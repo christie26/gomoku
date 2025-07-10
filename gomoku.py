@@ -1,9 +1,25 @@
+from enum import Enum
+class MoveResult(Enum):
+    VALID = 0
+    OUT_OF_BOARD = 1
+    NOT_EMPTY = 2
+    DOUBLE_THREE = 3
+
 class Gomoku:
     def __init__(self, size=19):
         self.size = size
         self.board = [['.' for _ in range(size)] for _ in range(size)]
         self.current_player = 'X'
         self.opponent_player = '0'
+        self.capture_count = {
+            'X': 0,
+            'O': 0
+        }
+        self.free_three_count = {
+            'X': 0,
+            'O': 0,
+        }
+        self.win_capture_count = 5
 
     def print_board(self):
         print('  ' + ' '.join(map(lambda x: f"{x:2}", range(self.size))))
@@ -14,16 +30,86 @@ class Gomoku:
         return 0 <= x < self.size and 0 <= y < self.size
         
     def is_valid_move(self, x, y):
-        # TODO double_three is not allowed, 
-        return self.is_on_board(x, y) and self.board[x][y] == '.'
+        if not self.is_on_board(x, y):
+            return MoveResult.OUT_OF_BOARD
+        elif self.board[x][y] != '.':
+            return MoveResult.NOT_EMPTY
+        elif self.is_double_three_move(x, y):
+            return MoveResult.DOUBLE_THREE
+        else:
+            return MoveResult.VALID
+    
+    def is_double_three_move(self, x, y):
+      self.board[x][y] = self.current_player
+      new_free_double = self.find_free_three_from_move(x, y)
+
+      if self.free_three_count[self.current_player] + new_free_double > 1:
+          self.board[x][y] = '.'
+          return True
+      
+      self.free_three_count[self.current_player] += new_free_double
+      return False
+    
+    def find_free_three_from_move(self, x0, y0):
+        '''
+        This function increase self.free_three_count if there is a free-double from a move.
+        '''
+        directions = [(1, -1), (1, 0), (1, 1), (0, 1)]
+        free_double_count = 0
+        for dx, dy in directions:
+            x_plus, y_plus = self.get_point_in_4_distance(x0, y0, dx, dy)
+            x_minus, y_minus = self.get_point_in_4_distance(x0, y0, -dx, -dy)
+            point_count = max(abs(x_minus - x_plus), abs(y_minus - y_plus)) + 1
+
+            array = []
+            for cell in range(point_count):
+                if self.board[x_minus][y_minus] == self.current_player:
+                    array.append(1)
+                elif self.board[x_minus][y_minus] == self.opponent_player:
+                    array.append(-1)
+                else:
+                    array.append(0)
+                x_minus += dx
+                y_minus += dy
+
+            if self.is_free_three_in_array(array):
+                free_double_count += 1
+        return free_double_count
+
+    def is_free_three_in_array(self, array):
+        '''
+        Get an array (max length: 9)
+        1  : my stone
+        0  : empty
+        -1 : other's stone
+
+        Return if there is a free-three in the array.
+        '''
+        my_count = 0
+        empty_count = 0
+        for i, cell in enumerate(array):
+            if cell == 0:
+                if my_count == 3 and empty_count < 3:
+                    return True
+                if my_count > 0:
+                    empty_count += 1
+                else:
+                    empty_count = 1
+            if empty_count > 0 and cell == 1:
+                my_count += 1
+            if cell == -1:
+                empty_count = 0
+                my_count = 0
+        return False
     
     def capture(self, x0, y0):
         """
         A function to detect if a move causes a capture.
         """
         directions = [(1, -1), (1, 0), (1, 1), 
-                      (0, -1), (0, 0), (0, 1), 
+                      (0, -1), (0, 1), 
                       (-1, -1), (-1, 0), (-1, 1)]
+        capture_count = 0
         for dx, dy in directions:
             count = 0
             x = x0 + dx
@@ -35,18 +121,35 @@ class Gomoku:
             if self.board[x][y] == self.current_player and count == 2:
                 self.board[x - dx][y - dy] = '.'
                 self.board[x - dx*2][y - dy*2] = '.'
-                print("Capture happens!")
-                self.print_board()
-                
-
-    def make_move(self, x, y):
-        if self.is_valid_move(x, y):
-            self.board[x][y] = self.current_player
-            self.capture(x, y)
+                capture_count += 1
+        if capture_count > 0:
+            self.capture_count[self.current_player] += capture_count
             return True
         return False
 
+    def handle_move(self, x, y):
+        result = self.is_valid_move(x, y)
+        if result == MoveResult.VALID:
+            self.board[x][y] = self.current_player
+            if self.capture(x, y):
+                return result, True
+        return result, False
+
+    def get_point_in_4_distance(self, x, y, dx, dy):
+        for i in range(4):
+            x += dx
+            y += dy
+            if not self.is_on_board(x, y):
+                return x - dx, y - dy
+        return x, y
+
     def check_winner(self):
+        # 1. 5 captures
+        if self.capture_count[self.current_player] >= self.win_capture_count:
+            return True
+        
+        # 2. 5 stones in a row
+        # TODO don't have to check whole board
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
         for x in range(self.size):
             for y in range(self.size):
@@ -70,24 +173,25 @@ class Gomoku:
         self.current_player = 'O' if self.current_player == 'X' else 'X'
         self.opponent_player = 'O' if self.opponent_player == 'X' else 'X'
 
-    def play(self):
-        print("Welcome to Gomoku!")
-        self.print_board()
-        while True:
-            print(f"Player {self.current_player}'s turn. (opponent {self.opponent_player})")
-            try:
-                x, y = map(int, input("Enter your move (row and column): ").split())
-                if self.make_move(x, y):
-                    self.print_board()
-                    if self.check_winner():
-                        print(f"Player {self.current_player} wins!")
-                        break
-                    self.switch_player()
-                else:
-                    print("Invalid move. Try again.")
-            except ValueError:
-                print("Please enter valid numbers separated by a space.")
-        print("Game Over")
+    # def play(self):
+    #     print("Welcome to Gomoku!")
+    #     self.print_board()
+    #     while True:
+    #         print(f"Player {self.current_player}'s turn. (opponent {self.opponent_player})")
+    #         try:
+    #             x, y = map(int, input("Enter your move (row and column): ").split())
+    #             result = self.handle_move(x, y)
+    #             if result == MoveResult.VALID:
+    #                 self.print_board()
+    #                 if self.check_winner():
+    #                     print(f"Player {self.current_player} wins!")
+    #                     break
+    #                 self.switch_player()
+    #             else:
+    #                 print("Invalid move:", result.name.replace("_", " ").title())
+    #         except ValueError:
+    #             print("Please enter valid numbers separated by a space.")
+    #     print("Game Over")
 
 
 if __name__ == "__main__":
