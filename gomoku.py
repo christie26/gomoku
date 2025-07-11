@@ -63,7 +63,7 @@ class Gomoku:
 
         for dx, dy in directions:
             new_free_three = self.get_free_three(x0, y0, dx, dy)
-            if new_free_three:
+            if len(new_free_three) > 0:
                 new_free_three.extend(new_free_three)
 
         return new_free_threes
@@ -85,12 +85,11 @@ class Gomoku:
             y_minus += dy
         result, i, empty_count = self.is_free_three_in_array(array)
         array_length = empty_count + 4
+        free_three = []
         if result:
-            free_three = []
             for j in range(array_length):
                 free_three.append({'x': x0 + dx * i, 'y': y0 + dy * i})
-            return free_three
-        return None            
+        return free_three
 
     def is_free_three_in_array(self, array):
         '''
@@ -116,7 +115,7 @@ class Gomoku:
             if cell == -1:
                 empty_count = 0
                 my_count = 0
-        return False
+        return False, 0, 0
     
     def capture(self, x0, y0):
         """
