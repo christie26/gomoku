@@ -19,6 +19,10 @@ class Gomoku:
             'X': 0,
             'O': 0,
         }
+        self.free_three_array = {
+            'X': [],
+            'O': []
+        }
         self.win_capture_count = 5
 
     def print_board(self):
@@ -41,40 +45,52 @@ class Gomoku:
     
     def is_double_three_move(self, x, y):
       self.board[x][y] = self.current_player
-      new_free_double = self.find_free_three_from_move(x, y)
+      new_free_threes = self.get_free_threes(x, y)
 
-      if self.free_three_count[self.current_player] + new_free_double > 1:
+      if len(self.free_three_array[self.current_player]) + len(new_free_threes) > 1:
           self.board[x][y] = '.'
           return True
       
-      self.free_three_count[self.current_player] += new_free_double
+      self.free_three_array[self.current_player].extend(new_free_threes)
       return False
     
-    def find_free_three_from_move(self, x0, y0):
+    def get_free_threes(self, x0, y0):
         '''
         This function increase self.free_three_count if there is a free-double from a move.
         '''
         directions = [(1, -1), (1, 0), (1, 1), (0, 1)]
-        free_double_count = 0
+        new_free_threes = []
+
         for dx, dy in directions:
-            x_plus, y_plus = self.get_point_in_4_distance(x0, y0, dx, dy)
-            x_minus, y_minus = self.get_point_in_4_distance(x0, y0, -dx, -dy)
-            point_count = max(abs(x_minus - x_plus), abs(y_minus - y_plus)) + 1
+            new_free_three = self.get_free_three(x0, y0, dx, dy)
+            if new_free_three:
+                new_free_three.extend(new_free_three)
 
-            array = []
-            for cell in range(point_count):
-                if self.board[x_minus][y_minus] == self.current_player:
-                    array.append(1)
-                elif self.board[x_minus][y_minus] == self.opponent_player:
-                    array.append(-1)
-                else:
-                    array.append(0)
-                x_minus += dx
-                y_minus += dy
+        return new_free_threes
 
-            if self.is_free_three_in_array(array):
-                free_double_count += 1
-        return free_double_count
+    def get_free_three(self, x0, y0, dx, dy):
+        x_plus, y_plus = self.get_point_in_4_distance(x0, y0, dx, dy)
+        x_minus, y_minus = self.get_point_in_4_distance(x0, y0, -dx, -dy)
+        point_count = max(abs(x_minus - x_plus), abs(y_minus - y_plus)) + 1
+
+        array = []
+        for cell in range(point_count):
+            if self.board[x_minus][y_minus] == self.current_player:
+                array.append(1)
+            elif self.board[x_minus][y_minus] == self.opponent_player:
+                array.append(-1)
+            else:
+                array.append(0)
+            x_minus += dx
+            y_minus += dy
+        result, i, empty_count = self.is_free_three_in_array(array)
+        array_length = empty_count + 4
+        if result:
+            free_three = []
+            for j in range(array_length):
+                free_three.append({'x': x0 + dx * i, 'y': y0 + dy * i})
+            return free_three
+        return None            
 
     def is_free_three_in_array(self, array):
         '''
@@ -90,7 +106,7 @@ class Gomoku:
         for i, cell in enumerate(array):
             if cell == 0:
                 if my_count == 3 and empty_count < 3:
-                    return True
+                    return True, i, empty_count
                 if my_count > 0:
                     empty_count += 1
                 else:
