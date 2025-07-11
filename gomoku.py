@@ -47,6 +47,9 @@ class Gomoku:
       self.board[x][y] = self.current_player
       new_free_threes = self.get_free_threes(x, y)
 
+
+
+      print(f"freethreees for {self.current_player}", self.free_three_array, new_free_threes)
       if len(self.free_three_array[self.current_player]) + len(new_free_threes) > 1:
           self.board[x][y] = '.'
           return True
@@ -63,8 +66,9 @@ class Gomoku:
 
         for dx, dy in directions:
             new_free_three = self.get_free_three(x0, y0, dx, dy)
+            print("return of getfreethre", new_free_three)
             if len(new_free_three) > 0:
-                new_free_three.extend(new_free_three)
+                new_free_threes.append(new_free_three)
 
         return new_free_threes
 
@@ -84,12 +88,17 @@ class Gomoku:
             x_minus += dx
             y_minus += dy
         result, i, empty_count = self.is_free_three_in_array(array)
+        print("return of isfreethree", result, i, empty_count)
         array_length = empty_count + 4
         free_three = []
         if result:
             for j in range(array_length):
-                free_three.append({'x': x0 + dx * i, 'y': y0 + dy * i})
+                free_three.append({'x': x_minus + dx * j, 'y': y_minus + dy * j})
         return free_three
+
+    def count_free_threes():
+        pass
+
 
     def is_free_three_in_array(self, array):
         '''
