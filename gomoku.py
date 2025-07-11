@@ -10,7 +10,7 @@ class Gomoku:
         self.size = size
         self.board = [['.' for _ in range(size)] for _ in range(size)]
         self.current_player = 'X'
-        self.opponent_player = '0'
+        self.opponent_player = 'O'
         self.capture_count = {
             'X': 0,
             'O': 0
@@ -45,19 +45,19 @@ class Gomoku:
     
     def is_double_three_move(self, x, y):
       self.board[x][y] = self.current_player
-      new_free_threes = self.get_free_threes(x, y)
+      new_free_threes = self.get_free_threes_from_move(x, y)
 
-
-
-      print(f"freethreees for {self.current_player}", self.free_three_array, new_free_threes)
       if len(self.free_three_array[self.current_player]) + len(new_free_threes) > 1:
           self.board[x][y] = '.'
           return True
       
       self.free_three_array[self.current_player].extend(new_free_threes)
+      print(f"{self.current_player} free-three: {len(self.free_three_array[self.current_player])}")
+      print(f"{self.opponent_player} free-three: {len(self.free_three_array[self.opponent_player])}")
+      print("\n")
       return False
     
-    def get_free_threes(self, x0, y0):
+    def get_free_threes_from_move(self, x0, y0):
         '''
         This function increase self.free_three_count if there is a free-double from a move.
         '''
@@ -87,6 +87,7 @@ class Gomoku:
                 array.append(0)
             x += dx
             y += dy
+
         result, i, empty_count = self.is_free_three_in_array(array)
         array_length = empty_count + 4
         free_three = []
@@ -144,6 +145,8 @@ class Gomoku:
             if self.board[x][y] == self.current_player and count == 2:
                 self.board[x - dx][y - dy] = '.'
                 self.board[x - dx*2][y - dy*2] = '.'
+                self.remove_free_three(x - dx, y - dy, self.opponent_player)
+                self.remove_free_three(x - dx*2, y - dy*2, self.opponent_player)
                 capture_count += 1
         if capture_count > 0:
             self.capture_count[self.current_player] += capture_count
@@ -154,9 +157,18 @@ class Gomoku:
         result = self.is_valid_move(x, y)
         if result == MoveResult.VALID:
             self.board[x][y] = self.current_player
+            self.remove_free_three(x, y, self.opponent_player)
             if self.capture(x, y):
                 return result, True
         return result, False
+    
+    def remove_free_three(self, x, y, player):
+        free_threes = self.free_three_array[player]
+        for free_three in free_threes:
+            for point in free_three:
+                if (x, y) == point:
+                    free_threes.remove(free_three)
+                    break
 
     def get_point_in_4_distance(self, x, y, dx, dy):
         for i in range(4):
