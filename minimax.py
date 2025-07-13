@@ -1,18 +1,21 @@
 import sys
 
-def is_terminal_state(state):
-    return True
+def is_terminal_state(state: Gomoku):
+    return state.check_winner() or state.check_draw()
 
-def state_value(state):
-    return 1
+def state_value(state: Gomoku):
+    if state.check_winner(state):
+        return state.current_player == 'X' ? 1 : -1
+    return 0
 
-def possible_next_states(state):
+
+def possible_next_states(state: Gomoku):
     pass
 
-def heuristic_evaluation(state):
+def heuristic_evaluation(state: Gomoku):
     return 1
 
-def minimax(state, initiating_player, max_depth = 30):
+def minimax(state: Gomoku, initiating_player, max_depth = 30):
     if is_terminal_state(state):
         return state_value(state)
 
