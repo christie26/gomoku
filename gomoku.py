@@ -15,10 +15,6 @@ class Gomoku:
             'X': 0,
             'O': 0
         }
-        self.free_three_count = {
-            'X': 0,
-            'O': 0,
-        }
         self.free_three_array = {
             'X': [],
             'O': []
@@ -57,75 +53,30 @@ class Gomoku:
       print("\n")
       return False
     
-    def get_free_threes_from_move(self, x0, y0):
+    def get_free_threes_from_move(self, x, y):
         '''
-        This function increase self.free_three_count if there is a free-double from a move.
+        This function return new free-three arrays from a move.
         '''
-        directions = [(1, -1), (1, 0), (1, 1), (0, 1)]
+        def find_sublist(lst, sub):
+          for i in range(len(lst) - len(sub) + 1):
+              if lst[i:i+len(sub)] == sub:
+                  return i
+          return -1
+        
         new_free_threes = []
+        directions = [(1, -1), (1, 0), (1, 1), (0, 1)]
+        free_three_pattern = [[0,1,1,1,0], [0,1,0,1,1,0], [0,1,1,0,1,0]]
 
         for dx, dy in directions:
-            new_free_three = self.get_free_three(x0, y0, dx, dy)
-            if len(new_free_three) > 0:
-                new_free_threes.append(new_free_three)
-
+            array = self.make_array(x, y, -4, 4, dx, dy)
+            for pattern in free_three_pattern:
+              find = find_sublist(array, pattern)
+              if find != -1:
+                  point_array = [(x + dx * i, y + dy * i) for i in range(find - 4, find + len(pattern) - 4)]
+                  new_free_threes.append(point_array)
+                      
         return new_free_threes
-
-    def get_free_three(self, x0, y0, dx, dy):
-        x_plus, y_plus = self.get_point_in_4_distance(x0, y0, dx, dy)
-        x_minus, y_minus = self.get_point_in_4_distance(x0, y0, -dx, -dy)
-        point_count = max(abs(x_minus - x_plus), abs(y_minus - y_plus)) + 1
-
-        array = []
-        x, y = x_minus, y_minus
-        for _ in range(point_count):
-            if self.board[x][y] == self.current_player:
-                array.append(1)
-            elif self.board[x][y] == self.opponent_player:
-                array.append(-1)
-            else:
-                array.append(0)
-            x += dx
-            y += dy
-
-        result, i, empty_count = self.is_free_three_in_array(array)
-        array_length = empty_count + 4
-        free_three = []
-        if result:
-            for j in range(array_length):
-                free_three.append((x_minus + dx * (i - j), y_minus + dy * (i - j)))
-        return free_three
-
-    def count_free_threes():
-        pass
-
-
-    def is_free_three_in_array(self, array):
-        '''
-        Get an array (max length: 9)
-        1  : my stone
-        0  : empty
-        -1 : other's stone
-
-        Return if there is a free-three in the array.
-        '''
-        my_count = 0
-        empty_count = 0
-        for i, cell in enumerate(array):
-            if cell == 0:
-                if my_count == 3 and empty_count < 3:
-                    return True, i, empty_count
-                if my_count > 0:
-                    empty_count += 1
-                else:
-                    empty_count = 1
-            if empty_count > 0 and cell == 1:
-                my_count += 1
-            if cell == -1:
-                empty_count = 0
-                my_count = 0
-        return False, 0, 0
-    
+        
     def capture(self, x0, y0):
         """
         A function to detect if a move causes a capture.
@@ -135,28 +86,35 @@ class Gomoku:
                       (-1, -1), (-1, 0), (-1, 1)]
         capture_count = 0
         for dx, dy in directions:
-            count = 0
-            x = x0 + dx
-            y = y0 + dy
-            
-            while self.is_on_board(x, y) and self.board[x][y] == self.opponent_player:
-                x += dx
-                y += dy
-                count += 1
+            x, y = x0, y0
+            array = self.make_array(x0, y0, 0, 3, dx, dy)
 
-            if self.is_on_board(x, y):
-                continue
-            
-            if self.board[x][y] == self.current_player and count == 2:
-                self.board[x - dx][y - dy] = '.'
-                self.board[x - dx*2][y - dy*2] = '.'
-                self.remove_free_three(x - dx, y - dy, self.opponent_player)
-                self.remove_free_three(x - dx*2, y - dy*2, self.opponent_player)
+            if array == [1, -1, -1, 1]:
+                self.board[x + dx][y + dy] = '.'
+                self.board[x + dx*2][y + dy*2] = '.'
+                self.remove_free_three(x + dx, y + dy, self.opponent_player)
+                self.remove_free_three(x + dx*2, y + dy*2, self.opponent_player)
                 capture_count += 1
         if capture_count > 0:
             self.capture_count[self.current_player] += capture_count
             return True
         return False
+    
+    def make_array(self, x, y, start_index, end_index, dx, dy):
+        array = []
+
+        for i in range(start_index, end_index + 1):
+            if not self.is_on_board(x + dx * i, y + dy * i):
+                array.append(-2)
+                continue
+            cell = self.board[x + dx * i][y + dy * i]
+            if cell == self.current_player:
+                array.append(1)
+            elif cell == self.opponent_player:
+                array.append(-1)
+            else:
+                array.append(0)
+        return array
 
     def handle_move(self, x, y):
         result = self.is_valid_move(x, y)
