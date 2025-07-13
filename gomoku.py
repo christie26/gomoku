@@ -138,10 +138,15 @@ class Gomoku:
             count = 0
             x = x0 + dx
             y = y0 + dy
-            while self.board[x][y] == self.opponent_player and self.is_on_board(x, y):
+            
+            while self.is_on_board(x, y) and self.board[x][y] == self.opponent_player:
                 x += dx
                 y += dy
                 count += 1
+
+            if self.is_on_board(x, y):
+                continue
+            
             if self.board[x][y] == self.current_player and count == 2:
                 self.board[x - dx][y - dy] = '.'
                 self.board[x - dx*2][y - dy*2] = '.'
@@ -171,7 +176,7 @@ class Gomoku:
                     break
 
     def get_point_in_4_distance(self, x, y, dx, dy):
-        for i in range(4):
+        for _ in range(4):
             x += dx
             y += dy
             if not self.is_on_board(x, y):
