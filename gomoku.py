@@ -49,8 +49,9 @@ class Gomoku:
         self.board[x][y] = self.current_player
         new_free_threes = self.get_free_threes_from_move(x, y)
 
+        self.board[x][y] = "."
+
         if len(new_free_threes) > 1:
-            self.board[x][y] = "."
             return True
         else:
             self.add_free_threes(new_free_threes, self.current_player)
@@ -152,6 +153,7 @@ class Gomoku:
                     (x + dx * i, y + dy * i)
                     for i in range(find - 4, find + len(win_pattern) - 4)
                 ]
+        # TODO check if it's catchable in next turn
 
     def add_free_threes(self, new_free_threes, player):
         self.free_three_list[player].extend(
