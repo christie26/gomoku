@@ -6,11 +6,11 @@ import copy
 
 
 def is_terminal_state(state: Gomoku):
-    return state.check_draw() or state.check_winner() is not None
+    return state.check_draw() or state.get_winner() is not None
 
 
 def state_value(state: Gomoku):
-    winner = state.check_winner()
+    winner = state.get_winner()
     if winner is None:
         return 0
     return 1 if winner == "X" else -1

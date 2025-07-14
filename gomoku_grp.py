@@ -147,7 +147,7 @@ class GomokuGUI:
                     f"{self.player_names[self.game.current_player]} captures {self.player_names[self.game.opponent_player]}"
                 )
             self.draw_board(self.game.board)
-            winner = self.game.check_winner(y, x)
+            winner = self.game.get_winner(y, x)
             if winner != None:
                 self.finish_game(winner)
             else:

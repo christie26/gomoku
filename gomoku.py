@@ -179,7 +179,7 @@ class Gomoku:
     def count_empty_spots(self):
         return sum(row.count(".") for row in self.board)
 
-    def check_winner(self):
+    def get_winner(self):
         x, y = self.current_move
 
         # 1. five captures
@@ -228,7 +228,7 @@ class Gomoku:
     #             result = self.handle_move(x, y)
     #             if result == MoveResult.VALID:
     #                 self.print_board()
-    #                 if self.check_winner():
+    #                 if self.get_winner():
     #                     print(f"Player {self.current_player} wins!")
     #                     break
     #                 self.switch_player()
