@@ -1,4 +1,4 @@
-import sys
+from gomoku import Gomoku
 
 def is_terminal_state(state: Gomoku):
     return state.check_winner() or state.check_draw()

@@ -159,7 +159,7 @@ class Gomoku:
 
     def check_draw(self):
         # TODO This should also check if there are no valid moves
-        return sum(row.count('.') for row in self.board) == size ** 2
+        return sum(row.count('.') for row in self.board) == 0
 
     def is_five_in_a_row(self, x, y, dx, dy):
         count = 0
