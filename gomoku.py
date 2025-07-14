@@ -22,7 +22,7 @@ class Gomoku:
         self.current_player = "X"
         self.opponent_player = "O"
         self.capture_count = {"X": 0, "O": 0}
-        self.free_three_array = {"X": [], "O": []}
+        self.free_three_list = {"X": [], "O": []}
         self.five_row = {"X": None, "O": None}
         self.win_capture_count = 5
         self.current_move = None, None
@@ -49,12 +49,11 @@ class Gomoku:
         self.board[x][y] = self.current_player
         new_free_threes = self.get_free_threes_from_move(x, y)
 
-        # if len(self.free_three_array[self.current_player]) + len(new_free_threes) > 1:
         if len(new_free_threes) > 1:
             self.board[x][y] = "."
             return True
         else:
-            self.free_three_array[self.current_player].extend(new_free_threes)
+            self.add_free_threes(new_free_threes, self.current_player)
             return False
 
     def get_free_threes_from_move(self, x, y):
@@ -71,11 +70,11 @@ class Gomoku:
             for pattern in free_three_pattern:
                 find = find_sublist(array, pattern)
                 if find != -1:
-                    point_array = [
+                    points = tuple(
                         (x + dx * i, y + dy * i)
                         for i in range(find - 4, find + len(pattern) - 4)
-                    ]
-                    new_free_threes.append(point_array)
+                    )
+                    new_free_threes.append(points)
 
         return new_free_threes
 
@@ -93,11 +92,11 @@ class Gomoku:
             for pattern in free_three_pattern:
                 find = find_sublist(array, pattern)
                 if find != -1:
-                    point_array = [
+                    points = tuple(
                         (x + dx * i, y + dy * i)
                         for i in range(find - 4, find + len(pattern) - 4)
-                    ]
-                    new_free_threes.append(point_array)
+                    )
+                    new_free_threes.append(points)
 
         return new_free_threes
 
@@ -133,13 +132,37 @@ class Gomoku:
         Remove opponent's stone, remove opponent's free-threes, find my new free-threes.
         """
         new_free_threes = []
-        for i in range(2):
+        for i in range(1, 3):
             new_x, new_y = x + dx * i, y + dy * i
             self.board[new_x][new_y] = "."
             self.remove_free_three(new_x, new_y, self.opponent_player)
             new_free_threes.append(self.get_free_threes_from_capture(new_x, new_y))
 
-        self.free_three_array[self.current_player].extend(list(set(new_free_threes)))
+        self.add_free_threes(new_free_threes, self.current_player)
+
+    def check_five_rows_from_move(self, x, y):
+        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
+        win_pattern = [1, 1, 1, 1, 1]
+
+        for dx, dy in directions:
+            array = self.make_array(x, y, -4, 4, dx, dy)
+            find = find_sublist(array, win_pattern)
+            if find != -1:
+                self.five_row[self.current_player] = [
+                    (x + dx * i, y + dy * i)
+                    for i in range(find - 4, find + len(win_pattern) - 4)
+                ]
+
+    def add_free_threes(self, new_free_threes, player):
+        self.free_three_list[player].extend(
+            v for v in new_free_threes if v not in self.free_three_list[player]
+        )
+
+    def remove_free_three(self, x, y, player):
+        free_threes = self.free_three_list[player]
+        self.free_three_list[player] = [
+            free_three for free_three in free_threes if (x, y) not in free_three
+        ]
 
     def make_array(self, x, y, start_index, end_index, dx, dy):
         array = []
@@ -168,14 +191,6 @@ class Gomoku:
                 return result, True
         return result, False
 
-    def remove_free_three(self, x, y, player):
-        free_threes = self.free_three_array[player]
-        for free_three in free_threes:
-            for point in free_three:
-                if (x, y) == point:
-                    free_threes.remove(free_three)
-                    break
-
     def count_empty_spots(self):
         return sum(row.count(".") for row in self.board)
 
@@ -200,19 +215,6 @@ class Gomoku:
     def check_draw(self):
         # TODO This should also check if there are no valid moves
         return sum(row.count(".") for row in self.board) == 0
-
-    def check_five_rows_from_move(self, x, y):
-        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
-        win_pattern = [1, 1, 1, 1, 1]
-
-        for dx, dy in directions:
-            array = self.make_array(x, y, -4, 4, dx, dy)
-            find = find_sublist(array, win_pattern)
-            if find != -1:
-                self.five_row[self.current_player] = [
-                    (x + dx * i, y + dy * i)
-                    for i in range(find - 4, find + len(win_pattern) - 4)
-                ]
 
     def switch_player(self):
         self.current_player = "O" if self.current_player == "X" else "X"
