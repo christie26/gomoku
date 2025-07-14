@@ -1,8 +1,9 @@
-# gomoku_gui.py
 import tkinter as tk
 from tkinter import simpledialog
 from gomoku import Gomoku, MoveResult
 import argparse
+from minimax import minimax, get_ai_move
+import time
 
 CELL_SIZE = 30
 BOARD_SIZE = 19
@@ -139,6 +140,8 @@ class GomokuGUI:
     def handle_click(self, event):
         x = event.x // CELL_SIZE
         y = event.y // CELL_SIZE
+        # self.game.print_board()
+        # print("\n\njaja\n\n")
         result, capture = self.game.handle_move(y, x)  # note: board is row (y), col (x)
         self.update_alert_label("")
         if result == MoveResult.VALID:
@@ -157,6 +160,34 @@ class GomokuGUI:
             self.update_alert_label(
                 f"Invalid move: {result.name.replace('_', ' ').title()}"
             )
+
+
+
+        #AI turn
+        start_time = time.time()
+        print("AI is thinking")
+        x, y = get_ai_move(self.game)
+        print(x, y)
+        result, capture = self.game.handle_move(x, y)
+        self.update_alert_label("")
+        if result == MoveResult.VALID:
+            if capture:
+                self.update_alert_label(
+                    f"{self.player_names[self.game.current_player]} captures {self.player_names[self.game.opponent_player]}"
+                )
+            self.draw_board(self.game.board)
+            winner = self.game.get_winner()
+            if winner != None:
+                self.finish_game(winner)
+            else:
+                self.game.switch_player()
+                self.update_turn_label()
+        else:
+            self.update_alert_label(
+                f"Invalid move: {result.name.replace('_', ' ').title()}"
+            )
+        print(f"AI is finished thinking in {time.time() - start_time:.4f}s")
+
 
 
 def load_and_validate_board(filepath):
