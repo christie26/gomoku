@@ -141,6 +141,13 @@ class Gomoku:
                 return x - dx, y - dy
         return x, y
 
+    def check_draw(self):
+        # TODO This should also check if there are no valid moves
+        return sum(row.count('.') for row in self.board) == 0
+
+    def count_empty_spots(self):
+        return sum(row.count('.') for row in self.board)
+
     def check_winner(self):
         # 1. 5 captures
         if self.capture_count[self.current_player] >= self.win_capture_count:
@@ -157,9 +164,6 @@ class Gomoku:
                             return True
         return False
 
-    def check_draw(self):
-        # TODO This should also check if there are no valid moves
-        return sum(row.count('.') for row in self.board) == 0
 
     def is_five_in_a_row(self, x, y, dx, dy):
         count = 0
