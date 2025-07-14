@@ -6,16 +6,17 @@ import copy
 
 
 def is_terminal_state(state: Gomoku):
-    return state.check_winner() or state.check_draw()
+    return state.check_draw() or state.check_winner() is not None
 
 
 def state_value(state: Gomoku):
-    if state.check_winner():
-        return 1 if state.current_player == "X" else -1
-    return 0
+    winner = state.check_winner()
+    if winner is None:
+        return 0
+    return 1 if winner == "X" else -1
 
 
-def get_candidate_moves(state: Gomoku, radius=2):
+def get_candidate_moves(state: Gomoku, radius: int = 2):
     if state.count_empty_spots() == state.size**2:
         return [(random.randint(7, 13), random.randint(7, 13))]
     candidates = set([])
@@ -25,10 +26,7 @@ def get_candidate_moves(state: Gomoku, radius=2):
                 for dr in range(-radius, radius + 1):
                     for dc in range(-radius, radius + 1):
                         new_row, new_col = row + dr, col + dc
-                        if (
-                            state.is_valid_move(new_row, new_col)
-                            and state.board[new_row][new_col] == "."
-                        ):
+                        if state.is_valid_move(new_row, new_col):
                             candidates.add((new_row, new_col))
     return list(candidates)
 
