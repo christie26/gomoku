@@ -25,6 +25,7 @@ class Gomoku:
         self.free_three_array = {"X": [], "O": []}
         self.five_row = {"X": None, "O": None}
         self.win_capture_count = 5
+        self.current_move = None, None
 
     def print_board(self):
         print("  " + " ".join(map(lambda x: f"{x:2}", range(self.size))))
@@ -159,6 +160,7 @@ class Gomoku:
     def handle_move(self, x, y):
         result = self.is_valid_move(x, y)
         if result == MoveResult.VALID:
+            self.current_move = x, y
             self.board[x][y] = self.current_player
             self.remove_free_three(x, y, self.opponent_player)
             self.check_five_rows_from_move(x, y)
@@ -175,14 +177,18 @@ class Gomoku:
                     break
 
     def count_empty_spots(self):
-        return sum(row.count('.') for row in self.board)
+        return sum(row.count(".") for row in self.board)
 
-    def check_winner(self, x, y):
+    def check_winner(self):
+        x, y = self.current_move
+
         # 1. five captures
         if self.capture_count[self.current_player] >= self.win_capture_count:
             return self.current_player
 
         # 2. check if opponent keep five rows
+        if x is None or y is None:
+            return None
         if self.five_row[self.opponent_player] != None:
             for x, y in self.five_row[self.opponent_player]:
                 if self.board[x][y] != self.opponent_player:
