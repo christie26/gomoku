@@ -130,7 +130,7 @@ class Gomoku:
         if result == MoveResult.VALID:
             self.board[x][y] = self.current_player
             self.remove_free_three(x, y, self.opponent_player)
-            self.get_five_rows_from_move(x, y)
+            self.check_five_rows_from_move(x, y)
             if self.capture(x, y):
                 return result, True
         return result, False
@@ -161,7 +161,7 @@ class Gomoku:
         # TODO This should also check if there are no valid moves
         return sum(row.count(".") for row in self.board) == 0
 
-    def get_five_rows_from_move(self, x, y):
+    def check_five_rows_from_move(self, x, y):
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
         win_pattern = [1, 1, 1, 1, 1]
 
