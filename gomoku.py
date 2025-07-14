@@ -52,9 +52,9 @@ class Gomoku:
         if len(new_free_threes) > 1:
             self.board[x][y] = "."
             return True
-
-        self.free_three_array[self.current_player].extend(new_free_threes)
-        return False
+        else:
+            self.free_three_array[self.current_player].extend(new_free_threes)
+            return False
 
     def get_free_threes_from_move(self, x, y):
         """
@@ -78,7 +78,29 @@ class Gomoku:
 
         return new_free_threes
 
-    def capture(self, x0, y0):
+    def get_free_threes_from_capture(self, x, y):
+        """
+        This function return new free-three arrays from a capture.
+        """
+
+        new_free_threes = []
+        directions = [(1, -1), (1, 0), (1, 1), (0, 1)]
+        free_three_pattern = [[0, 1, 1, 1, 0], [0, 1, 0, 1, 1, 0], [0, 1, 1, 0, 1, 0]]
+
+        for dx, dy in directions:
+            array = self.make_array(x, y, -4, 4, dx, dy)
+            for pattern in free_three_pattern:
+                find = find_sublist(array, pattern)
+                if find != -1:
+                    point_array = [
+                        (x + dx * i, y + dy * i)
+                        for i in range(find - 4, find + len(pattern) - 4)
+                    ]
+                    new_free_threes.append(point_array)
+
+        return new_free_threes
+
+    def capture_center(self, x, y):
         """
         A function to detect if a move causes a capture.
         """
@@ -94,20 +116,29 @@ class Gomoku:
         ]
         capture_count = 0
         for dx, dy in directions:
-            x, y = x0, y0
-            array = self.make_array(x0, y0, 0, 3, dx, dy)
-
+            array = self.make_array(x, y, 0, 3, dx, dy)
             if array == [1, -1, -1, 1]:
-                self.board[x + dx][y + dy] = "."
-                self.board[x + dx * 2][y + dy * 2] = "."
-                self.remove_free_three(x + dx, y + dy, self.opponent_player)
-                self.remove_free_three(x + dx * 2, y + dy * 2, self.opponent_player)
-                # TODO record any free three happen by this
+                self.apply_capture(x, y, dx, dy)
                 capture_count += 1
+
         if capture_count > 0:
             self.capture_count[self.current_player] += capture_count
             return True
         return False
+
+    def apply_capture(self, x, y, dx, dy):
+        """
+        A function to apply a capture.
+        Remove opponent's stone, remove opponent's free-threes, find my new free-threes.
+        """
+        new_free_threes = []
+        for i in range(2):
+            new_x, new_y = x + dx * i, y + dy * i
+            self.board[new_x][new_y] = "."
+            self.remove_free_three(new_x, new_y, self.opponent_player)
+            new_free_threes.append(self.get_free_threes_from_capture(new_x, new_y))
+
+        self.free_three_array[self.current_player].extend(list(set(new_free_threes)))
 
     def make_array(self, x, y, start_index, end_index, dx, dy):
         array = []
@@ -131,7 +162,7 @@ class Gomoku:
             self.board[x][y] = self.current_player
             self.remove_free_three(x, y, self.opponent_player)
             self.check_five_rows_from_move(x, y)
-            if self.capture(x, y):
+            if self.capture_center(x, y):
                 return result, True
         return result, False
 

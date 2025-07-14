@@ -178,13 +178,10 @@ def load_and_validate_board(filepath):
                 count[c] += 1
         board.append(list(row))
 
-    if abs(count["X"] - count["O"]) > 1:
-        raise ValueError("Number of X and O must be equal or differ by 1")
-
-    if count["X"] == count["O"]:
-        current_player = "X"
-    else:
-        current_player = "O" if count["O"] < count["X"] else "X"
+    # if count["X"] == count["O"]:
+    current_player = "X"
+    # else:
+    #     current_player = "O" if count["O"] < count["X"] else "X"
 
     return board, current_player
 
