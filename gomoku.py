@@ -149,10 +149,10 @@ class Gomoku:
             return self.current_player
 
         # 2. check if opponent keep five rows
-        if (
-            self.five_row[self.opponent_player] != None
-            and (x, y) not in self.five_row[self.opponent_player]
-        ):
+        if self.five_row[self.opponent_player] != None:
+            for x, y in self.five_row[self.opponent_player]:
+                if self.board[x][y] != self.opponent_player:
+                    return None
             return self.opponent_player
 
         return None
