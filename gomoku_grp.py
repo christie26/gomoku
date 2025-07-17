@@ -11,7 +11,20 @@ PADDING = 20
 
 
 class GomokuGUI:
+    """
+    A GUI class for playing Gomoku using Tkinter. Supports human and AI players,
+    handles user interaction, board drawing, turn management, and displaying results.
+    """
+
     def __init__(self, root, player1, player2):
+        """
+        Initialize the GUI, canvas, labels, and player info.
+
+        Args:
+            root: The Tkinter root window.
+            player1 (str or None): Name of player X, or None to ask.
+            player2 (str or None): Name of player O, or None to ask.
+        """
         self.root = root
         self.root.title("Gomoku")
         self.cell_size = 30
@@ -34,6 +47,9 @@ class GomokuGUI:
 
         self.alert_label = tk.Label(root, text="", font=("Arial", 20))
         self.alert_label.pack(pady=5)
+
+        self.ai_label = tk.Label(root, text="", font=("Arial", 20))
+        self.ai_label.pack(pady=5)
 
         # Player names
         self.player_names = {"X": player1, "O": player2}
@@ -59,7 +75,10 @@ class GomokuGUI:
 
     def update_info_label(self):
         self.info_label.config(
-            text=f"⚫ {self.player_names['X']}  vs {self.player_names['O']} ⚪"
+            text=(
+                f"⚫ {self.player_names['X']} (captures: {self.game.capture_count['X']}) "
+                f"vs {self.player_names['O']} (captures: {self.game.capture_count['O']}) ⚪"
+            )
         )
 
     def update_turn_label(self):
@@ -69,6 +88,9 @@ class GomokuGUI:
 
     def update_alert_label(self, message):
         self.alert_label.config(text=message)
+
+    def update_ai_label(self, message):
+        self.ai_label.config(text=message)
 
     def draw_grid(self):
         for i in range(BOARD_SIZE):
@@ -140,12 +162,12 @@ class GomokuGUI:
     def handle_click(self, event):
         x = event.x // CELL_SIZE
         y = event.y // CELL_SIZE
-        # self.game.print_board()
-        # print("\n\njaja\n\n")
         result, capture = self.game.handle_move(y, x)  # note: board is row (y), col (x)
         self.update_alert_label("")
         if result == MoveResult.VALID:
             if capture:
+                self.update_info_label()
+
                 self.update_alert_label(
                     f"{self.player_names[self.game.current_player]} captures {self.player_names[self.game.opponent_player]}"
                 )
@@ -160,34 +182,39 @@ class GomokuGUI:
             self.update_alert_label(
                 f"Invalid move: {result.name.replace('_', ' ').title()}"
             )
+        self.ai_play()
 
+    def ai_play(self):
+        while True:
+            start_time = time.time()
 
+            self.update_ai_label("AI is thinking")
+            print("AI is thinking")
 
-        #AI turn
-        start_time = time.time()
-        print("AI is thinking")
-        x, y = get_ai_move(self.game)
-        print(x, y)
-        result, capture = self.game.handle_move(x, y)
-        self.update_alert_label("")
-        if result == MoveResult.VALID:
-            if capture:
-                self.update_alert_label(
-                    f"{self.player_names[self.game.current_player]} captures {self.player_names[self.game.opponent_player]}"
-                )
-            self.draw_board(self.game.board)
-            winner = self.game.get_winner()
-            if winner != None:
-                self.finish_game(winner)
+            x, y = get_ai_move(self.game)
+
+            self.update_ai_label(f"AI played in {time.time() - start_time:.4f}s")
+            print(f"AI played in {time.time() - start_time:.4f}s")
+
+            result, capture = self.game.handle_move(x, y)
+            self.update_alert_label("")
+            if result == MoveResult.VALID:
+                if capture:
+                    self.update_alert_label(
+                        f"{self.player_names[self.game.current_player]} captures {self.player_names[self.game.opponent_player]}"
+                    )
+                self.draw_board(self.game.board)
+                winner = self.game.get_winner()
+                if winner != None:
+                    self.finish_game(winner)
+                else:
+                    self.game.switch_player()
+                    self.update_turn_label()
+                return
             else:
-                self.game.switch_player()
-                self.update_turn_label()
-        else:
-            self.update_alert_label(
-                f"Invalid move: {result.name.replace('_', ' ').title()}"
-            )
-        print(f"AI is finished thinking in {time.time() - start_time:.4f}s")
-
+                self.update_alert_label(
+                    f"Invalid move: {result.name.replace('_', ' ').title()}"
+                )
 
 
 def load_and_validate_board(filepath):
@@ -209,10 +236,7 @@ def load_and_validate_board(filepath):
                 count[c] += 1
         board.append(list(row))
 
-    # if count["X"] == count["O"]:
     current_player = "X"
-    # else:
-    #     current_player = "O" if count["O"] < count["X"] else "X"
 
     return board, current_player
 
@@ -241,10 +265,6 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Failed to load board: {e}")
             exit(1)
-
-    print(f"Board size: {args.size}")
-    print(f"Black player: {args.black}")
-    print(f"White player: {args.white}")
 
     root = tk.Tk()
     app = GomokuGUI(root, args.black, args.white)

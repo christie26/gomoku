@@ -101,7 +101,7 @@ class Gomoku:
 
         return new_free_threes
 
-    def capture_center(self, x, y):
+    def capture_center(self, x, y) -> int:
         """
         A function to detect if a move causes a capture.
         """
@@ -124,8 +124,7 @@ class Gomoku:
 
         if capture_count > 0:
             self.capture_count[self.current_player] += capture_count
-            return True
-        return False
+        return capture_count
 
     def apply_capture(self, x, y, dx, dy):
         """
@@ -184,14 +183,14 @@ class Gomoku:
 
     def handle_move(self, x, y):
         result = self.is_valid_move(x, y)
+        capture_count = 0
         if result == MoveResult.VALID:
             self.current_move = x, y
             self.board[x][y] = self.current_player
             self.remove_free_three(x, y, self.opponent_player)
             self.check_five_rows_from_move(x, y)
-            if self.capture_center(x, y):
-                return result, True
-        return result, False
+            capture_count = self.capture_center(x, y)
+        return result, capture_count
 
     def count_empty_spots(self):
         return sum(row.count(".") for row in self.board)
