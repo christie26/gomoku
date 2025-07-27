@@ -63,7 +63,7 @@ class Gomoku:
         This function return new free-three arrays from a move.
         """
 
-        def count_direction(sign, dx, dy):
+        def count_free_three(sign, dx, dy):
             my_count = 0
             empty_count = 0
             i = 1
@@ -89,8 +89,8 @@ class Gomoku:
         directions = [(1, -1), (1, 0), (1, 1), (0, 1)]
 
         for dx, dy in directions:
-            plus_my, plus_empty, plus_hole = count_direction(+1, dx, dy)
-            minus_my, minus_empty, minus_hole = count_direction(-1, dx, dy)
+            plus_my, plus_empty, plus_hole = count_free_three(+1, dx, dy)
+            minus_my, minus_empty, minus_hole = count_free_three(-1, dx, dy)
 
             if plus_my + minus_my >= 2 and plus_empty + minus_empty >= 3:
                 if plus_hole and minus_empty == 2:
@@ -105,32 +105,80 @@ class Gomoku:
                 new_free_threes.append(points)
         return new_free_threes
 
-    def get_free_threes_from_capture(self, x, y):
+    def get_free_threes_from_capture(self, x0, y0):
         """
         This function return new free-three arrays from a capture.
         """
 
+        def count_free_three(sign, dx, dy):
+            my_count = 0
+            empty_count = 0
+            i = 1
+            hole = False
+            while True:
+                x, y = x0 + dx * i * sign, y0 + dy * i * sign
+                if (
+                    not self.is_on_board(x, y)
+                    or self.board[x][y] == self.opponent_player
+                    or empty_count == 2
+                ):
+                    break
+                if self.board[x][y] == self.current_player:
+                    if empty_count > 0:
+                        hole = True
+                    my_count += 1
+                else:
+                    empty_count += 1
+                i += 1
+            return my_count, empty_count, hole
+
         new_free_threes = []
         directions = [(1, -1), (1, 0), (1, 1), (0, 1)]
-        free_three_pattern = [[0, 1, 1, 1, 0], [0, 1, 0, 1, 1, 0], [0, 1, 1, 0, 1, 0]]
 
         for dx, dy in directions:
-            array = self.make_array(x, y, -4, 4, dx, dy)
-            for pattern in free_three_pattern:
-                find = find_sublist(array, pattern)
-                if find != -1:
+            plus_my, plus_empty, plus_hole = count_free_three(+1, dx, dy)
+            minus_my, minus_empty, minus_hole = count_free_three(-1, dx, dy)
+            if (plus_my == 3 and plus_empty == 2) or (
+                minus_my == 3 and minus_empty == 2
+            ):
+                if plus_my == 3 and plus_empty == 2:
                     points = tuple(
-                        (x + dx * i, y + dy * i)
-                        for i in range(find - 4, find + len(pattern) - 4)
+                        (x0 + dx * i, y0 + dy * i)
+                        for i in range(0, plus_my + plus_empty + 1)
                     )
                     new_free_threes.append(points)
-
+                if minus_my == 3 and minus_empty == 2:
+                    points = tuple(
+                        (x0 + dx * i, y0 + dy * i)
+                        for i in range(-(minus_my + minus_empty), 0 + 1)
+                    )
+                    new_free_threes.append(points)
+            elif plus_hole == False and minus_hole == False:
+                if plus_my + minus_my == 3 and plus_empty and minus_empty:
+                    plus_end = plus_my + 1
+                    minus_end = minus_my + 1
+                    points = tuple(
+                        (x0 + dx * i, y0 + dy * i)
+                        for i in range(-(minus_end), plus_end + 1)
+                    )
+                    new_free_threes.append(points)
         return new_free_threes
 
-    def capture_center(self, x, y) -> int:
+    def capture_center(self, x0, y0) -> int:
         """
         A function to detect if a move causes a capture.
         """
+
+        def is_capture(dx, dy):
+            for i in range(1, 3):
+                x, y = x0 + dx * i, y0 + dy * i
+                if self.board[x][y] != self.opponent_player:
+                    return False
+            x, y = x0 + dx * 3, y0 + dy * 3
+            if self.board[x][y] == self.current_player:
+                return True
+            return False
+
         directions = [
             (1, -1),
             (1, 0),
@@ -143,43 +191,55 @@ class Gomoku:
         ]
         capture_count = 0
         for dx, dy in directions:
-            array = self.make_array(x, y, 0, 3, dx, dy)
-            if array == [1, -1, -1, 1]:
-                self.apply_capture(x, y, dx, dy)
+            if is_capture(dx, dy):
+                self.apply_capture(x0, y0, dx, dy)
                 capture_count += 1
 
         if capture_count > 0:
             self.capture_count[self.current_player] += capture_count
         return capture_count
 
-    def apply_capture(self, x, y, dx, dy):
+    def apply_capture(self, x0, y0, dx, dy):
         """
         A function to apply a capture.
         Remove opponent's stone, remove opponent's free-threes, find my new free-threes.
         """
         new_free_threes = []
         for i in range(1, 3):
-            new_x, new_y = x + dx * i, y + dy * i
-            self.board[new_x][new_y] = "."
-            # self.change.append((new_x, new_y))
-            self.remove_free_three(new_x, new_y, self.opponent_player)
-            new_free_threes.append(self.get_free_threes_from_capture(new_x, new_y))
+            x, y = x0 + dx * i, y0 + dy * i
+            self.board[x][y] = "."
+            # self.change.append((x, y))
+            self.remove_free_three(x, y, self.opponent_player)
+        for i in range(1, 3):
+            x, y = x0 + dx * i, y0 + dy * i
+            new_free_threes.append(self.get_free_threes_from_capture(x, y))
 
         self.add_free_threes(new_free_threes, self.current_player)
 
-    def check_five_rows_from_move(self, x, y):
+    def check_five_rows_from_move(self, x0, y0):
+        def count_five(sign, dx, dy):
+            my_count = 0
+            i = 1
+            while True:
+                x, y = x0 + dx * i * sign, y0 + dy * i * sign
+                if (
+                    not self.is_on_board(x, y)
+                    or self.board[x][y] != self.current_player
+                ):
+                    break
+                my_count += 1
+                i += 1
+            return my_count
+
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
-        win_pattern = [1, 1, 1, 1, 1]
 
         for dx, dy in directions:
-            array = self.make_array(x, y, -4, 4, dx, dy)
-            find = find_sublist(array, win_pattern)
-            if find != -1:
-                self.five_row[self.current_player] = [
-                    (x + dx * i, y + dy * i)
-                    for i in range(find - 4, find + len(win_pattern) - 4)
-                ]
-        # TODO check if it's catchable in next turn
+            plus_my = count_five(+1, dx, dy)
+            minus_my = count_five(-1, dx, dy)
+            if plus_my + minus_my >= 4:
+                self.five_row[self.current_player] = tuple(
+                    (x0 + dx * i, y0 + dy * i) for i in range(-minus_my, plus_my + 1)
+                )
 
     def add_free_threes(self, new_free_threes, player):
         self.free_three_list[player].extend(
