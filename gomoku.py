@@ -92,7 +92,7 @@ class Gomoku:
             plus_my, plus_empty, plus_hole = count_free_three(+1, dx, dy)
             minus_my, minus_empty, minus_hole = count_free_three(-1, dx, dy)
 
-            if plus_my + minus_my >= 2 and plus_empty + minus_empty >= 3:
+            if plus_my + minus_my == 2 and plus_empty + minus_empty >= 3:
                 if plus_hole and minus_empty == 2:
                     minus_empty = 1
                 if minus_hole and plus_empty == 2:
@@ -172,10 +172,13 @@ class Gomoku:
         def is_capture(dx, dy):
             for i in range(1, 3):
                 x, y = x0 + dx * i, y0 + dy * i
-                if self.board[x][y] != self.opponent_player:
+                if (
+                    not self.is_on_board(x, y)
+                    or self.board[x][y] != self.opponent_player
+                ):
                     return False
             x, y = x0 + dx * 3, y0 + dy * 3
-            if self.board[x][y] == self.current_player:
+            if self.is_on_board(x, y) and self.board[x][y] == self.current_player:
                 return True
             return False
 
