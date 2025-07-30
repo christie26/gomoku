@@ -24,3 +24,5 @@ if __name__ == "__main__":
     stats.strip_dirs()
     stats.sort_stats(pstats.SortKey.CUMULATIVE)
     stats.print_stats(50)  # Print top 50 cumulative time functions
+
+    stats.dump_stats("gomoku.prof")
