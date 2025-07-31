@@ -162,6 +162,10 @@ class GomokuGUI:
     def handle_click(self, event):
         x = event.x // CELL_SIZE
         y = event.y // CELL_SIZE
+        self.play_one_turn(x, y)
+        self.ai_play()
+
+    def play_one_turn(self, x, y) -> int:
         result, capture = self.game.handle_move(y, x)  # note: board is row (y), col (x)
         self.update_alert_label("")
         if result == MoveResult.VALID:
@@ -182,7 +186,7 @@ class GomokuGUI:
             self.update_alert_label(
                 f"Invalid move: {result.name.replace('_', ' ').title()}"
             )
-        self.ai_play()
+        return result
 
     def ai_play(self):
         while True:
@@ -193,28 +197,13 @@ class GomokuGUI:
 
             x, y = get_ai_move(self.game)
 
-            self.update_ai_label(f"AI played in {time.time() - start_time:.4f}s")
-            print(f"AI played in {time.time() - start_time:.4f}s")
+            time = time.time() - start_time
+            self.update_ai_label(f"AI played in {time:.4f}s")
+            print(f"AI played in {time:.4f}s")
 
-            result, capture = self.game.handle_move(x, y)
-            self.update_alert_label("")
+            result = self.play_one_turn(x, y)
             if result == MoveResult.VALID:
-                if capture:
-                    self.update_alert_label(
-                        f"{self.player_names[self.game.current_player]} captures {self.player_names[self.game.opponent_player]}"
-                    )
-                self.draw_board(self.game.board)
-                winner = self.game.get_winner()
-                if winner != None:
-                    self.finish_game(winner)
-                else:
-                    self.game.switch_player()
-                    self.update_turn_label()
                 return
-            else:
-                self.update_alert_label(
-                    f"Invalid move: {result.name.replace('_', ' ').title()}"
-                )
 
 
 def load_and_validate_board(filepath):
