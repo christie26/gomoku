@@ -162,11 +162,11 @@ class GomokuGUI:
     def handle_click(self, event):
         x = event.x // CELL_SIZE
         y = event.y // CELL_SIZE
-        self.play_one_turn(x, y)
+        self.play_one_turn(y, x)  # note: board is row (y), col (x)
         self.ai_play()
 
     def play_one_turn(self, x, y) -> int:
-        result, capture = self.game.handle_move(y, x)  # note: board is row (y), col (x)
+        result, capture = self.game.handle_move(x, y)
         self.update_alert_label("")
         if result == MoveResult.VALID:
             if capture:
@@ -197,9 +197,9 @@ class GomokuGUI:
 
             x, y = get_ai_move(self.game)
 
-            time = time.time() - start_time
-            self.update_ai_label(f"AI played in {time:.4f}s")
-            print(f"AI played in {time:.4f}s")
+            ai_time = time.time() - start_time
+            self.update_ai_label(f"AI played in {ai_time:.4f}s")
+            print(f"AI played in {ai_time:.4f}s")
 
             result = self.play_one_turn(x, y)
             if result == MoveResult.VALID:
