@@ -8,13 +8,6 @@ class MoveResult(Enum):
     DOUBLE_THREE = 3
 
 
-def find_sublist(lst, sub):
-    for i in range(len(lst) - len(sub) + 1):
-        if lst[i : i + len(sub)] == sub:
-            return i
-    return -1
-
-
 class Gomoku:
     def __init__(self, size=19):
         self.size = size
@@ -23,10 +16,12 @@ class Gomoku:
         self.opponent_player = "O"
         self.capture_count = {"X": 0, "O": 0}
         self.free_three_list = {"X": [], "O": []}
-        self.five_row = {"X": None, "O": None}
+        self.five_row = {"X": [], "O": []}
+        self.open_two = {"X": [], "O": []}
+        self.open_three = {"X": [], "O": []}
+        self.open_four = {"X": [], "O": []}
         self.win_capture_count = 5
         self.current_move = None, None
-        # self.change = []
 
     def print_board(self):
         print("  " + " ".join(map(lambda x: f"{x:2}", range(self.size))))
@@ -211,16 +206,18 @@ class Gomoku:
         for i in range(1, 3):
             x, y = x0 + dx * i, y0 + dy * i
             self.board[x][y] = "."
-            # self.change.append((x, y))
             self.remove_free_three(x, y, self.opponent_player)
+            self.remove_opens(x, y)
         for i in range(1, 3):
             x, y = x0 + dx * i, y0 + dy * i
             new_free_threes.append(self.get_free_threes_from_capture(x, y))
 
         self.add_free_threes(new_free_threes, self.current_player)
 
-    def check_five_rows_from_move(self, x0, y0):
-        def count_five(sign, dx, dy):
+    def check_opens(self, x0, y0):
+        """Record all kind of opens cause by this move."""
+
+        def count_open(sign, dx, dy):
             my_count = 0
             i = 1
             while True:
@@ -232,23 +229,48 @@ class Gomoku:
                     break
                 my_count += 1
                 i += 1
-            return my_count
+            x, y = x0 + dx * i * sign, y0 + dy * i * sign
+            open = self.board[x][y] == "."
+            return my_count, open
 
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
 
         for dx, dy in directions:
-            plus_my = count_five(+1, dx, dy)
-            minus_my = count_five(-1, dx, dy)
-            if plus_my + minus_my >= 4:
-                self.five_row[self.current_player] = tuple(
-                    (x0 + dx * i, y0 + dy * i) for i in range(-minus_my, plus_my + 1)
+            plus_my, plus_open = count_open(+1, dx, dy)
+            minus_my, minus_open = count_open(-1, dx, dy)
+            if plus_my + minus_my == 1 and plus_open and minus_open:
+                self.open_two[self.current_player].append(
+                    tuple(
+                        (x0 + dx * i, y0 + dy * i)
+                        for i in range(-(minus_my + 1), plus_my + 2)
+                    )
+                )
+            elif plus_my + minus_my == 2 and plus_open and minus_open:
+                self.open_three[self.current_player].append(
+                    tuple(
+                        (x0 + dx * i, y0 + dy * i)
+                        for i in range(-(minus_my + 1), plus_my + 2)
+                    )
+                )
+            elif plus_my + minus_my == 3 and (plus_open or minus_open):
+                self.open_four[self.current_player].append(
+                    tuple(
+                        (x0 + dx * i, y0 + dy * i)
+                        for i in range(-(minus_my + 1), plus_my + 2)
+                    )
+                )
+            elif plus_my + minus_my == 4:
+                self.five_row[self.current_player].append(
+                    tuple(
+                        (x0 + dx * i, y0 + dy * i)
+                        for i in range(-minus_my, plus_my + 1)
+                    )
                 )
 
     def add_free_threes(self, new_free_threes, player):
         self.free_three_list[player].extend(
             v for v in new_free_threes if v not in self.free_three_list[player]
         )
-        # print(f"After add free three", self.free_three_list[player])
 
     def remove_free_three(self, x, y, player):
         def filtered_tuple(free_three, x, y):
@@ -267,23 +289,22 @@ class Gomoku:
             for free_three in free_threes
             if filtered_tuple(free_three, x, y) is not None
         ]
-        # print("After remove free three", self.free_three_list[player])
 
-    def make_array(self, x, y, start_index, end_index, dx, dy):
-        array = []
-
-        for i in range(start_index, end_index + 1):
-            if not self.is_on_board(x + dx * i, y + dy * i):
-                array.append(-2)
-                continue
-            cell = self.board[x + dx * i][y + dy * i]
-            if cell == self.current_player:
-                array.append(1)
-            elif cell == self.opponent_player:
-                array.append(-1)
-            else:
-                array.append(0)
-        return array
+    def remove_opens(self, x, y):
+        for category in ["open_two", "open_three", "open_four", "five_row"]:
+            for player in [self.current_player, self.opponent_player]:
+                setattr(
+                    self,
+                    category,
+                    {
+                        **getattr(self, category),
+                        player: [
+                            pattern
+                            for pattern in getattr(self, category)[player]
+                            if (x, y) not in pattern
+                        ],
+                    },
+                )
 
     def handle_move(self, x, y):
         result = self.is_valid_move(x, y)
@@ -291,9 +312,9 @@ class Gomoku:
         if result == MoveResult.VALID:
             self.current_move = x, y
             self.board[x][y] = self.current_player
-            # self.change.append((x, y))
             self.remove_free_three(x, y, self.opponent_player)
-            self.check_five_rows_from_move(x, y)
+            self.remove_opens(x, y)
+            self.check_opens(x, y)
             capture_count = self.capture_center(x, y)
         return result, capture_count
 
@@ -310,10 +331,11 @@ class Gomoku:
         # 2. check if opponent keep five rows
         if x is None or y is None:
             return None
-        if self.five_row[self.opponent_player] != None:
-            for x, y in self.five_row[self.opponent_player]:
-                if self.board[x][y] != self.opponent_player:
-                    return None
+        if len(self.five_row[self.opponent_player]) > 0:
+            for five_row in self.five_row[self.opponent_player]:
+                for x, y in five_row:
+                    if self.board[x][y] != self.opponent_player:
+                        return None
             return self.opponent_player
 
         return None
