@@ -56,15 +56,15 @@ def possible_next_states(state: Gomoku) -> list[Gomoku]:
 def get_ai_move(state: Gomoku):
     minimax_value, best_move = None, None
     candidate_moves = get_candidate_moves(state)
+    is_max_player = state.current_player == "X"
 
     for move_x, move_y in candidate_moves:
         new_state = make_next_state(state, move_x, move_y)
-        is_max_player = new_state.current_player == "X"
         val = alphabeta(new_state, MIN_VALUE, MAX_VALUE, is_max_player)
         if (
             minimax_value is None
-            or (state.current_player == "X" and minimax_value < val)
-            or (state.current_player == "O" and minimax_value > val)
+            or (is_max_player and minimax_value < val)
+            or (not is_max_player and minimax_value > val)
         ):
             minimax_value = val
             best_move = (move_x, move_y)
@@ -74,43 +74,35 @@ def get_ai_move(state: Gomoku):
 
 def alphabeta(state: Gomoku, alpha, beta, is_max_player, depth: int = 1) -> int:
     if is_terminal_state(state):
-        value = state_value(state)
-        # print(
-        #   f"{indent}{state.current_player}, {alpha:.0f}, {beta:.0f}, {value:.0f}."
-        # )
-        return value
+        return state_value(state)
 
     if depth == MAX_DEPTH:
-        value = heuristic_evaluation(state)
-        # print(
-        #   f"{indent}{state.current_player}, {alpha:.0f}, {beta:.0f}, {value:.0f}.."
-        # )
-        return value
+        return heuristic_evaluation(state)
+
+    candidate_moves = get_candidate_moves(state)
 
     if is_max_player:
         value = MIN_VALUE
-        for next_state in possible_next_states(state):
-            value = max(value, alphabeta(next_state, alpha, beta, False, depth + 1))
+        for x, y in candidate_moves:
+            state.apply_move(x, y)
+            value = max(value, alphabeta(state, alpha, beta, False, depth + 1))
+            state.undo_move(x, y)
+
             alpha = max(alpha, value)
             if alpha >= beta:
-                # print(f"{indent}🔥 가지치기 ------------------------- alpha")
-                break
-        #     print(
-        #     f"{indent}{state.current_player}, {alpha:.0f}, {beta:.0f} {value:.0f}..."
-        # )
+                break  # Beta cut-off
         return value
 
     else:
         value = MAX_VALUE
-        for next_state in possible_next_states(state):
-            value = min(value, alphabeta(next_state, alpha, beta, True, depth + 1))
+        for x, y in candidate_moves:
+            state.apply_move(x, y)
+            value = min(value, alphabeta(state, alpha, beta, True, depth + 1))
+            state.undo_move(x, y)
+
             beta = min(beta, value)
             if beta <= alpha:
-                # print(f"{indent}🔥 가지치기 ------------------------- beta")
-                break
-        #     print(
-        #     f"{indent}{state.current_player}, {alpha:.0f}, {beta:.0f} {value:.0f}...."
-        # )
+                break  # Alpha cut-off
         return value
 
 
