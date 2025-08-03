@@ -189,21 +189,18 @@ class GomokuGUI:
         return result
 
     def ai_play(self):
-        while True:
-            start_time = time.time()
+        start_time = time.time()
 
-            self.update_ai_label("AI is thinking")
-            print("AI is thinking")
+        self.update_ai_label("AI is thinking")
+        print("AI is thinking")
 
-            x, y = get_ai_move(self.game)
+        x, y = get_ai_move(self.game)
 
-            ai_time = time.time() - start_time
-            self.update_ai_label(f"AI played in {ai_time:.4f}s")
-            print(f"AI played in {ai_time:.4f}s")
+        ai_time = time.time() - start_time
+        self.update_ai_label(f"AI played in {ai_time:.4f}s")
+        print(f"AI played in {ai_time:.4f}s")
 
-            result = self.play_one_turn(x, y)
-            if result == MoveResult.VALID:
-                return
+        self.play_one_turn(x, y)
 
 
 def load_and_validate_board(filepath):
