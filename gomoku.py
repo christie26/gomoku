@@ -230,7 +230,8 @@ class Gomoku:
                 my_count += 1
                 i += 1
             x, y = x0 + dx * i * sign, y0 + dy * i * sign
-            open = self.board[x][y] == "."
+
+            open = self.is_on_board(x, y) and self.board[x][y] == "."
             return my_count, open
 
         directions = [(1, 0), (0, 1), (1, 1), (1, -1)]

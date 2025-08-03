@@ -84,9 +84,8 @@ def alphabeta(state: Gomoku, alpha, beta, is_max_player, depth: int = 1) -> int:
     if is_max_player:
         value = MIN_VALUE
         for x, y in candidate_moves:
-            state.apply_move(x, y)
+            state.handle_move(x, y)
             value = max(value, alphabeta(state, alpha, beta, False, depth + 1))
-            state.undo_move(x, y)
 
             alpha = max(alpha, value)
             if alpha >= beta:
@@ -96,9 +95,8 @@ def alphabeta(state: Gomoku, alpha, beta, is_max_player, depth: int = 1) -> int:
     else:
         value = MAX_VALUE
         for x, y in candidate_moves:
-            state.apply_move(x, y)
+            state.handle_move(x, y)
             value = min(value, alphabeta(state, alpha, beta, True, depth + 1))
-            state.undo_move(x, y)
 
             beta = min(beta, value)
             if beta <= alpha:
