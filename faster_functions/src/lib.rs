@@ -1,6 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::{intern, prelude::*};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[pyclass]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -643,10 +642,43 @@ impl Gomoku {
     }
 }
 
+#[pyfunction]
+fn get_candidate_moves(state: &mut Gomoku, radius: i32) -> Vec<(usize, usize)> {
+    if state.count_empty_spots() as usize == state.size * state.size {
+        return vec![(9, 9)];
+    }
+
+    let mut candidates = HashSet::with_capacity(100);
+    let (rows, cols) = (state.board.len(), state.board[0].len());
+    let radius = radius as usize;
+
+    for row in 0..rows {
+        for col in 0..cols {
+            if state.board[row][col] != "." {
+                let start_row = row.saturating_sub(radius);
+                let end_row = (row + radius + 1).min(rows);
+                let start_col = col.saturating_sub(radius);
+                let end_col = (col + radius + 1).min(cols);
+
+                for r in start_row..end_row {
+                    for c in start_col..end_col {
+                        if state.is_valid_move(r as i32, c as i32) == MoveResult::Valid {
+                            candidates.insert((r, c));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    candidates.into_iter().collect()
+}
+
 #[pymodule]
 fn faster_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<MoveResult>()?;
     m.add_class::<Gomoku>()?;
+    m.add_function(wrap_pyfunction!(get_candidate_moves, m)?)?;
     let gomoku_class = m.getattr("Gomoku")?;
     gomoku_class.setattr("__module__", "faster_functions")?;
 
@@ -654,31 +686,3 @@ fn faster_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     move_result_class.setattr("__module__", "faster_functions")?;
     Ok(())
 }
-
-// A Python module implemented in Rust.
-// #[pymodule]
-// fn faster_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
-//     // m.add_function(wrap_pyfunction!(count_free_three, m)?)?;
-//     m.add_function(wrap_pyfunction!(is_on_board, m)?)?;
-//     m.add_function(wrap_pyfunction!(gomoku_test, m)?)?;
-//     Ok(())
-// }
-//
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//
-//     #[test]
-//     fn test_is_on_baord_exec_time() {
-//         let start = std::time::Instant::now();
-//         let mut total = 0;
-//         let iters = 100000;
-//         for i in 0..iters {
-//             is_on_board(i, i * i, i * i * i);
-//         }
-//         let elapsed = start.elapsed();
-//         let per_iter = elapsed.as_secs_f64() / (iters as f64);
-//         println!("elapsed: {elapsed:?}, per iter: {per_iter:e}");
-//         assert!(per_iter < 1e-15);
-//     }
-// }

@@ -1,5 +1,5 @@
 from typing import Optional
-from faster_functions import Gomoku, MoveResult
+from faster_functions import Gomoku, MoveResult, get_candidate_moves
 import random
 import copy
 import pickle
@@ -9,7 +9,7 @@ import math
 MAX_VALUE = 100000
 MIN_VALUE = -100000
 
-MAX_DEPTH = 3
+MAX_DEPTH = 6
 
 
 def is_terminal_state(state: Gomoku):
@@ -23,21 +23,21 @@ def state_value(state: Gomoku):
     return MAX_VALUE if winner == "X" else MIN_VALUE
 
 
-def get_candidate_moves(state: Gomoku, radius: int = 1):
-    if state.count_empty_spots() == state.size**2:
-        return [(random.randint(7, 13), random.randint(7, 13))]
-    candidates = set([])
-    for row in range(len(state.board)):
-        for col in range(len(state.board[0])):
-            if state.board[row][col] != ".":
-                for dr in range(-radius, radius + 1):
-                    for dc in range(-radius, radius + 1):
-                        new_row, new_col = row + dr, col + dc
-                        o = state.is_valid_move(new_row, new_col)
-                        if o == MoveResult.Valid:
-                            candidates.add((new_row, new_col))
-
-    return list(candidates)
+# def get_candidate_moves(state: Gomoku, radius: int = 1):
+#     if state.count_empty_spots() == state.size**2:
+#         return [(random.randint(7, 13), random.randint(7, 13))]
+#     candidates = set([])
+#     for row in range(len(state.board)):
+#         for col in range(len(state.board[0])):
+#             if state.board[row][col] != ".":
+#                 for dr in range(-radius, radius + 1):
+#                     for dc in range(-radius, radius + 1):
+#                         new_row, new_col = row + dr, col + dc
+#                         o = state.is_valid_move(new_row, new_col)
+#                         if o == MoveResult.Valid:
+#                             candidates.add((new_row, new_col))
+#
+#     return list(candidates)
 
 
 def make_next_state(state: Gomoku, move_x: int, move_y: int) -> Gomoku:
@@ -50,12 +50,12 @@ def make_next_state(state: Gomoku, move_x: int, move_y: int) -> Gomoku:
 
 
 def possible_next_states(state: Gomoku) -> list[Gomoku]:
-    return [make_next_state(state, x, y) for x, y in get_candidate_moves(state)]
+    return [make_next_state(state, x, y) for x, y in get_candidate_moves(state, 2)]
 
 
 def get_ai_move(state: Gomoku):
     minimax_value, best_move = None, None
-    candidate_moves = get_candidate_moves(state)
+    candidate_moves = get_candidate_moves(state, 2)
     is_max_player = state.current_player == "X"
 
     for move_x, move_y in candidate_moves:
@@ -79,7 +79,7 @@ def alphabeta(state: Gomoku, alpha, beta, is_max_player, depth: int = 1) -> int:
     if depth == MAX_DEPTH:
         return heuristic_evaluation(state)
 
-    candidate_moves = get_candidate_moves(state)
+    candidate_moves = get_candidate_moves(state, 2)
 
     if is_max_player:
         value = MIN_VALUE
