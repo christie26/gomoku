@@ -1,6 +1,5 @@
-from gomoku import MoveResult
 from typing import Optional
-from gomoku import Gomoku
+from faster_functions import Gomoku, MoveResult
 import random
 import copy
 import pickle
@@ -34,7 +33,8 @@ def get_candidate_moves(state: Gomoku, radius: int = 1):
                 for dr in range(-radius, radius + 1):
                     for dc in range(-radius, radius + 1):
                         new_row, new_col = row + dr, col + dc
-                        if state.is_valid_move(new_row, new_col) == MoveResult.VALID:
+                        o = state.is_valid_move(new_row, new_col)
+                        if o == MoveResult.Valid:
                             candidates.add((new_row, new_col))
 
     return list(candidates)

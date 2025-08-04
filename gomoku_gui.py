@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import simpledialog
-from gomoku import Gomoku, MoveResult
+from faster_functions import Gomoku, MoveResult
 import argparse
 from minimax import minimax, get_ai_move
 import time
