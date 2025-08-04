@@ -24,7 +24,34 @@ def state_value(state: Gomoku):
     return MAX_VALUE if winner == "X" else MIN_VALUE
 
 
-def get_candidate_moves(state: Gomoku, radius: int = 1):
+def get_critical_moves(state: Gomoku) -> list[tuple[int, int]]:
+    critical_moves = []
+    for player in [state.opponent_player, state.current_player]:
+        for category in [
+            "block_four",
+            "open_four",
+            "open_three",
+            "open_two",
+        ]:
+            patterns = getattr(state, category)[player]
+            for pattern in patterns:
+                (x, y) = pattern[0]
+                if (
+                    state.board[x][y] == "."
+                    and state.is_valid_move(x, y) == MoveResult.VALID
+                ):
+                    critical_moves.append(pattern[0])
+                (x, y) = pattern[-1]
+                if (
+                    state.board[x][y] == "."
+                    and state.is_valid_move(x, y) == MoveResult.VALID
+                ):
+                    critical_moves.append(pattern[-1])
+
+    return critical_moves
+
+
+def get_radius_moves(state: Gomoku, radius: int = 1):
     if state.count_empty_spots() == state.size**2:
         return [(random.randint(7, 13), random.randint(7, 13))]
     candidates = set([])
@@ -38,6 +65,13 @@ def get_candidate_moves(state: Gomoku, radius: int = 1):
                             candidates.add((new_row, new_col))
 
     return list(candidates)
+
+
+def get_candidate_moves(state: Gomoku):
+    candiates = []
+    candiates.extend(get_critical_moves(state))
+    candiates.extend(get_radius_moves(state))
+    return candiates
 
 
 def make_next_state(state: Gomoku, move_x: int, move_y: int) -> Gomoku:
@@ -59,8 +93,12 @@ def get_ai_move(state: Gomoku):
     is_max_player = state.current_player == "X"
 
     for move_x, move_y in candidate_moves:
+        # print(f"\n{state.current_player} ({move_x},{move_y})")
+
         new_state = make_next_state(state, move_x, move_y)
-        val = alphabeta(new_state, MIN_VALUE, MAX_VALUE, is_max_player)
+        val = alphabeta(
+            new_state, MIN_VALUE, MAX_VALUE, new_state.current_player == "X"
+        )
         if (
             minimax_value is None
             or (is_max_player and minimax_value < val)
@@ -73,33 +111,40 @@ def get_ai_move(state: Gomoku):
 
 
 def alphabeta(state: Gomoku, alpha, beta, is_max_player, depth: int = 1) -> int:
+    # indent = "  " * (depth + 1)
     if is_terminal_state(state):
         return state_value(state)
 
     if depth == MAX_DEPTH:
-        return heuristic_evaluation(state)
+        value = heuristic_evaluation(state)
+        # print(f"{state.current_player}{indent}{value}")
+        return value
 
     candidate_moves = get_candidate_moves(state)
 
     if is_max_player:
         value = MIN_VALUE
         for x, y in candidate_moves:
-            state.handle_move(x, y)
-            value = max(value, alphabeta(state, alpha, beta, False, depth + 1))
-
+            new_state = make_next_state(state, x, y)
+            value = max(value, alphabeta(new_state, alpha, beta, False, depth + 1))
             alpha = max(alpha, value)
+            # print(f"{state.current_player}{indent}({x},{y})")
+            # print(f"{state.current_player}{indent}{alpha} {beta} {value}")
             if alpha >= beta:
+                # print("cut----------")
                 break  # Beta cut-off
         return value
 
     else:
         value = MAX_VALUE
         for x, y in candidate_moves:
-            state.handle_move(x, y)
-            value = min(value, alphabeta(state, alpha, beta, True, depth + 1))
-
+            new_state = make_next_state(state, x, y)
+            value = min(value, alphabeta(new_state, alpha, beta, True, depth + 1))
             beta = min(beta, value)
+            # print(f"{state.current_player}{indent}({x},{y})")
+            # print(f"{state.current_player}{indent}{alpha} {beta} {value}")
             if beta <= alpha:
+                # print("cut----------")
                 break  # Alpha cut-off
         return value
 
