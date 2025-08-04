@@ -10,7 +10,7 @@ import math
 MAX_VALUE = 100000
 MIN_VALUE = -100000
 
-MAX_DEPTH = 3
+MAX_DEPTH = 5
 
 
 def is_terminal_state(state: Gomoku):
@@ -28,6 +28,7 @@ def get_critical_moves(state: Gomoku) -> list[tuple[int, int]]:
     critical_moves = []
     for player in [state.opponent_player, state.current_player]:
         for category in [
+            "free_three",
             "block_four",
             "open_four",
             "open_three",
@@ -35,18 +36,26 @@ def get_critical_moves(state: Gomoku) -> list[tuple[int, int]]:
         ]:
             patterns = getattr(state, category)[player]
             for pattern in patterns:
-                (x, y) = pattern[0]
-                if (
-                    state.board[x][y] == "."
-                    and state.is_valid_move(x, y) == MoveResult.VALID
-                ):
-                    critical_moves.append(pattern[0])
-                (x, y) = pattern[-1]
-                if (
-                    state.board[x][y] == "."
-                    and state.is_valid_move(x, y) == MoveResult.VALID
-                ):
-                    critical_moves.append(pattern[-1])
+                if category == "free_three":
+                    for x, y in pattern:
+                        if (
+                            state.board[x][y] == "."
+                            and state.is_valid_move(x, y) == MoveResult.VALID
+                        ):
+                            critical_moves.append((x, y))
+                else:
+                    (x, y) = pattern[0]
+                    if (
+                        state.board[x][y] == "."
+                        and state.is_valid_move(x, y) == MoveResult.VALID
+                    ):
+                        critical_moves.append(pattern[0])
+                    (x, y) = pattern[-1]
+                    if (
+                        state.board[x][y] == "."
+                        and state.is_valid_move(x, y) == MoveResult.VALID
+                    ):
+                        critical_moves.append(pattern[-1])
 
     return critical_moves
 
@@ -76,9 +85,7 @@ def get_candidate_moves(state: Gomoku):
 
 def make_next_state(state: Gomoku, move_x: int, move_y: int) -> Gomoku:
     new_state: Gomoku = pickle.loads(pickle.dumps(state, -1))
-    result, _ = new_state.handle_move(move_x, move_y)
-    if result != MoveResult.VALID:
-        raise Exception(f"Invalid move: {result} at ({move_x}, {move_y})")
+    new_state.handle_move(move_x, move_y)
     new_state.switch_player()
     return new_state
 
@@ -120,33 +127,21 @@ def alphabeta(state: Gomoku, alpha, beta, is_max_player, depth: int = 1) -> int:
         # print(f"{state.current_player}{indent}{value}")
         return value
 
-    candidate_moves = get_candidate_moves(state)
+    value = MIN_VALUE if is_max_player else MAX_VALUE
 
-    if is_max_player:
-        value = MIN_VALUE
-        for x, y in candidate_moves:
-            new_state = make_next_state(state, x, y)
-            value = max(value, alphabeta(new_state, alpha, beta, False, depth + 1))
+    for next_state in possible_next_states(state):
+        if is_max_player:
+            value = max(value, alphabeta(next_state, alpha, beta, False, depth + 1))
             alpha = max(alpha, value)
-            # print(f"{state.current_player}{indent}({x},{y})")
-            # print(f"{state.current_player}{indent}{alpha} {beta} {value}")
-            if alpha >= beta:
-                # print("cut----------")
-                break  # Beta cut-off
-        return value
-
-    else:
-        value = MAX_VALUE
-        for x, y in candidate_moves:
-            new_state = make_next_state(state, x, y)
-            value = min(value, alphabeta(new_state, alpha, beta, True, depth + 1))
+        else:
+            value = min(value, alphabeta(next_state, alpha, beta, True, depth + 1))
             beta = min(beta, value)
-            # print(f"{state.current_player}{indent}({x},{y})")
-            # print(f"{state.current_player}{indent}{alpha} {beta} {value}")
-            if beta <= alpha:
-                # print("cut----------")
-                break  # Alpha cut-off
-        return value
+        # print(f"{state.current_player}{indent}({x},{y})")
+        # print(f"{state.current_player}{indent}{alpha} {beta} {value}")
+        if alpha >= beta:
+            break
+
+    return value
 
 
 def minimax(state: Gomoku, depth: int = MAX_DEPTH) -> int:

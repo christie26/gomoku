@@ -340,16 +340,14 @@ class Gomoku:
                 )
 
     def handle_move(self, x, y):
-        result = self.is_valid_move(x, y)
-        capture_count = 0
-        if result == MoveResult.VALID:
-            self.current_move = x, y
-            self.board[x][y] = self.current_player
-            self.remove_free_three(x, y, self.opponent_player)
-            self.remove_opens(x, y)
-            self.check_opens(x, y)
-            capture_count = self.capture_center(x, y)
-        return result, capture_count
+        self.current_move = x, y
+        self.board[x][y] = self.current_player
+        # TODO add free three
+        self.remove_free_three(x, y, self.opponent_player)
+        self.remove_opens(x, y)
+        self.check_opens(x, y)
+        capture_count = self.capture_center(x, y)
+        return capture_count
 
     def count_empty_spots(self):
         return sum(row.count(".") for row in self.board)
