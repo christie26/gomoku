@@ -62,6 +62,7 @@ impl MoveResult {
 type Position = (i32, i32);
 type Pattern = Vec<Position>;
 
+#[derive(Clone)]
 #[pyclass]
 pub struct Gomoku {
     size: usize,
@@ -138,6 +139,10 @@ impl Gomoku {
             }
             println!();
         }
+    }
+
+    fn clone_gomoku(&self) -> Gomoku {
+        self.clone()
     }
 
     fn is_on_board(&self, x: i32, y: i32) -> bool {
