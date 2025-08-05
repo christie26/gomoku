@@ -1,6 +1,5 @@
 from enum import Enum
 
-DEBUG = False
 
 class MoveResult(Enum):
     VALID = 0
@@ -222,7 +221,7 @@ class Gomoku:
             if pattern not in self.free_three[player]
         )
         if len(new_free_threes):
-            print(f"free_three {player} added {new_free_threes}") if DEBUG else None
+            # print(f"free_three {player} added {new_free_threes}") 
 
     def remove_free_three(self, x, y):
         def filtered_tuple(free_three, x, y):
@@ -242,7 +241,7 @@ class Gomoku:
                 if result is not None:
                     new_list.append(result)
             if new_list != self.free_three[player]:
-                print(f"free_three {player} modified {new_list}") if DEBUG else None
+                # print(f"free_three {player} modified {new_list}") 
             self.free_three[player] = new_list
     
     def add_opens(self, x0, y0):
@@ -278,7 +277,7 @@ class Gomoku:
                     )
                 )
                 
-                print(f"open_two {self.current_player} added {self.open_two[self.current_player]}") if DEBUG else None
+                # print(f"open_two {self.current_player} added {self.open_two[self.current_player]}") 
             elif plus_my + minus_my == 2 and plus_open and minus_open:
                 self.open_three[self.current_player].append(
                     tuple(
@@ -287,7 +286,7 @@ class Gomoku:
                     )
                 )
                 
-                print(f"open_three {self.current_player} added {self.open_three[self.current_player]}") if DEBUG else None
+                # print(f"open_three {self.current_player} added {self.open_three[self.current_player]}") 
             elif plus_my + minus_my == 3 and (plus_open and minus_open):
                 self.open_four[self.current_player].append(
                     tuple(
@@ -296,7 +295,7 @@ class Gomoku:
                     )
                 )
                 
-                print(f"open_four {self.current_player} added {self.open_four[self.current_player]}") if DEBUG else None
+                # print(f"open_four {self.current_player} added {self.open_four[self.current_player]}") 
             elif plus_my + minus_my == 3 and (plus_open or minus_open):
                 plus_end = plus_my + 1 + (plus_open)
                 minus_end = minus_my + (minus_open)
@@ -306,7 +305,7 @@ class Gomoku:
                     )
                 )
                 
-                print(f"block_four {self.current_player} added {self.block_four[self.current_player]}") if DEBUG else None
+                # print(f"block_four {self.current_player} added {self.block_four[self.current_player]}") 
             elif plus_my + minus_my == 4:
                 self.five_row[self.current_player].append(
                     tuple(
@@ -315,7 +314,7 @@ class Gomoku:
                     )
                 )
                 
-                print(f"five_row {self.current_player} added {self.five_row[self.current_player]}") if DEBUG else None
+                # print(f"five_row {self.current_player} added {self.five_row[self.current_player]}") 
 
     def remove_opens(self, x, y):
         for player in [self.current_player, self.opponent_player]:
@@ -335,13 +334,13 @@ class Gomoku:
                     elif category == "open_four":
                         if (x, y) == pattern[0] or (x, y) == pattern[-1]:
                             if (x, y) == pattern[0]:
-                                print(f"open_four became block_four {pattern} -> {pattern[1:]}") if DEBUG else None
+                                # print(f"open_four became block_four {pattern} -> {pattern[1:]}") 
                                 new_block_four.append(pattern[1:])
                             else:
-                                print(f"open_four became block_four {pattern} -> {pattern[:-1]}") if DEBUG else None
+                                # print(f"open_four became block_four {pattern} -> {pattern[:-1]}") 
                                 new_block_four.append(pattern[:-1])
                     else:
-                        print(f"{category} {player} removed {pattern}") if DEBUG else None
+                        # print(f"{category} {player} removed {pattern}") 
                 if category == "block_four":
                     new_patterns.extend(new_block_four)
                 setattr(
