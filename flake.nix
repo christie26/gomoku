@@ -15,13 +15,14 @@
       pkgs = nixpkgs.legacyPackages.${system};
 
       # Python with packages you might need
-      python = pkgs.python311Full.withPackages (ps:
+      python = pkgs.python311.withPackages (ps:
         with ps; [
-	tkinter
+          tkinter
           pip
           setuptools
           wheel
           virtualenv
+          snakeviz
         ]);
     in {
       devShells.default = pkgs.mkShell {
