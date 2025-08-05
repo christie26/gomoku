@@ -95,10 +95,10 @@ class Gomoku:
                     plus_empty = 1
                 plus_end = plus_empty + plus_my
                 minus_end = minus_empty + minus_my
-                points = tuple(
+                pattern = tuple(
                     (x0 + dx * i, y0 + dy * i) for i in range(-minus_end, plus_end + 1)
                 )
-                new_free_threes.append(points)
+                new_free_threes.append(pattern)
         return new_free_threes
 
     def get_free_threes_from_capture(self, x0, y0):
@@ -138,26 +138,26 @@ class Gomoku:
                 minus_my == 3 and minus_empty == 2
             ):
                 if plus_my == 3 and plus_empty == 2:
-                    points = tuple(
+                    pattern = tuple(
                         (x0 + dx * i, y0 + dy * i)
                         for i in range(0, plus_my + plus_empty + 1)
                     )
-                    new_free_threes.append(points)
+                    new_free_threes.append(pattern)
                 if minus_my == 3 and minus_empty == 2:
-                    points = tuple(
+                    pattern = tuple(
                         (x0 + dx * i, y0 + dy * i)
                         for i in range(-(minus_my + minus_empty), 0 + 1)
                     )
-                    new_free_threes.append(points)
+                    new_free_threes.append(pattern)
             elif plus_hole == False and minus_hole == False:
                 if plus_my + minus_my == 3 and plus_empty and minus_empty:
                     plus_end = plus_my + 1
                     minus_end = minus_my + 1
-                    points = tuple(
+                    pattern = tuple(
                         (x0 + dx * i, y0 + dy * i)
                         for i in range(-(minus_end), plus_end + 1)
                     )
-                    new_free_threes.append(points)
+                    new_free_threes.append(pattern)
         return new_free_threes
 
     def capture_center(self, x0, y0) -> int:
@@ -203,7 +203,6 @@ class Gomoku:
         A function to apply a capture.
         Remove opponent's stone, remove opponent's free-threes, find my new free-threes.
         """
-        new_free_threes = []
         for i in range(1, 3):
             x, y = x0 + dx * i, y0 + dy * i
             self.board[x][y] = "."
@@ -211,9 +210,9 @@ class Gomoku:
             self.remove_opens(x, y)
         for i in range(1, 3):
             x, y = x0 + dx * i, y0 + dy * i
-            new_free_threes.append(self.get_free_threes_from_capture(x, y))
-
-        self.add_free_threes(new_free_threes, self.current_player)
+            self.add_free_threes(
+                self.get_free_threes_from_capture(x, y), self.current_player
+            )
 
     def check_opens(self, x0, y0):
         """Record all kind of opens cause by this move."""
@@ -281,12 +280,14 @@ class Gomoku:
         # print(f"open_three {self.open_three[self.current_player]}")
         # print(f"open_four {self.open_four[self.current_player]}")
         # print(f"block_four {self.block_four[self.current_player]}")
-        # print(f"free_three_list {self.free_three[self.current_player]}")
+        # print(f"free_three {self.free_three[self.current_player]}")
         # print()
 
-    def add_free_threes(self, new_free_threes, player):
+    def add_free_threes(self, new_free_threes: list, player):
         self.free_three[player].extend(
-            v for v in new_free_threes if v not in self.free_three[player]
+            pattern
+            for pattern in new_free_threes
+            if pattern not in self.free_three[player]
         )
 
     def remove_free_three(self, x, y, player):
@@ -300,12 +301,12 @@ class Gomoku:
             else:
                 return None
 
-        free_threes = self.free_three[player]
-        self.free_three[player] = [
-            filtered_tuple(free_three, x, y)
-            for free_three in free_threes
-            if filtered_tuple(free_three, x, y) is not None
-        ]
+        new_list = []
+        for free_three in self.free_three[player]:
+            result = filtered_tuple(free_three, x, y)
+            if result is not None:
+                new_list.append(result)
+        self.free_three[player] = new_list
 
     def remove_opens(self, x, y):
         new_block_four = {"X": [], "O": []}

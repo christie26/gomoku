@@ -10,7 +10,7 @@ import math
 MAX_VALUE = 100000
 MIN_VALUE = -100000
 
-MAX_DEPTH = 5
+MAX_DEPTH = 3
 
 
 def is_terminal_state(state: Gomoku):
@@ -34,28 +34,26 @@ def get_critical_moves(state: Gomoku) -> list[tuple[int, int]]:
             "open_three",
             "open_two",
         ]:
-            patterns = getattr(state, category)[player]
-            for pattern in patterns:
+            for pattern in getattr(state, category)[player]:
                 if category == "free_three":
-                    for x, y in pattern:
-                        if (
-                            state.board[x][y] == "."
-                            and state.is_valid_move(x, y) == MoveResult.VALID
-                        ):
-                            critical_moves.append((x, y))
+                    points_to_check = pattern  # pattern 자체가 tuple of (x, y)
                 else:
-                    (x, y) = pattern[0]
+                    points_to_check = [pattern[0], pattern[-1]]
+                # print(
+                #     f"{category} {points_to_check} {getattr(state, category)[player]}"
+                # )
+                for point in points_to_check:
+                    try:
+                        (x, y) = point
+                    except:
+                        print(point)
+                        print(pattern)
+                        print(getattr(state, category)[player])
                     if (
                         state.board[x][y] == "."
                         and state.is_valid_move(x, y) == MoveResult.VALID
                     ):
-                        critical_moves.append(pattern[0])
-                    (x, y) = pattern[-1]
-                    if (
-                        state.board[x][y] == "."
-                        and state.is_valid_move(x, y) == MoveResult.VALID
-                    ):
-                        critical_moves.append(pattern[-1])
+                        critical_moves.append((x, y))
 
     return critical_moves
 
