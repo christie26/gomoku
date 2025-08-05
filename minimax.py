@@ -24,8 +24,8 @@ def state_value(state: Gomoku):
     return MAX_VALUE if winner == "X" else MIN_VALUE
 
 
-def get_critical_moves(state: Gomoku) -> list[tuple[int, int]]:
-    critical_moves = []
+def get_critical_moves(state: Gomoku) -> set[tuple[int, int]]:
+    critical_moves = set([])
     for player in [state.opponent_player, state.current_player]:
         for category in [
             "free_three",
@@ -35,30 +35,19 @@ def get_critical_moves(state: Gomoku) -> list[tuple[int, int]]:
             "open_two",
         ]:
             for pattern in getattr(state, category)[player]:
-                if category == "free_three":
-                    points_to_check = pattern  # pattern 자체가 tuple of (x, y)
-                else:
-                    points_to_check = [pattern[0], pattern[-1]]
-                # print(
-                #     f"{category} {points_to_check} {getattr(state, category)[player]}"
-                # )
+                points_to_check = pattern if category == "free_three" else [pattern[0], pattern[-1]]
                 for point in points_to_check:
-                    try:
-                        (x, y) = point
-                    except:
-                        print(point)
-                        print(pattern)
-                        print(getattr(state, category)[player])
+                    (x, y) = point
                     if (
                         state.board[x][y] == "."
                         and state.is_valid_move(x, y) == MoveResult.VALID
                     ):
-                        critical_moves.append((x, y))
+                        critical_moves.add((x, y))
 
     return critical_moves
 
 
-def get_radius_moves(state: Gomoku, radius: int = 1):
+def get_radius_moves(state: Gomoku, radius: int = 1) -> set[tuple[int, int]]:
     if state.count_empty_spots() == state.size**2:
         return [(random.randint(7, 13), random.randint(7, 13))]
     candidates = set([])
@@ -71,14 +60,14 @@ def get_radius_moves(state: Gomoku, radius: int = 1):
                         if state.is_valid_move(new_row, new_col) == MoveResult.VALID:
                             candidates.add((new_row, new_col))
 
-    return list(candidates)
+    return candidates
 
 
-def get_candidate_moves(state: Gomoku):
-    candiates = []
-    candiates.extend(get_critical_moves(state))
-    candiates.extend(get_radius_moves(state))
-    return candiates
+def get_candidate_moves(state: Gomoku) -> list[tuple[int, int]]:
+    candiates = set([])
+    candiates.update(get_critical_moves(state))
+    candiates.update(get_radius_moves(state))
+    return list(candiates)
 
 
 def make_next_state(state: Gomoku, move_x: int, move_y: int) -> Gomoku:
