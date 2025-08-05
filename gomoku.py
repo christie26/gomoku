@@ -15,11 +15,12 @@ class Gomoku:
         self.current_player = "X"
         self.opponent_player = "O"
         self.capture_count = {"X": 0, "O": 0}
-        self.free_three_list = {"X": [], "O": []}
+        self.free_three = {"X": [], "O": []}
         self.five_row = {"X": [], "O": []}
         self.open_two = {"X": [], "O": []}
         self.open_three = {"X": [], "O": []}
         self.open_four = {"X": [], "O": []}
+        self.block_four = {"X": [], "O": []}
         self.win_capture_count = 5
         self.current_move = None, None
 
@@ -253,11 +254,19 @@ class Gomoku:
                         for i in range(-(minus_my + 1), plus_my + 2)
                     )
                 )
-            elif plus_my + minus_my == 3 and (plus_open or minus_open):
+            elif plus_my + minus_my == 3 and (plus_open and minus_open):
                 self.open_four[self.current_player].append(
                     tuple(
                         (x0 + dx * i, y0 + dy * i)
                         for i in range(-(minus_my + 1), plus_my + 2)
+                    )
+                )
+            elif plus_my + minus_my == 3 and (plus_open or minus_open):
+                plus_end = plus_my + 1 + (plus_open)
+                minus_end = minus_my + (minus_open)
+                self.block_four[self.current_player].append(
+                    tuple(
+                        (x0 + dx * i, y0 + dy * i) for i in range(-minus_end, plus_end)
                     )
                 )
             elif plus_my + minus_my == 4:
@@ -267,10 +276,17 @@ class Gomoku:
                         for i in range(-minus_my, plus_my + 1)
                     )
                 )
+        # print(self.current_player)
+        # print(f"open_two {self.open_two[self.current_player]}")
+        # print(f"open_three {self.open_three[self.current_player]}")
+        # print(f"open_four {self.open_four[self.current_player]}")
+        # print(f"block_four {self.block_four[self.current_player]}")
+        # print(f"free_three_list {self.free_three[self.current_player]}")
+        # print()
 
     def add_free_threes(self, new_free_threes, player):
-        self.free_three_list[player].extend(
-            v for v in new_free_threes if v not in self.free_three_list[player]
+        self.free_three[player].extend(
+            v for v in new_free_threes if v not in self.free_three[player]
         )
 
     def remove_free_three(self, x, y, player):
@@ -284,26 +300,42 @@ class Gomoku:
             else:
                 return None
 
-        free_threes = self.free_three_list[player]
-        self.free_three_list[player] = [
+        free_threes = self.free_three[player]
+        self.free_three[player] = [
             filtered_tuple(free_three, x, y)
             for free_three in free_threes
             if filtered_tuple(free_three, x, y) is not None
         ]
 
     def remove_opens(self, x, y):
-        for category in ["open_two", "open_three", "open_four", "five_row"]:
-            for player in [self.current_player, self.opponent_player]:
+        new_block_four = {"X": [], "O": []}
+        for player in [self.current_player, self.opponent_player]:
+            for category in [
+                "open_two",
+                "open_three",
+                "open_four",
+                "block_four",
+                "five_row",
+            ]:
+                original_patterns = getattr(self, category)[player]
+                new_patterns = []
+                for pattern in original_patterns:
+                    if (x, y) not in pattern:
+                        new_patterns.append(pattern)
+                    elif category == "open_four":
+                        if (x, y) == pattern[0] or (x, y) == pattern[-1]:
+                            if (x, y) == pattern[0]:
+                                new_block_four[player].append(pattern[1:])
+                            else:
+                                new_block_four[player].append(pattern[:-1])
+                if category == "block_four":
+                    new_patterns.extend(new_block_four[player])
                 setattr(
                     self,
                     category,
                     {
                         **getattr(self, category),
-                        player: [
-                            pattern
-                            for pattern in getattr(self, category)[player]
-                            if (x, y) not in pattern
-                        ],
+                        player: new_patterns,
                     },
                 )
 
