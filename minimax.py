@@ -9,7 +9,7 @@ import math
 MAX_VALUE = 100000
 MIN_VALUE = -100000
 
-MAX_DEPTH = 3
+MAX_DEPTH = 5
 
 
 def is_terminal_state(state: Gomoku):
@@ -84,12 +84,12 @@ def make_next_state(state: Gomoku, move_x: int, move_y: int) -> Gomoku:
 
 
 def possible_next_states(state: Gomoku) -> list[Gomoku]:
-    return [make_next_state(state, x, y) for x, y in get_candidate_moves(state, 2)]
+    return [make_next_state(state, x, y) for x, y in get_candidate_moves(state, 1)]
 
 
 def get_ai_move(state: Gomoku):
     minimax_value, best_move = None, None
-    candidate_moves = get_candidate_moves(state, 2)
+    candidate_moves = get_candidate_moves(state, 1)
     is_max_player = state.current_player == "X"
 
     for move_x, move_y in candidate_moves:
@@ -120,7 +120,7 @@ def alphabeta(state: Gomoku, alpha, beta, is_max_player, depth: int = 1) -> int:
         # print(f"{state.current_player}{indent}{value}")
         return value
 
-    candidate_moves = get_candidate_moves(state, 2)
+    candidate_moves = get_candidate_moves(state, 1)
 
     if is_max_player:
         value = MIN_VALUE

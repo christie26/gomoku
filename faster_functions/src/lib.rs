@@ -75,6 +75,7 @@ pub struct Gomoku {
     open_two: HashMap<String, Vec<Pattern>>,
     open_three: HashMap<String, Vec<Pattern>>,
     open_four: HashMap<String, Vec<Pattern>>,
+    block_four: HashMap<String, Vec<Pattern>>,
     win_capture_count: i32,
     current_move: Option<Position>,
 }
@@ -109,6 +110,10 @@ impl Gomoku {
         open_four.insert("X".to_string(), Vec::new());
         open_four.insert("O".to_string(), Vec::new());
 
+        let mut block_four = HashMap::new();
+        block_four.insert("X".to_string(), Vec::new());
+        block_four.insert("O".to_string(), Vec::new());
+
         Gomoku {
             size,
             board,
@@ -120,6 +125,7 @@ impl Gomoku {
             open_two,
             open_three,
             open_four,
+            block_four,
             win_capture_count: 5,
             current_move: None,
         }
@@ -149,7 +155,7 @@ impl Gomoku {
         x >= 0 && y >= 0 && (x as usize) < self.size && (y as usize) < self.size
     }
 
-    fn is_valid_move(&mut self, x: i32, y: i32) -> MoveResult {
+    fn is_valid_move(&self, x: i32, y: i32) -> MoveResult {
         if !self.is_on_board(x, y) {
             return MoveResult::OutOfBoard;
         }
@@ -162,15 +168,15 @@ impl Gomoku {
         MoveResult::Valid
     }
 
-    fn is_double_three_move(&mut self, x: i32, y: i32) -> bool {
-        self.board[x as usize][y as usize] = self.current_player.clone();
+    fn is_double_three_move(&self, x: i32, y: i32) -> bool {
+        // self.board[x as usize][y as usize] = self.current_player.clone();
         let new_free_threes = self.get_free_threes_from_move(x, y);
-        self.board[x as usize][y as usize] = ".".to_string();
+        // self.board[x as usize][y as usize] = ".".to_string();
 
         if new_free_threes.len() > 1 {
             true
         } else {
-            self.add_free_threes(new_free_threes, &self.current_player.clone());
+            // self.add_free_threes(new_free_threes, &self.current_player.clone());
             false
         }
     }
@@ -373,6 +379,18 @@ impl Gomoku {
                     .get_mut(&self.current_player)
                     .unwrap()
                     .push(points);
+            } else if total_my == 3 && (plus_open || minus_open) {
+                let plus_end = plus_my + 1 + (plus_open as i32);
+                let minus_end = minus_my + (minus_open as i32);
+
+                let mut points = Vec::new();
+                for i in (-(minus_end))..(plus_end) {
+                    points.push((x0 + dx * i, y0 + dy * i));
+                }
+                self.block_four
+                    .get_mut(&self.current_player)
+                    .unwrap()
+                    .push(points);
             } else if total_my == 4 {
                 let mut points = Vec::new();
                 for i in (-minus_my)..=(plus_my) {
@@ -438,6 +456,8 @@ impl Gomoku {
         let pos = (x, y);
         let players = [&self.current_player.clone(), &self.opponent_player.clone()];
 
+        let mut new_block_four_x = Vec::new();
+        let mut new_block_four_y = Vec::new();
         for player in &players {
             self.open_two
                 .get_mut(*player)
@@ -447,7 +467,27 @@ impl Gomoku {
                 .get_mut(*player)
                 .unwrap()
                 .retain(|pattern| !pattern.contains(&pos));
-            self.open_four
+            self.open_four.get_mut(*player).unwrap().retain(|pattern| {
+                if !pattern.contains(&pos) {
+                    true
+                } else {
+                    if pos == pattern[0] {
+                        if *player == "X" {
+                            new_block_four_x.push(pattern[1..].to_vec());
+                        } else {
+                            new_block_four_y.push(pattern[1..].to_vec());
+                        }
+                    } else if pos == pattern[pattern.len() - 1] {
+                        if *player == "X" {
+                            new_block_four_x.push(pattern[..pattern.len() - 1].to_vec());
+                        } else {
+                            new_block_four_y.push(pattern[..pattern.len() - 1].to_vec());
+                        }
+                    }
+                    false
+                }
+            });
+            self.block_four
                 .get_mut(*player)
                 .unwrap()
                 .retain(|pattern| !pattern.contains(&pos));
@@ -456,6 +496,14 @@ impl Gomoku {
                 .unwrap()
                 .retain(|pattern| !pattern.contains(&pos));
         }
+        self.block_four
+            .get_mut("X")
+            .unwrap()
+            .extend(new_block_four_x);
+        self.block_four
+            .get_mut("O")
+            .unwrap()
+            .extend(new_block_four_y);
     }
 
     fn handle_move(&mut self, x: i32, y: i32) -> (MoveResult, i32) {
@@ -647,13 +695,43 @@ impl Gomoku {
     }
 }
 
+fn get_critical_moves(state: &Gomoku) -> Vec<(usize, usize)> {
+    let mut critical_moves = vec![];
+    for player in [&state.opponent_player, &state.current_player] {
+        for patterns in [
+            &state.block_four,
+            &state.open_four,
+            &state.open_three,
+            &state.open_two,
+        ] {
+            for pattern in patterns.get(player).unwrap() {
+                let (x, y) = pattern[0];
+                if state.board[x as usize][y as usize] == "."
+                    && state.is_valid_move(x, y) == MoveResult::Valid
+                {
+                    critical_moves.push((x as usize, y as usize))
+                }
+                let (x, y) = pattern[pattern.len() - 1];
+                if state.board[x as usize][y as usize] == "."
+                    && state.is_valid_move(x, y) == MoveResult::Valid
+                {
+                    critical_moves.push((x as usize, y as usize))
+                }
+            }
+        }
+    }
+
+    return critical_moves;
+}
+
 #[pyfunction]
-fn get_candidate_moves(state: &mut Gomoku, radius: i32) -> Vec<(usize, usize)> {
+fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
     if state.count_empty_spots() as usize == state.size * state.size {
         return vec![(9, 9)];
     }
 
     let mut candidates = HashSet::with_capacity(100);
+    candidates.extend(get_critical_moves(state));
     let (rows, cols) = (state.board.len(), state.board[0].len());
     let radius = radius as usize;
 
