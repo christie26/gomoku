@@ -163,7 +163,9 @@ class GomokuGUI:
         x = event.x // CELL_SIZE
         y = event.y // CELL_SIZE
         self.play_one_turn(y, x)  # note: board is row (y), col (x)
+        self.root.update_idletasks()
         self.ai_play()
+        self.root.update_idletasks()
 
     def play_one_turn(self, x, y) -> int:
         result, capture = self.game.handle_move(x, y)
