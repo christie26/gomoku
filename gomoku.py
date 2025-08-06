@@ -43,10 +43,7 @@ class Gomoku:
             return MoveResult.VALID
 
     def is_double_three_move(self, x, y):
-        self.board[x][y] = self.current_player
         new_free_threes = self.get_free_threes_from_move(x, y)
-
-        self.board[x][y] = "."
 
         if len(new_free_threes) > 1:
             return True
@@ -98,6 +95,8 @@ class Gomoku:
                     (x0 + dx * i, y0 + dy * i) for i in range(-minus_end, plus_end + 1)
                 )
                 new_free_threes.append(pattern)
+        # if len(new_free_threes):
+        #     print(f"I found new free three, {new_free_threes}")
         return new_free_threes
 
     def get_free_threes_from_capture(self, x0, y0):
@@ -220,8 +219,8 @@ class Gomoku:
             for pattern in new_free_threes
             if pattern not in self.free_three[player]
         )
-        if len(new_free_threes):
-            # print(f"free_three {player} added {new_free_threes}") 
+        # if len(new_free_threes):
+        # print(f"free_three {player} added {new_free_threes}")
 
     def remove_free_three(self, x, y):
         def filtered_tuple(free_three, x, y):
@@ -240,10 +239,10 @@ class Gomoku:
                 result = filtered_tuple(free_three, x, y)
                 if result is not None:
                     new_list.append(result)
-            if new_list != self.free_three[player]:
-                # print(f"free_three {player} modified {new_list}") 
+            # if new_list != self.free_three[player]:
+            # print(f"free_three {player} modified {new_list}")
             self.free_three[player] = new_list
-    
+
     def add_opens(self, x0, y0):
         """Record all kind of opens cause by this move."""
 
@@ -276,8 +275,8 @@ class Gomoku:
                         for i in range(-(minus_my + 1), plus_my + 2)
                     )
                 )
-                
-                # print(f"open_two {self.current_player} added {self.open_two[self.current_player]}") 
+
+                # print(f"open_two {self.current_player} added {self.open_two[self.current_player]}")
             elif plus_my + minus_my == 2 and plus_open and minus_open:
                 self.open_three[self.current_player].append(
                     tuple(
@@ -285,8 +284,8 @@ class Gomoku:
                         for i in range(-(minus_my + 1), plus_my + 2)
                     )
                 )
-                
-                # print(f"open_three {self.current_player} added {self.open_three[self.current_player]}") 
+
+                # print(f"open_three {self.current_player} added {self.open_three[self.current_player]}")
             elif plus_my + minus_my == 3 and (plus_open and minus_open):
                 self.open_four[self.current_player].append(
                     tuple(
@@ -294,8 +293,8 @@ class Gomoku:
                         for i in range(-(minus_my + 1), plus_my + 2)
                     )
                 )
-                
-                # print(f"open_four {self.current_player} added {self.open_four[self.current_player]}") 
+
+                # print(f"open_four {self.current_player} added {self.open_four[self.current_player]}")
             elif plus_my + minus_my == 3 and (plus_open or minus_open):
                 plus_end = plus_my + 1 + (plus_open)
                 minus_end = minus_my + (minus_open)
@@ -304,8 +303,8 @@ class Gomoku:
                         (x0 + dx * i, y0 + dy * i) for i in range(-minus_end, plus_end)
                     )
                 )
-                
-                # print(f"block_four {self.current_player} added {self.block_four[self.current_player]}") 
+
+                # print(f"block_four {self.current_player} added {self.block_four[self.current_player]}")
             elif plus_my + minus_my == 4:
                 self.five_row[self.current_player].append(
                     tuple(
@@ -313,8 +312,8 @@ class Gomoku:
                         for i in range(-minus_my, plus_my + 1)
                     )
                 )
-                
-                # print(f"five_row {self.current_player} added {self.five_row[self.current_player]}") 
+
+                # print(f"five_row {self.current_player} added {self.five_row[self.current_player]}")
 
     def remove_opens(self, x, y):
         for player in [self.current_player, self.opponent_player]:
@@ -334,13 +333,13 @@ class Gomoku:
                     elif category == "open_four":
                         if (x, y) == pattern[0] or (x, y) == pattern[-1]:
                             if (x, y) == pattern[0]:
-                                # print(f"open_four became block_four {pattern} -> {pattern[1:]}") 
+                                # print(f"open_four became block_four {pattern} -> {pattern[1:]}")
                                 new_block_four.append(pattern[1:])
                             else:
-                                # print(f"open_four became block_four {pattern} -> {pattern[:-1]}") 
+                                # print(f"open_four became block_four {pattern} -> {pattern[:-1]}")
                                 new_block_four.append(pattern[:-1])
-                    else:
-                        # print(f"{category} {player} removed {pattern}") 
+                    # else:
+                    # print(f"{category} {player} removed {pattern}")
                 if category == "block_four":
                     new_patterns.extend(new_block_four)
                 setattr(
