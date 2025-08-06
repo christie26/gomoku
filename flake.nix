@@ -29,6 +29,7 @@
         buildInputs = with pkgs; [
           # Python
           python
+	  pkgs.python311Packages.tkinter
 
           # Rust toolchain
           rustc
