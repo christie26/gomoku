@@ -1,6 +1,5 @@
-from gomoku import MoveResult
 from typing import Optional
-from gomoku import Gomoku
+from faster_functions import Gomoku, MoveResult, get_candidate_moves
 import random
 import copy
 import pickle
@@ -10,7 +9,7 @@ import math
 MAX_VALUE = 100000
 MIN_VALUE = -100000
 
-MAX_DEPTH = 3
+MAX_DEPTH = 5
 
 
 def is_terminal_state(state: Gomoku):
@@ -35,7 +34,9 @@ def get_critical_moves(state: Gomoku) -> set[tuple[int, int]]:
             "open_two",
         ]:
             for pattern in getattr(state, category)[player]:
-                points_to_check = pattern if category == "free_three" else [pattern[0], pattern[-1]]
+                points_to_check = (
+                    pattern if category == "free_three" else [pattern[0], pattern[-1]]
+                )
                 for point in points_to_check:
                     (x, y) = point
                     if (
@@ -63,27 +64,28 @@ def get_radius_moves(state: Gomoku, radius: int = 1) -> set[tuple[int, int]]:
     return candidates
 
 
-def get_candidate_moves(state: Gomoku) -> list[tuple[int, int]]:
-    candiates = set([])
-    candiates.update(get_critical_moves(state))
-    candiates.update(get_radius_moves(state))
-    return list(candiates)
+# NOTE same name function in Rust
+# def get_candidate_moves(state: Gomoku) -> list[tuple[int, int]]:
+#     candiates = set([])
+#     candiates.update(get_critical_moves(state))
+#     candiates.update(get_radius_moves(state))
+#     return list(candiates)
 
 
 def make_next_state(state: Gomoku, move_x: int, move_y: int) -> Gomoku:
-    new_state: Gomoku = pickle.loads(pickle.dumps(state, -1))
+    new_state: Gomoku = state.clone_gomoku()
     new_state.handle_move(move_x, move_y)
     new_state.switch_player()
     return new_state
 
 
 def possible_next_states(state: Gomoku) -> list[Gomoku]:
-    return [make_next_state(state, x, y) for x, y in get_candidate_moves(state)]
+    return [make_next_state(state, x, y) for x, y in get_candidate_moves(state, 1)]
 
 
 def get_ai_move(state: Gomoku):
     minimax_value, best_move = None, None
-    candidate_moves = get_candidate_moves(state)
+    candidate_moves = get_candidate_moves(state, 1)
     is_max_player = state.current_player == "X"
 
     for move_x, move_y in candidate_moves:

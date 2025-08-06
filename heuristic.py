@@ -1,4 +1,4 @@
-from gomoku import Gomoku
+from faster_functions import Gomoku
 
 
 def evaluate_player(state: Gomoku, player: str) -> int:
