@@ -29,7 +29,7 @@
         buildInputs = with pkgs; [
           # Python
           python
-	  pkgs.python311Packages.tkinter
+          pkgs.python311Packages.tkinter
 
           # Rust toolchain
           rustc
@@ -43,6 +43,7 @@
           # Build tools that might be needed
           pkg-config
           openssl
+          git
         ];
 
         shellHook = ''
