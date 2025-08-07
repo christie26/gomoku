@@ -169,14 +169,11 @@ impl Gomoku {
     }
 
     fn is_double_three_move(&self, x: i32, y: i32) -> bool {
-        // self.board[x as usize][y as usize] = self.current_player.clone();
         let new_free_threes = self.get_free_threes_from_move(x, y);
-        // self.board[x as usize][y as usize] = ".".to_string();
 
         if new_free_threes.len() > 1 {
             true
         } else {
-            // self.add_free_threes(new_free_threes, &self.current_player.clone());
             false
         }
     }
@@ -323,8 +320,6 @@ impl Gomoku {
     }
 
     fn apply_capture(&mut self, x0: i32, y0: i32, dx: i32, dy: i32) {
-        let mut new_free_threes = Vec::new();
-
         for i in 1..3 {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
@@ -336,14 +331,13 @@ impl Gomoku {
         for i in 1..3 {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
-            let threes = self.get_free_threes_from_capture(x, y);
-            new_free_threes.extend(threes);
+            self.add_free_threes(self.get_free_threes_from_capture(x, y), &self.current_player.clone());
+            // TODO - implement add_opens_from_capture
         }
 
-        self.add_free_threes(new_free_threes, &self.current_player.clone());
     }
 
-    fn check_opens(&mut self, x0: i32, y0: i32) {
+    fn add_opens_from_move(&mut self, x0: i32, y0: i32) {
         let directions = [(1, 0), (0, 1), (1, 1), (1, -1)];
 
         for (dx, dy) in directions {
@@ -513,9 +507,13 @@ impl Gomoku {
         if result == MoveResult::Valid {
             self.current_move = Some((x, y));
             self.board[x as usize][y as usize] = self.current_player.clone();
+
             self.remove_free_three(x, y, &self.opponent_player.clone());
             self.remove_opens(x, y);
-            self.check_opens(x, y);
+            
+            self.add_free_threes(self.get_free_threes_from_move(x, y), &self.current_player.clone());
+            self.add_opens_from_move(x, y);
+
             capture_count = self.capture_center(x, y);
         }
 
@@ -705,6 +703,7 @@ fn get_critical_moves(state: &Gomoku) -> Vec<(usize, usize)> {
             &state.open_two,
         ] {
             for pattern in patterns.get(player).unwrap() {
+              // TODO - add free_three and for free_three, we should check whole pattern
                 let (x, y) = pattern[0];
                 if state.board[x as usize][y as usize] == "."
                     && state.is_valid_move(x, y) == MoveResult::Valid
@@ -726,6 +725,7 @@ fn get_critical_moves(state: &Gomoku) -> Vec<(usize, usize)> {
 
 #[pyfunction]
 fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
+  // TODO - we can do valid_check after check duplication -> reduce number of call of 'is_valid_move'
     if state.count_empty_spots() as usize == state.size * state.size {
         return vec![(9, 9)];
     }
