@@ -332,7 +332,7 @@ impl Gomoku {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
             self.add_free_threes(self.get_free_threes_from_capture(x, y), &self.current_player.clone());
-            // TODO - implement add_opens_from_capture
+            self.add_opens_from_capture(x, y);
         }
 
     }
@@ -394,6 +394,54 @@ impl Gomoku {
                     .get_mut(&self.current_player)
                     .unwrap()
                     .push(points);
+            }
+        }
+    }
+
+    fn add_opens_from_capture(&mut self, x0: i32, y0: i32) {
+        let directions = [(1, 0), (0, 1), (1, 1), (1, -1), (-1, 0), (0, -1), (-1, -1), (-1, 1)];
+
+        for (dx, dy) in directions {
+            let (count_my, open) = self.count_open(1, dx, dy, x0, y0);
+
+            if count_my == 2 && open {
+                let mut points = Vec::new();
+                for i in (0)..=(count_my + 1) {
+                    points.push((x0 + dx * i, y0 + dy * i));
+                }
+                self.open_two
+                    .get_mut(&self.current_player)
+                    .unwrap()
+                    .push(points);
+            } else if count_my == 3 && open {
+                let mut points = Vec::new();
+                for i in (0)..=(count_my + 1) {
+                    points.push((x0 + dx * i, y0 + dy * i));
+                }
+                self.open_three
+                    .get_mut(&self.current_player)
+                    .unwrap()
+                    .push(points);
+            } else if count_my == 4 && open {
+                if open {
+                  let mut points = Vec::new();
+                  for i in (0)..=(count_my + 1) {
+                      points.push((x0 + dx * i, y0 + dy * i));
+                  }
+                  self.open_four
+                      .get_mut(&self.current_player)
+                      .unwrap()
+                      .push(points);
+                } else {
+                  let mut points = Vec::new();
+                  for i in (0)..=(count_my) {
+                      points.push((x0 + dx * i, y0 + dy * i));
+                  }
+                  self.block_four
+                      .get_mut(&self.current_player)
+                      .unwrap()
+                      .push(points);
+                }
             }
         }
     }
@@ -693,28 +741,27 @@ impl Gomoku {
     }
 }
 
-fn get_critical_moves(state: &Gomoku) -> Vec<(usize, usize)> {
-    let mut critical_moves = vec![];
+fn get_critical_moves(state: &Gomoku) -> HashSet<(usize, usize)> {
+    let mut critical_moves = HashSet::new();
     for player in [&state.opponent_player, &state.current_player] {
-        for patterns in [
-            &state.block_four,
-            &state.open_four,
-            &state.open_three,
-            &state.open_two,
+        for (pattern_type, patterns) in [
+            ("block_four", &state.block_four),
+            ("open_four", &state.open_four),
+            ("open_three", &state.open_three),
+            ("open_two", &state.open_two),
+            ("free_three", &state.free_three),
         ] {
             for pattern in patterns.get(player).unwrap() {
-              // TODO - add free_three and for free_three, we should check whole pattern
-                let (x, y) = pattern[0];
-                if state.board[x as usize][y as usize] == "."
-                    && state.is_valid_move(x, y) == MoveResult::Valid
-                {
-                    critical_moves.push((x as usize, y as usize))
-                }
-                let (x, y) = pattern[pattern.len() - 1];
-                if state.board[x as usize][y as usize] == "."
-                    && state.is_valid_move(x, y) == MoveResult::Valid
-                {
-                    critical_moves.push((x as usize, y as usize))
+              let points: Vec<(i32, i32)> = if pattern_type == "free_three" {
+                    pattern.clone()
+                } else {
+                    vec![pattern[0], pattern[pattern.len() - 1]]
+                };
+
+                for (x, y) in points {
+                    if state.board[x as usize][y as usize] == "." {
+                        critical_moves.insert((x as usize, y as usize));
+                    }
                 }
             }
         }
@@ -723,17 +770,9 @@ fn get_critical_moves(state: &Gomoku) -> Vec<(usize, usize)> {
     return critical_moves;
 }
 
-#[pyfunction]
-fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
-  // TODO - we can do valid_check after check duplication -> reduce number of call of 'is_valid_move'
-    if state.count_empty_spots() as usize == state.size * state.size {
-        return vec![(9, 9)];
-    }
-
-    let mut candidates = HashSet::with_capacity(100);
-    candidates.extend(get_critical_moves(state));
+fn get_radius_moves(state: &Gomoku, radius: usize) -> HashSet<(usize, usize)> {
+    let mut radius_moves = HashSet::new();
     let (rows, cols) = (state.board.len(), state.board[0].len());
-    let radius = radius as usize;
 
     for row in 0..rows {
         for col in 0..cols {
@@ -745,16 +784,42 @@ fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
 
                 for r in start_row..end_row {
                     for c in start_col..end_col {
-                        if state.is_valid_move(r as i32, c as i32) == MoveResult::Valid {
-                            candidates.insert((r, c));
-                        }
+                        radius_moves.insert((r, c));
                     }
                 }
             }
         }
     }
 
-    candidates.into_iter().collect()
+    radius_moves
+}
+
+#[pyfunction]
+fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
+    if state.count_empty_spots() as usize == state.size * state.size {
+        return vec![(9, 9)];
+    }
+
+    let radius = radius as usize;
+
+    let critical_moves = get_critical_moves(state);
+    let radius_moves = get_radius_moves(state, radius);
+
+    let all_candidates: HashSet<_> = critical_moves.union(&radius_moves).copied().collect();
+
+    // println!(
+    //     "[DEBUG] Before validation: {} candidates",
+    //     all_candidates.len()
+    // );
+
+    let valid_moves: Vec<_> = all_candidates
+        .into_iter()
+        .filter(|&(r, c)| state.is_valid_move(r as i32, c as i32) == MoveResult::Valid)
+        .collect();
+
+    // println!("[DEBUG] After validation: {} valid moves", valid_moves.len());
+
+    valid_moves
 }
 
 #[pymodule]
