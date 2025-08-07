@@ -79,79 +79,53 @@ def make_next_state(state: Gomoku, move_x: int, move_y: int) -> Gomoku:
     return new_state
 
 
-def possible_next_states(state: Gomoku) -> list[Gomoku]:
-    return [make_next_state(state, x, y) for x, y in get_candidate_moves(state, 1)]
-
-
 def get_ai_move(state: Gomoku):
-    minimax_value, best_move = None, None
-    candidate_moves = get_candidate_moves(state, 1)
     is_max_player = state.current_player == "X"
 
-    for move_x, move_y in candidate_moves:
-        # print(f"\n{state.current_player} ({move_x},{move_y})")
+    best_value = MIN_VALUE if is_max_player else MAX_VALUE
+    alpha, beta = MIN_VALUE, MAX_VALUE
 
-        new_state = make_next_state(state, move_x, move_y)
-        val = alphabeta(
-            new_state, MIN_VALUE, MAX_VALUE, new_state.current_player == "X"
-        )
-        if (
-            minimax_value is None
-            or (is_max_player and minimax_value < val)
-            or (not is_max_player and minimax_value > val)
-        ):
-            minimax_value = val
+    best_move = None
+
+    for move_x, move_y in get_candidate_moves(state, 1):
+        next_state = make_next_state(state, move_x, move_y)
+        value = alphabeta(next_state, alpha, beta, not is_max_player)
+
+        if is_max_player and value > best_value:
+            best_value = value
+            alpha = max(alpha, best_value)
             best_move = (move_x, move_y)
+        elif not is_max_player and value < best_value:
+            best_value = value
+            beta = min(beta, best_value)
+            best_move = (move_x, move_y)
+
+        if alpha >= beta:
+            break
 
     return best_move
 
 
 def alphabeta(state: Gomoku, alpha, beta, is_max_player, depth: int = 1) -> int:
-    # indent = "  " * (depth + 1)
     if is_terminal_state(state):
         return state_value(state)
 
     if depth == MAX_DEPTH:
         value = heuristic_evaluation(state)
-        # print(f"{state.current_player}{indent}{value}")
         return value
 
     value = MIN_VALUE if is_max_player else MAX_VALUE
 
-    for next_state in possible_next_states(state):
+    for move_x, move_y in get_candidate_moves(state, 1):
+        next_state = make_next_state(state, move_x, move_y)
+
         if is_max_player:
             value = max(value, alphabeta(next_state, alpha, beta, False, depth + 1))
             alpha = max(alpha, value)
         else:
             value = min(value, alphabeta(next_state, alpha, beta, True, depth + 1))
             beta = min(beta, value)
-        # print(f"{state.current_player}{indent}({x},{y})")
-        # print(f"{state.current_player}{indent}{alpha} {beta} {value}")
         if alpha >= beta:
             break
 
     return value
-
-
-def minimax(state: Gomoku, depth: int = MAX_DEPTH) -> int:
-    if is_terminal_state(state):
-        return state_value(state)
-
-    if depth == 0:
-        return heuristic_evaluation(state)
-
-    minimax_value = None
-    for next_state in possible_next_states(state):
-        player_win = 1 if state.current_player == "X" else -1
-        val = minimax(next_state, depth - 1)
-
-        if val == player_win:
-            return player_win
-        elif (
-            minimax_value is None
-            or (state.current_player == "X" and minimax_value < val)
-            or (state.current_player == "O" and minimax_value > val)
-        ):
-            minimax_value = val
-
-    return minimax_value if minimax_value is not None else 0

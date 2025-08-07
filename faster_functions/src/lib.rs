@@ -759,9 +759,7 @@ fn get_critical_moves(state: &Gomoku) -> HashSet<(usize, usize)> {
                 };
 
                 for (x, y) in points {
-                    if state.board[x as usize][y as usize] == "." {
-                        critical_moves.insert((x as usize, y as usize));
-                    }
+                    critical_moves.insert((x as usize, y as usize));
                 }
             }
         }
