@@ -43,15 +43,11 @@ class Gomoku:
             return MoveResult.VALID
 
     def is_double_three_move(self, x, y):
-        self.board[x][y] = self.current_player
         new_free_threes = self.get_free_threes_from_move(x, y)
-
-        self.board[x][y] = "."
 
         if len(new_free_threes) > 1:
             return True
         else:
-            self.add_free_threes(new_free_threes, self.current_player)
             return False
 
     def get_free_threes_from_move(self, x0, y0):
@@ -95,10 +91,12 @@ class Gomoku:
                     plus_empty = 1
                 plus_end = plus_empty + plus_my
                 minus_end = minus_empty + minus_my
-                points = tuple(
+                pattern = tuple(
                     (x0 + dx * i, y0 + dy * i) for i in range(-minus_end, plus_end + 1)
                 )
-                new_free_threes.append(points)
+                new_free_threes.append(pattern)
+        # if len(new_free_threes):
+        #     print(f"I found new free three, {new_free_threes}")
         return new_free_threes
 
     def get_free_threes_from_capture(self, x0, y0):
@@ -138,26 +136,26 @@ class Gomoku:
                 minus_my == 3 and minus_empty == 2
             ):
                 if plus_my == 3 and plus_empty == 2:
-                    points = tuple(
+                    pattern = tuple(
                         (x0 + dx * i, y0 + dy * i)
                         for i in range(0, plus_my + plus_empty + 1)
                     )
-                    new_free_threes.append(points)
+                    new_free_threes.append(pattern)
                 if minus_my == 3 and minus_empty == 2:
-                    points = tuple(
+                    pattern = tuple(
                         (x0 + dx * i, y0 + dy * i)
                         for i in range(-(minus_my + minus_empty), 0 + 1)
                     )
-                    new_free_threes.append(points)
+                    new_free_threes.append(pattern)
             elif plus_hole == False and minus_hole == False:
                 if plus_my + minus_my == 3 and plus_empty and minus_empty:
                     plus_end = plus_my + 1
                     minus_end = minus_my + 1
-                    points = tuple(
+                    pattern = tuple(
                         (x0 + dx * i, y0 + dy * i)
                         for i in range(-(minus_end), plus_end + 1)
                     )
-                    new_free_threes.append(points)
+                    new_free_threes.append(pattern)
         return new_free_threes
 
     def capture_center(self, x0, y0) -> int:
@@ -203,19 +201,49 @@ class Gomoku:
         A function to apply a capture.
         Remove opponent's stone, remove opponent's free-threes, find my new free-threes.
         """
-        new_free_threes = []
         for i in range(1, 3):
             x, y = x0 + dx * i, y0 + dy * i
             self.board[x][y] = "."
-            self.remove_free_three(x, y, self.opponent_player)
+            self.remove_free_three(x, y)
             self.remove_opens(x, y)
         for i in range(1, 3):
             x, y = x0 + dx * i, y0 + dy * i
-            new_free_threes.append(self.get_free_threes_from_capture(x, y))
+            self.add_free_threes(
+                self.get_free_threes_from_capture(x, y), self.current_player
+            )
+            # TODO add_opens
 
-        self.add_free_threes(new_free_threes, self.current_player)
+    def add_free_threes(self, new_free_threes: list, player):
+        self.free_three[player].extend(
+            pattern
+            for pattern in new_free_threes
+            if pattern not in self.free_three[player]
+        )
+        # if len(new_free_threes):
+        # print(f"free_three {player} added {new_free_threes}")
 
-    def check_opens(self, x0, y0):
+    def remove_free_three(self, x, y):
+        def filtered_tuple(free_three, x, y):
+            if (x, y) not in free_three:
+                return free_three
+            elif len(free_three) == 7 and (
+                (x, y) == free_three[0] or (x, y) == free_three[6]
+            ):
+                return tuple(i for i in free_three if i != (x, y))
+            else:
+                return None
+
+        for player in [self.current_player, self.opponent_player]:
+            new_list = []
+            for free_three in self.free_three[player]:
+                result = filtered_tuple(free_three, x, y)
+                if result is not None:
+                    new_list.append(result)
+            # if new_list != self.free_three[player]:
+            # print(f"free_three {player} modified {new_list}")
+            self.free_three[player] = new_list
+
+    def add_opens(self, x0, y0):
         """Record all kind of opens cause by this move."""
 
         def count_open(sign, dx, dy):
@@ -247,6 +275,8 @@ class Gomoku:
                         for i in range(-(minus_my + 1), plus_my + 2)
                     )
                 )
+
+                # print(f"open_two {self.current_player} added {self.open_two[self.current_player]}")
             elif plus_my + minus_my == 2 and plus_open and minus_open:
                 self.open_three[self.current_player].append(
                     tuple(
@@ -254,6 +284,8 @@ class Gomoku:
                         for i in range(-(minus_my + 1), plus_my + 2)
                     )
                 )
+
+                # print(f"open_three {self.current_player} added {self.open_three[self.current_player]}")
             elif plus_my + minus_my == 3 and (plus_open and minus_open):
                 self.open_four[self.current_player].append(
                     tuple(
@@ -261,6 +293,8 @@ class Gomoku:
                         for i in range(-(minus_my + 1), plus_my + 2)
                     )
                 )
+
+                # print(f"open_four {self.current_player} added {self.open_four[self.current_player]}")
             elif plus_my + minus_my == 3 and (plus_open or minus_open):
                 plus_end = plus_my + 1 + (plus_open)
                 minus_end = minus_my + (minus_open)
@@ -269,6 +303,8 @@ class Gomoku:
                         (x0 + dx * i, y0 + dy * i) for i in range(-minus_end, plus_end)
                     )
                 )
+
+                # print(f"block_four {self.current_player} added {self.block_four[self.current_player]}")
             elif plus_my + minus_my == 4:
                 self.five_row[self.current_player].append(
                     tuple(
@@ -276,40 +312,12 @@ class Gomoku:
                         for i in range(-minus_my, plus_my + 1)
                     )
                 )
-        # print(self.current_player)
-        # print(f"open_two {self.open_two[self.current_player]}")
-        # print(f"open_three {self.open_three[self.current_player]}")
-        # print(f"open_four {self.open_four[self.current_player]}")
-        # print(f"block_four {self.block_four[self.current_player]}")
-        # print(f"free_three_list {self.free_three[self.current_player]}")
-        # print()
 
-    def add_free_threes(self, new_free_threes, player):
-        self.free_three[player].extend(
-            v for v in new_free_threes if v not in self.free_three[player]
-        )
-
-    def remove_free_three(self, x, y, player):
-        def filtered_tuple(free_three, x, y):
-            if (x, y) not in free_three:
-                return free_three
-            elif len(free_three) == 7 and (
-                (x, y) == free_three[0] or (x, y) == free_three[6]
-            ):
-                return tuple(i for i in free_three if i != (x, y))
-            else:
-                return None
-
-        free_threes = self.free_three[player]
-        self.free_three[player] = [
-            filtered_tuple(free_three, x, y)
-            for free_three in free_threes
-            if filtered_tuple(free_three, x, y) is not None
-        ]
+                # print(f"five_row {self.current_player} added {self.five_row[self.current_player]}")
 
     def remove_opens(self, x, y):
-        new_block_four = {"X": [], "O": []}
         for player in [self.current_player, self.opponent_player]:
+            new_block_four = []
             for category in [
                 "open_two",
                 "open_three",
@@ -325,11 +333,15 @@ class Gomoku:
                     elif category == "open_four":
                         if (x, y) == pattern[0] or (x, y) == pattern[-1]:
                             if (x, y) == pattern[0]:
-                                new_block_four[player].append(pattern[1:])
+                                # print(f"open_four became block_four {pattern} -> {pattern[1:]}")
+                                new_block_four.append(pattern[1:])
                             else:
-                                new_block_four[player].append(pattern[:-1])
+                                # print(f"open_four became block_four {pattern} -> {pattern[:-1]}")
+                                new_block_four.append(pattern[:-1])
+                    # else:
+                    # print(f"{category} {player} removed {pattern}")
                 if category == "block_four":
-                    new_patterns.extend(new_block_four[player])
+                    new_patterns.extend(new_block_four)
                 setattr(
                     self,
                     category,
@@ -340,16 +352,18 @@ class Gomoku:
                 )
 
     def handle_move(self, x, y):
-        result = self.is_valid_move(x, y)
-        capture_count = 0
-        if result == MoveResult.VALID:
-            self.current_move = x, y
-            self.board[x][y] = self.current_player
-            self.remove_free_three(x, y, self.opponent_player)
-            self.remove_opens(x, y)
-            self.check_opens(x, y)
-            capture_count = self.capture_center(x, y)
-        return result, capture_count
+        self.current_move = x, y
+        self.board[x][y] = self.current_player
+
+        self.remove_free_three(x, y)
+        self.remove_opens(x, y)
+
+        new_free_threes = self.get_free_threes_from_move(x, y)
+        self.add_free_threes(new_free_threes, self.current_player)
+        self.add_opens(x, y)
+
+        capture_count = self.capture_center(x, y)
+        return capture_count
 
     def count_empty_spots(self):
         return sum(row.count(".") for row in self.board)
@@ -380,26 +394,6 @@ class Gomoku:
     def switch_player(self):
         self.current_player = "O" if self.current_player == "X" else "X"
         self.opponent_player = "O" if self.opponent_player == "X" else "X"
-
-    # def play(self):
-    #     print("Welcome to Gomoku!")
-    #     self.print_board()
-    #     while True:
-    #         print(f"Player {self.current_player}'s turn. (opponent {self.opponent_player})")
-    #         try:
-    #             x, y = map(int, input("Enter your move (row and column): ").split())
-    #             result = self.handle_move(x, y)
-    #             if result == MoveResult.VALID:
-    #                 self.print_board()
-    #                 if self.get_winner():
-    #                     print(f"Player {self.current_player} wins!")
-    #                     break
-    #                 self.switch_player()
-    #             else:
-    #                 print("Invalid move:", result.name.replace("_", " ").title())
-    #         except ValueError:
-    #             print("Please enter valid numbers separated by a space.")
-    #     print("Game Over")
 
 
 if __name__ == "__main__":

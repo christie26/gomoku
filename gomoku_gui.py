@@ -168,9 +168,10 @@ class GomokuGUI:
         self.root.update_idletasks()
 
     def play_one_turn(self, x, y) -> int:
-        result, capture = self.game.handle_move(x, y)
+        result = self.game.is_valid_move(x, y)
         self.update_alert_label("")
         if result == MoveResult.VALID:
+            capture = self.game.handle_move(x, y)
             if capture:
                 self.update_info_label()
 
