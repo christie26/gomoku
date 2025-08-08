@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import simpledialog
 from faster_functions import Gomoku, MoveResult
 import argparse
-from minimax import minimax, get_ai_move
+from minimax import get_ai_move
 import time
 
 CELL_SIZE = 30

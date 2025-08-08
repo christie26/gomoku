@@ -62,20 +62,45 @@ impl MoveResult {
 type Position = (i32, i32);
 type Pattern = Vec<Position>;
 
+#[derive(PartialEq, Eq, Hash, Clone)]
+#[pyclass]
+enum Stone {
+    Empty,
+    Black,
+    White,
+}
+
+impl std::fmt::Display for Stone {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let c = match self {
+            Stone::Empty => '.',
+            Stone::Black => 'X',
+            Stone::White => 'O',
+        };
+        write!(f, "{c}")
+    }
+}
+
+impl Into<String> for Stone {
+    fn into(self) -> String {
+        self.to_string()
+    }
+}
+
 #[derive(Clone)]
 #[pyclass]
 pub struct Gomoku {
     size: usize,
-    board: Vec<Vec<String>>,
-    current_player: String,
-    opponent_player: String,
-    capture_count: HashMap<String, i32>,
-    free_three_list: HashMap<String, Vec<Pattern>>,
-    five_row: HashMap<String, Vec<Pattern>>,
-    open_two: HashMap<String, Vec<Pattern>>,
-    open_three: HashMap<String, Vec<Pattern>>,
-    open_four: HashMap<String, Vec<Pattern>>,
-    block_four: HashMap<String, Vec<Pattern>>,
+    board: Vec<Vec<Stone>>,
+    current_player: Stone,
+    opponent_player: Stone,
+    capture_count: HashMap<Stone, i32>,
+    free_three: HashMap<Stone, Vec<Pattern>>,
+    five_row: HashMap<Stone, Vec<Pattern>>,
+    open_two: HashMap<Stone, Vec<Pattern>>,
+    open_three: HashMap<Stone, Vec<Pattern>>,
+    open_four: HashMap<Stone, Vec<Pattern>>,
+    block_four: HashMap<Stone, Vec<Pattern>>,
     win_capture_count: i32,
     current_move: Option<Position>,
 }
@@ -85,42 +110,42 @@ impl Gomoku {
     #[new]
     #[pyo3(signature = (size = 19))]
     fn new(size: usize) -> Self {
-        let board = vec![vec![".".to_string(); size]; size];
+        let board = vec![vec![Stone::Empty; size]; size];
         let mut capture_count = HashMap::new();
-        capture_count.insert("X".to_string(), 0);
-        capture_count.insert("O".to_string(), 0);
+        capture_count.insert(Stone::Black, 0);
+        capture_count.insert(Stone::White, 0);
 
-        let mut free_three_list = HashMap::new();
-        free_three_list.insert("X".to_string(), Vec::new());
-        free_three_list.insert("O".to_string(), Vec::new());
+        let mut free_three = HashMap::new();
+        free_three.insert(Stone::Black, Vec::new());
+        free_three.insert(Stone::White, Vec::new());
 
         let mut five_row = HashMap::new();
-        five_row.insert("X".to_string(), Vec::new());
-        five_row.insert("O".to_string(), Vec::new());
+        five_row.insert(Stone::Black, Vec::new());
+        five_row.insert(Stone::White, Vec::new());
 
         let mut open_two = HashMap::new();
-        open_two.insert("X".to_string(), Vec::new());
-        open_two.insert("O".to_string(), Vec::new());
+        open_two.insert(Stone::Black, Vec::new());
+        open_two.insert(Stone::White, Vec::new());
 
         let mut open_three = HashMap::new();
-        open_three.insert("X".to_string(), Vec::new());
-        open_three.insert("O".to_string(), Vec::new());
+        open_three.insert(Stone::Black, Vec::new());
+        open_three.insert(Stone::White, Vec::new());
 
         let mut open_four = HashMap::new();
-        open_four.insert("X".to_string(), Vec::new());
-        open_four.insert("O".to_string(), Vec::new());
+        open_four.insert(Stone::Black, Vec::new());
+        open_four.insert(Stone::White, Vec::new());
 
         let mut block_four = HashMap::new();
-        block_four.insert("X".to_string(), Vec::new());
-        block_four.insert("O".to_string(), Vec::new());
+        block_four.insert(Stone::Black, Vec::new());
+        block_four.insert(Stone::White, Vec::new());
 
         Gomoku {
             size,
             board,
-            current_player: "X".to_string(),
-            opponent_player: "O".to_string(),
+            current_player: Stone::Black,
+            opponent_player: Stone::White,
             capture_count,
-            free_three_list,
+            free_three,
             five_row,
             open_two,
             open_three,
@@ -159,7 +184,7 @@ impl Gomoku {
         if !self.is_on_board(x, y) {
             return MoveResult::OutOfBoard;
         }
-        if self.board[x as usize][y as usize] != "." {
+        if self.board[x as usize][y as usize] != Stone::Empty {
             return MoveResult::NotEmpty;
         }
         if self.is_double_three_move(x, y) {
@@ -323,7 +348,7 @@ impl Gomoku {
         for i in 1..3 {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
-            self.board[x as usize][y as usize] = ".".to_string();
+            self.board[x as usize][y as usize] = Stone::Empty;
             self.remove_free_three(x, y, &self.opponent_player.clone());
             self.remove_opens(x, y);
         }
@@ -331,10 +356,12 @@ impl Gomoku {
         for i in 1..3 {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
-            self.add_free_threes(self.get_free_threes_from_capture(x, y), &self.current_player.clone());
+            self.add_free_threes(
+                self.get_free_threes_from_capture(x, y),
+                &self.current_player.clone(),
+            );
             self.add_opens_from_capture(x, y);
         }
-
     }
 
     fn add_opens_from_move(&mut self, x0: i32, y0: i32) {
@@ -399,7 +426,16 @@ impl Gomoku {
     }
 
     fn add_opens_from_capture(&mut self, x0: i32, y0: i32) {
-        let directions = [(1, 0), (0, 1), (1, 1), (1, -1), (-1, 0), (0, -1), (-1, -1), (-1, 1)];
+        let directions = [
+            (1, 0),
+            (0, 1),
+            (1, 1),
+            (1, -1),
+            (-1, 0),
+            (0, -1),
+            (-1, -1),
+            (-1, 1),
+        ];
 
         for (dx, dy) in directions {
             let (count_my, open) = self.count_open(1, dx, dy, x0, y0);
@@ -424,23 +460,23 @@ impl Gomoku {
                     .push(points);
             } else if count_my == 4 && open {
                 if open {
-                  let mut points = Vec::new();
-                  for i in (0)..=(count_my + 1) {
-                      points.push((x0 + dx * i, y0 + dy * i));
-                  }
-                  self.open_four
-                      .get_mut(&self.current_player)
-                      .unwrap()
-                      .push(points);
+                    let mut points = Vec::new();
+                    for i in (0)..=(count_my + 1) {
+                        points.push((x0 + dx * i, y0 + dy * i));
+                    }
+                    self.open_four
+                        .get_mut(&self.current_player)
+                        .unwrap()
+                        .push(points);
                 } else {
-                  let mut points = Vec::new();
-                  for i in (0)..=(count_my) {
-                      points.push((x0 + dx * i, y0 + dy * i));
-                  }
-                  self.block_four
-                      .get_mut(&self.current_player)
-                      .unwrap()
-                      .push(points);
+                    let mut points = Vec::new();
+                    for i in (0)..=(count_my) {
+                        points.push((x0 + dx * i, y0 + dy * i));
+                    }
+                    self.block_four
+                        .get_mut(&self.current_player)
+                        .unwrap()
+                        .push(points);
                 }
             }
         }
@@ -464,13 +500,13 @@ impl Gomoku {
 
         let x = x0 + dx * i * sign;
         let y = y0 + dy * i * sign;
-        let open = self.is_on_board(x, y) && self.board[x as usize][y as usize] == ".";
+        let open = self.is_on_board(x, y) && self.board[x as usize][y as usize] == Stone::Empty;
 
         (my_count, open)
     }
 
-    fn add_free_threes(&mut self, new_free_threes: Vec<Pattern>, player: &str) {
-        let player_list = self.free_three_list.get_mut(player).unwrap();
+    fn add_free_threes(&mut self, new_free_threes: Vec<Pattern>, player: &Stone) {
+        let player_list = self.free_three.get_mut(player).unwrap();
         for pattern in new_free_threes {
             if !player_list.contains(&pattern) {
                 player_list.push(pattern);
@@ -478,8 +514,8 @@ impl Gomoku {
         }
     }
 
-    fn remove_free_three(&mut self, x: i32, y: i32, player: &str) {
-        let player_list = self.free_three_list.get_mut(player).unwrap();
+    fn remove_free_three(&mut self, x: i32, y: i32, player: &Stone) {
+        let player_list = self.free_three.get_mut(player).unwrap();
         let pos = (x, y);
 
         player_list.retain_mut(|free_three| {
@@ -496,31 +532,31 @@ impl Gomoku {
 
     fn remove_opens(&mut self, x: i32, y: i32) {
         let pos = (x, y);
-        let players = [&self.current_player.clone(), &self.opponent_player.clone()];
+        let players = [self.current_player.clone(), self.opponent_player.clone()];
 
         let mut new_block_four_x = Vec::new();
         let mut new_block_four_y = Vec::new();
         for player in &players {
             self.open_two
-                .get_mut(*player)
+                .get_mut(player)
                 .unwrap()
                 .retain(|pattern| !pattern.contains(&pos));
             self.open_three
-                .get_mut(*player)
+                .get_mut(player)
                 .unwrap()
                 .retain(|pattern| !pattern.contains(&pos));
-            self.open_four.get_mut(*player).unwrap().retain(|pattern| {
+            self.open_four.get_mut(player).unwrap().retain(|pattern| {
                 if !pattern.contains(&pos) {
                     true
                 } else {
                     if pos == pattern[0] {
-                        if *player == "X" {
+                        if player == &Stone::Black {
                             new_block_four_x.push(pattern[1..].to_vec());
                         } else {
                             new_block_four_y.push(pattern[1..].to_vec());
                         }
                     } else if pos == pattern[pattern.len() - 1] {
-                        if *player == "X" {
+                        if player == &Stone::Black {
                             new_block_four_x.push(pattern[..pattern.len() - 1].to_vec());
                         } else {
                             new_block_four_y.push(pattern[..pattern.len() - 1].to_vec());
@@ -530,20 +566,20 @@ impl Gomoku {
                 }
             });
             self.block_four
-                .get_mut(*player)
+                .get_mut(player)
                 .unwrap()
                 .retain(|pattern| !pattern.contains(&pos));
             self.five_row
-                .get_mut(*player)
+                .get_mut(player)
                 .unwrap()
                 .retain(|pattern| !pattern.contains(&pos));
         }
         self.block_four
-            .get_mut("X")
+            .get_mut(&Stone::Black)
             .unwrap()
             .extend(new_block_four_x);
         self.block_four
-            .get_mut("O")
+            .get_mut(&Stone::White)
             .unwrap()
             .extend(new_block_four_y);
     }
@@ -558,8 +594,11 @@ impl Gomoku {
 
             self.remove_free_three(x, y, &self.opponent_player.clone());
             self.remove_opens(x, y);
-            
-            self.add_free_threes(self.get_free_threes_from_move(x, y), &self.current_player.clone());
+
+            self.add_free_threes(
+                self.get_free_threes_from_move(x, y),
+                &self.current_player.clone(),
+            );
             self.add_opens_from_move(x, y);
 
             capture_count = self.capture_center(x, y);
@@ -571,7 +610,7 @@ impl Gomoku {
     fn count_empty_spots(&self) -> i32 {
         self.board
             .iter()
-            .map(|row| row.iter().filter(|&cell| cell == ".").count() as i32)
+            .map(|row| row.iter().filter(|&cell| cell == &Stone::Empty).count() as i32)
             .sum()
     }
 
@@ -579,7 +618,7 @@ impl Gomoku {
         if let Some((x, y)) = self.current_move {
             // Check five captures
             if *self.capture_count.get(&self.current_player).unwrap() >= self.win_capture_count {
-                return Some(self.current_player.clone());
+                return Some(self.current_player.to_string());
             }
 
             // Check if opponent has five in a row
@@ -593,7 +632,7 @@ impl Gomoku {
                         }
                     }
                     if all_opponent {
-                        return Some(self.opponent_player.clone());
+                        return Some(self.opponent_player.to_string());
                     }
                 }
             }
@@ -606,12 +645,16 @@ impl Gomoku {
     }
 
     fn switch_player(&mut self) {
-        if self.current_player == "X" {
-            self.current_player = "O".to_string();
-            self.opponent_player = "X".to_string();
-        } else {
-            self.current_player = "X".to_string();
-            self.opponent_player = "O".to_string();
+        match self.current_player {
+            Stone::Black => {
+                self.current_player = Stone::Black;
+                self.opponent_player = Stone::Black;
+            }
+            Stone::White => {
+                self.current_player = Stone::Black;
+                self.opponent_player = Stone::Black;
+            }
+            Stone::Empty => panic!("Player cannot be the empty stone"),
         }
     }
 
@@ -623,17 +666,20 @@ impl Gomoku {
 
     #[getter]
     fn current_player(&self) -> String {
-        self.current_player.clone()
+        self.current_player.to_string()
     }
 
     #[getter]
     fn opponent_player(&self) -> String {
-        self.opponent_player.clone()
+        self.opponent_player.to_string()
     }
 
     #[getter]
     fn capture_count(&self) -> HashMap<String, i32> {
-        self.capture_count.clone()
+        self.capture_count
+            .iter()
+            .map(|(stone, c)| (stone.to_string(), *c))
+            .collect()
     }
 
     #[getter]
@@ -643,101 +689,55 @@ impl Gomoku {
 
     #[getter]
     fn board(&self) -> Vec<Vec<String>> {
-        self.board.clone()
+        self.board
+            .iter()
+            .map(|v| v.iter().map(|s| s.to_string()).collect())
+            .collect()
     }
 
     #[getter]
     fn free_three_list(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.free_three_list.clone()
+        self.free_three
+            .iter()
+            .map(|(stone, c)| (stone.to_string(), c.clone()))
+            .collect()
     }
 
     #[getter]
     fn five_row(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.five_row.clone()
+        self.five_row
+            .iter()
+            .map(|(stone, c)| (stone.to_string(), c.clone()))
+            .collect()
     }
 
     #[getter]
     fn open_two(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.open_two.clone()
+        self.open_two
+            .iter()
+            .map(|(stone, c)| (stone.to_string(), c.clone()))
+            .collect()
     }
 
     #[getter]
     fn open_three(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.open_three.clone()
+        self.open_three
+            .iter()
+            .map(|(stone, c)| (stone.to_string(), c.clone()))
+            .collect()
     }
 
     #[getter]
     fn open_four(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.open_four.clone()
+        self.open_four
+            .iter()
+            .map(|(stone, c)| (stone.to_string(), c.clone()))
+            .collect()
     }
 
     #[getter]
     fn win_capture_count(&self) -> i32 {
         self.win_capture_count
-    }
-
-    fn __getstate__(
-        &self,
-    ) -> PyResult<(
-        usize,
-        Vec<Vec<String>>,
-        String,
-        String,
-        HashMap<String, i32>,
-        HashMap<String, Vec<Vec<(i32, i32)>>>,
-        HashMap<String, Vec<Vec<(i32, i32)>>>,
-        HashMap<String, Vec<Vec<(i32, i32)>>>,
-        HashMap<String, Vec<Vec<(i32, i32)>>>,
-        HashMap<String, Vec<Vec<(i32, i32)>>>,
-        i32,
-        Option<(i32, i32)>,
-    )> {
-        Ok((
-            self.size,
-            self.board.clone(),
-            self.current_player.clone(),
-            self.opponent_player.clone(),
-            self.capture_count.clone(),
-            self.free_three_list.clone(),
-            self.five_row.clone(),
-            self.open_two.clone(),
-            self.open_three.clone(),
-            self.open_four.clone(),
-            self.win_capture_count,
-            self.current_move,
-        ))
-    }
-
-    fn __setstate__(
-        &mut self,
-        state: (
-            usize,
-            Vec<Vec<String>>,
-            String,
-            String,
-            HashMap<String, i32>,
-            HashMap<String, Vec<Vec<(i32, i32)>>>,
-            HashMap<String, Vec<Vec<(i32, i32)>>>,
-            HashMap<String, Vec<Vec<(i32, i32)>>>,
-            HashMap<String, Vec<Vec<(i32, i32)>>>,
-            HashMap<String, Vec<Vec<(i32, i32)>>>,
-            i32,
-            Option<(i32, i32)>,
-        ),
-    ) -> PyResult<()> {
-        self.size = state.0;
-        self.board = state.1;
-        self.current_player = state.2;
-        self.opponent_player = state.3;
-        self.capture_count = state.4;
-        self.free_three_list = state.5;
-        self.five_row = state.6;
-        self.open_two = state.7;
-        self.open_three = state.8;
-        self.open_four = state.9;
-        self.win_capture_count = state.10;
-        self.current_move = state.11;
-        Ok(())
     }
 }
 
@@ -752,7 +752,7 @@ fn get_critical_moves(state: &Gomoku) -> HashSet<(usize, usize)> {
             ("free_three", &state.free_three),
         ] {
             for pattern in patterns.get(player).unwrap() {
-              let points: Vec<(i32, i32)> = if pattern_type == "free_three" {
+                let points: Vec<(i32, i32)> = if pattern_type == "free_three" {
                     pattern.clone()
                 } else {
                     vec![pattern[0], pattern[pattern.len() - 1]]
@@ -774,7 +774,7 @@ fn get_radius_moves(state: &Gomoku, radius: usize) -> HashSet<(usize, usize)> {
 
     for row in 0..rows {
         for col in 0..cols {
-            if state.board[row][col] != "." {
+            if state.board[row][col] != Stone::Empty {
                 let start_row = row.saturating_sub(radius);
                 let end_row = (row + radius + 1).min(rows);
                 let start_col = col.saturating_sub(radius);
