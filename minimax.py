@@ -80,11 +80,12 @@ def make_next_state(state: Gomoku, move_x: int, move_y: int) -> Gomoku:
     return new_state
 
 
-def  compute_alphabeta_worker(move, state):
-    (move_x, move_y) = move
-    next_state = make_next_state(state, move_x, move_y)
-    value = alphabeta(next_state, alpha, beta, not is_max_player)
-    return (move_x, move_y), value
+# def compute_alphabeta_worker(move, state):
+#     (move_x, move_y) = move
+#     next_state = make_next_state(state, move_x, move_y)
+#     value = alphabeta(next_state, alpha, beta, not is_max_player)
+#     return (move_x, move_y), value
+
 
 def get_ai_move(state: Gomoku):
     is_max_player = state.current_player == "X"
@@ -94,32 +95,32 @@ def get_ai_move(state: Gomoku):
 
     best_move = None
 
-    moves = get_candidate_moves(state, 1)
+    # moves = get_candidate_moves(state, 1)
 
-    with ProcessPoolExecutor(max_workers=30) as executor:
-        futures = [executor.submit(compute_alphabeta_worker, move, state) for move in moves]
-        results = [future.result() for future in futures]
-        best_move, val = max(results, key = lambda x, y: y)
-        print(f"move: {best_move} score: {val}")
-        return best_move
+    # with ProcessPoolExecutor(max_workers=30) as executor:
+    #     futures = [executor.submit(compute_alphabeta_worker, move, state) for move in moves]
+    #     results = [future.result() for future in futures]
+    #     best_move, val = max(results, key = lambda x, y: y)
+    #     print(f"move: {best_move} score: {val}")
+    #     return best_move
 
-    # for move_x, move_y in get_candidate_moves(state, 1):
-    #     next_state = make_next_state(state, move_x, move_y)
-    #     value = alphabeta(next_state, alpha, beta, not is_max_player)
-    #
-    #     if is_max_player and value > best_value:
-    #         best_value = value
-    #         alpha = max(alpha, best_value)
-    #         best_move = (move_x, move_y)
-    #     elif not is_max_player and value < best_value:
-    #         best_value = value
-    #         beta = min(beta, best_value)
-    #         best_move = (move_x, move_y)
-    #
-    #     if alpha >= beta:
-    #         break
-    #
-    # return best_move
+    for move_x, move_y in get_candidate_moves(state, 1):
+        next_state = make_next_state(state, move_x, move_y)
+        value = alphabeta(next_state, alpha, beta, not is_max_player)
+
+        if is_max_player and value > best_value:
+            best_value = value
+            alpha = max(alpha, best_value)
+            best_move = (move_x, move_y)
+        elif not is_max_player and value < best_value:
+            best_value = value
+            beta = min(beta, best_value)
+            best_move = (move_x, move_y)
+
+        if alpha >= beta:
+            break
+
+    return best_move
 
 
 def alphabeta(state: Gomoku, alpha, beta, is_max_player, depth: int = 1) -> int:
