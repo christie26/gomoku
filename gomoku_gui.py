@@ -123,24 +123,24 @@ class GomokuGUI:
         self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=color)
 
     def finish_game(self, winner):
-        # Create a toplevel window to act as overlay
-        overlay = tk.Toplevel(root)
-
-        overlay.geometry(
-            f"{self.canvas_size}x{self.canvas_size}+{root.winfo_rootx() + self.canvas.winfo_x()}+{root.winfo_rooty() + self.canvas.winfo_y()}"
-        )
-        overlay.overrideredirect(True)
-        overlay.attributes("-topmost", True)
-        overlay.attributes("-alpha", 0.3)  # 30% opaque (i.e. 70% transparent)
-        overlay.configure(bg="black")
-
-        def update_overlay_position():
-            overlay.geometry(
-                f"{self.canvas_size}x{self.canvas_size}+{root.winfo_rootx() + self.canvas.winfo_x()}+{root.winfo_rooty() + self.canvas.winfo_y()}"
-            )
-            root.after(50, update_overlay_position)
-
-        update_overlay_position()
+        # # Create a toplevel window to act as overlay
+        # overlay = tk.Toplevel(root)
+        #
+        # overlay.geometry(
+        #     f"{self.canvas_size}x{self.canvas_size}+{root.winfo_rootx() + self.canvas.winfo_x()}+{root.winfo_rooty() + self.canvas.winfo_y()}"
+        # )
+        # overlay.overrideredirect(True)
+        # overlay.attributes("-topmost", True)
+        # overlay.attributes("-alpha", 0.3)  # 30% opaque (i.e. 70% transparent)
+        # overlay.configure(bg="black")
+        #
+        # def update_overlay_position():
+        #     overlay.geometry(
+        #         f"{self.canvas_size}x{self.canvas_size}+{root.winfo_rootx() + self.canvas.winfo_x()}+{root.winfo_rooty() + self.canvas.winfo_y()}"
+        #     )
+        #     root.after(50, update_overlay_position)
+        #
+        # update_overlay_position()
 
         # Display the result text in the center
         self.result_text = self.canvas.create_text(
@@ -229,6 +229,11 @@ def load_and_validate_board(filepath):
 
     return board, current_player
 
+def load_board_str(filepath):
+    with open(filepath, "r") as f:
+        content = f.read()
+        return content
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simple Gomoku Game")
@@ -249,7 +254,8 @@ if __name__ == "__main__":
 
     if args.board:
         try:
-            board, current_player = load_and_validate_board(args.board)
+            # board, current_player = load_and_validate_board(args.board)
+            board = load_board_str(args.board)
             print(f"Loaded board from {args.board}")
         except Exception as e:
             print(f"Failed to load board: {e}")
@@ -260,10 +266,11 @@ if __name__ == "__main__":
 
     # if board is passed, update game state
     if board:
-        app.game.board = board
-        app.game.current_player = current_player
-        app.game.opponent_player = "O" if current_player == "X" else "X"
-        app.draw_board(board)
+        app.game.parse_board(board)
+        # app.game.board = board
+        # app.game.current_player = current_player
+        # app.game.opponent_player = "O" if current_player == "X" else "X"
+        app.draw_board(app.game.board)
         app.update_turn_label()
 
     root.mainloop()

@@ -647,12 +647,12 @@ impl Gomoku {
     fn switch_player(&mut self) {
         match self.current_player {
             Stone::Black => {
-                self.current_player = Stone::Black;
+                self.current_player = Stone::White;
                 self.opponent_player = Stone::Black;
             }
             Stone::White => {
                 self.current_player = Stone::Black;
-                self.opponent_player = Stone::Black;
+                self.opponent_player = Stone::White;
             }
             Stone::Empty => panic!("Player cannot be the empty stone"),
         }
@@ -739,10 +739,28 @@ impl Gomoku {
     fn win_capture_count(&self) -> i32 {
         self.win_capture_count
     }
+
+    pub fn parse_board(&mut self, board_str: &str) {
+        self.board = board_str
+            .lines()
+            .map(|line| {
+                line.chars()
+                    .map(|ch| match ch {
+                        'X' => Stone::Black,
+                        'O' => Stone::White,
+                        '.' => Stone::Empty,
+                        _ => Stone::Empty, // Handle any unexpected characters as empty
+                    })
+                    .collect()
+            })
+            .collect();
+    }
 }
 
-fn get_critical_moves(state: &Gomoku) -> HashSet<(usize, usize)> {
-    let mut critical_moves = HashSet::new();
+fn get_critical_moves(
+    mut critical_moves: HashSet<(usize, usize)>,
+    state: &Gomoku,
+) -> HashSet<(usize, usize)> {
     for player in [&state.opponent_player, &state.current_player] {
         for (pattern_type, patterns) in [
             ("block_four", &state.block_four),
@@ -768,8 +786,11 @@ fn get_critical_moves(state: &Gomoku) -> HashSet<(usize, usize)> {
     return critical_moves;
 }
 
-fn get_radius_moves(state: &Gomoku, radius: usize) -> HashSet<(usize, usize)> {
-    let mut radius_moves = HashSet::new();
+fn get_radius_moves(
+    mut radius_moves: HashSet<(usize, usize)>,
+    state: &Gomoku,
+    radius: usize,
+) -> HashSet<(usize, usize)> {
     let (rows, cols) = (state.board.len(), state.board[0].len());
 
     for row in 0..rows {
@@ -800,17 +821,16 @@ fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
 
     let radius = radius as usize;
 
-    let critical_moves = get_critical_moves(state);
-    let radius_moves = get_radius_moves(state, radius);
-
-    let all_candidates: HashSet<_> = critical_moves.union(&radius_moves).copied().collect();
+    let move_set = HashSet::new();
+    let move_set = get_critical_moves(move_set, state);
+    let move_set = get_radius_moves(move_set, state, radius);
 
     // println!(
     //     "[DEBUG] Before validation: {} candidates",
-    //     all_candidates.len()
+    //     move_set.len()
     // );
 
-    let valid_moves: Vec<_> = all_candidates
+    let valid_moves: Vec<_> = move_set
         .into_iter()
         .filter(|&(r, c)| state.is_valid_move(r as i32, c as i32) == MoveResult::Valid)
         .collect();
