@@ -1,8 +1,7 @@
 import tkinter as tk
 from tkinter import simpledialog
-from faster_functions import Gomoku, MoveResult
+from faster_functions import Gomoku, MoveResult, get_ai_move
 import argparse
-from minimax import get_ai_move
 import time
 
 CELL_SIZE = 30
@@ -228,6 +227,7 @@ def load_and_validate_board(filepath):
     current_player = "X"
 
     return board, current_player
+
 
 def load_board_str(filepath):
     with open(filepath, "r") as f:
