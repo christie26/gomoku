@@ -1,16 +1,21 @@
 from typing import Optional
-from faster_functions import Gomoku, MoveResult, get_candidate_moves
+from faster_functions import (
+    Gomoku,
+    MoveResult,
+    get_candidate_moves,
+    heuristic_evaluation,
+)
 import random
 import copy
 import pickle
-from heuristic import heuristic_evaluation
+
 import math
 from concurrent.futures import ProcessPoolExecutor
 
 MAX_VALUE = 100000
 MIN_VALUE = -100000
 
-MAX_DEPTH = 5
+MAX_DEPTH = 6
 
 
 def is_terminal_state(state: Gomoku):
@@ -22,55 +27,6 @@ def state_value(state: Gomoku):
     if winner is None:
         return 0
     return MAX_VALUE if winner == "X" else MIN_VALUE
-
-
-def get_critical_moves(state: Gomoku) -> set[tuple[int, int]]:
-    critical_moves = set([])
-    for player in [state.opponent_player, state.current_player]:
-        for category in [
-            "free_three",
-            "block_four",
-            "open_four",
-            "open_three",
-            "open_two",
-        ]:
-            for pattern in getattr(state, category)[player]:
-                points_to_check = (
-                    pattern if category == "free_three" else [pattern[0], pattern[-1]]
-                )
-                for point in points_to_check:
-                    (x, y) = point
-                    if (
-                        state.board[x][y] == "."
-                        and state.is_valid_move(x, y) == MoveResult.VALID
-                    ):
-                        critical_moves.add((x, y))
-
-    return critical_moves
-
-
-def get_radius_moves(state: Gomoku, radius: int = 1) -> set[tuple[int, int]]:
-    if state.count_empty_spots() == state.size**2:
-        return [(random.randint(7, 13), random.randint(7, 13))]
-    candidates = set([])
-    for row in range(len(state.board)):
-        for col in range(len(state.board[0])):
-            if state.board[row][col] != ".":
-                for dr in range(-radius, radius + 1):
-                    for dc in range(-radius, radius + 1):
-                        new_row, new_col = row + dr, col + dc
-                        if state.is_valid_move(new_row, new_col) == MoveResult.VALID:
-                            candidates.add((new_row, new_col))
-
-    return candidates
-
-
-# NOTE same name function in Rust
-# def get_candidate_moves(state: Gomoku) -> list[tuple[int, int]]:
-#     candiates = set([])
-#     candiates.update(get_critical_moves(state))
-#     candiates.update(get_radius_moves(state))
-#     return list(candiates)
 
 
 def make_next_state(state: Gomoku, move_x: int, move_y: int) -> Gomoku:

@@ -1,6 +1,8 @@
 use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
 
+mod heuristic;
+
 #[pyclass]
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum MoveResult {
@@ -62,7 +64,7 @@ impl MoveResult {
 type Position = (i32, i32);
 type Pattern = Vec<Position>;
 
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
 #[pyclass]
 enum Stone {
     Empty,
@@ -813,6 +815,103 @@ fn get_radius_moves(
     radius_moves
 }
 
+const BOARD_SIZE: usize = 19; 
+const DIRECTIONS: &[(i32, i32)] = &[
+    (1, 0),
+    (0, 1),
+    (1, 1),
+    (1, -1),
+];
+
+// Count stones in one direction from (x,y) for player
+fn count_stones(board: &Vec<Vec<Stone>>, x: usize, y: usize, dx: i32, dy: i32, player: &Stone) -> i32 {
+    let mut count = 0;
+    for i in 1..5 {
+        let nx = x as i32 + dx * i;
+        let ny = y as i32 + dy * i;
+        if nx < 0 || nx >= BOARD_SIZE as i32 || ny < 0 || ny >= BOARD_SIZE as i32 {
+            break;
+        }
+        if board[nx as usize][ny as usize] == *player {
+            count += 1;
+        } else {
+            break;
+        }
+    }
+    count
+}
+
+fn opponent(player: Stone) -> Stone {
+    match player {
+        Stone::Black => Stone::White,
+        Stone::White => Stone::Black,
+        Stone::Empty => Stone::Empty,  // no opponent if empty
+    }
+}
+
+fn can_capture(board: &Vec<Vec<Stone>>, x: usize, y: usize, dx: i32, dy: i32, player: Stone) -> bool {
+    let opp = opponent(player);
+
+    // Positions to check:
+    // (x + dx, y + dy), (x + 2*dx, y + 2*dy) - opponent stones
+    // (x + 3*dx, y + 3*dy) - player stone
+
+    let nx1 = x as i32 + dx;
+    let ny1 = y as i32 + dy;
+    let nx2 = x as i32 + 2 * dx;
+    let ny2 = y as i32 + 2 * dy;
+    let nx3 = x as i32 + 3 * dx;
+    let ny3 = y as i32 + 3 * dy;
+
+    if nx3 < 0 || nx3 >= BOARD_SIZE as i32 || ny3 < 0 || ny3 >= BOARD_SIZE as i32 {
+        return false;
+    }
+    if nx2 < 0 || nx2 >= BOARD_SIZE as i32 || ny2 < 0 || ny2 >= BOARD_SIZE as i32 {
+        return false;
+    }
+    if nx1 < 0 || nx1 >= BOARD_SIZE as i32 || ny1 < 0 || ny1 >= BOARD_SIZE as i32 {
+        return false;
+    }
+
+    board[nx1 as usize][ny1 as usize] == opp &&
+    board[nx2 as usize][ny2 as usize] == opp &&
+    board[nx3 as usize][ny3 as usize] == player
+}
+
+// Evaluate score for one position for one player
+fn evaluate_position(board: &Vec<Vec<Stone>>, x: usize, y: usize, player: &Stone) -> i32 {
+    let mut score = 0;
+
+    for &(dx, dy) in DIRECTIONS {
+        let mut count = 1; // Count the current spot as occupied (hypothetically)
+
+        count += count_stones(board, x, y, dx, dy, player);
+        count += count_stones(board, x, y, -dx, -dy, player);
+
+        score += match count {
+            n if n >= 5 => 100_000,
+            4 => 10_000,
+            3 => 1_000,
+            2 => 100,
+            1 => 10,
+            _ => 0,
+        };
+                // Check capture pattern in positive direction:
+        if can_capture(board, x, y, dx, dy, *player) {
+            score += 50000;  // assign your capture score here
+        }
+
+        // Check capture pattern in negative direction:
+        if can_capture(board, x, y, -dx, -dy, *player) {
+            score += 50000;
+        }
+        // println!("Score: {}", score);
+    }
+
+    score
+}
+
+
 #[pyfunction]
 fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
     if state.count_empty_spots() as usize == state.size * state.size {
@@ -825,17 +924,34 @@ fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
     let move_set = get_critical_moves(move_set, state);
     let move_set = get_radius_moves(move_set, state, radius);
 
-    // println!(
-    //     "[DEBUG] Before validation: {} candidates",
-    //     move_set.len()
-    // );
-
-    let valid_moves: Vec<_> = move_set
+    let mut valid_moves: Vec<_> = move_set
         .into_iter()
         .filter(|&(r, c)| state.is_valid_move(r as i32, c as i32) == MoveResult::Valid)
         .collect();
 
-    // println!("[DEBUG] After validation: {} valid moves", valid_moves.len());
+    valid_moves.sort_by_key(|&(r, c)| {
+    -(evaluate_position(&state.board, r, c, &state.current_player))
+    });
+
+    // // Create a vector of (move, score)
+    // let mut moves_with_scores: Vec<((usize, usize), i32)> = valid_moves
+    //     .iter()
+    //     .map(|&(r, c)| {
+    //         let score = evaluate_position(&state.board, r, c, &state.current_player);
+    //         println!("Move: ({}, {}), Score: {}", r, c, score);
+    //         ((r, c), score)
+    //     })
+    //     .collect();
+
+    // // Sort descending by score
+    // moves_with_scores.sort_by_key(|&(_, score)| -score);
+
+    // // Extract just the sorted moves if you want
+    // let sorted_moves: Vec<(usize, usize)> = moves_with_scores
+    //     .into_iter()
+    //     .map(|(mv, _score)| mv)
+    //     .collect();
+
 
     valid_moves
 }
@@ -845,6 +961,8 @@ fn faster_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<MoveResult>()?;
     m.add_class::<Gomoku>()?;
     m.add_function(wrap_pyfunction!(get_candidate_moves, m)?)?;
+    m.add_function(wrap_pyfunction!(heuristic::heuristic_evaluation, m)?)?;
+
     let gomoku_class = m.getattr("Gomoku")?;
     gomoku_class.setattr("__module__", "faster_functions")?;
 
