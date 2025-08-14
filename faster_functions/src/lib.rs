@@ -618,7 +618,7 @@ impl Gomoku {
     }
 
     fn get_winner(&self) -> Option<String> {
-        if let Some((x, y)) = self.current_move {
+        if let Some((_x, _y)) = self.current_move {
             // Check five captures
             if *self.capture_count.get(&self.current_player).unwrap() >= self.win_capture_count {
                 return Some(self.current_player.to_string());
