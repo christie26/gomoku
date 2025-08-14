@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 
 mod heuristic;
 mod minimax;
