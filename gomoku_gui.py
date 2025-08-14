@@ -200,7 +200,7 @@ class GomokuGUI:
 
         ai_time = time.time() - start_time
         self.update_ai_label(f"AI played in {ai_time:.4f}s")
-        print(f"AI played in {ai_time:.4f}s")
+        print(f"AI played in {ai_time:.4f}s-------------------------")
 
         self.play_one_turn(x, y)
 

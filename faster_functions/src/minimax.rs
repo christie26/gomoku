@@ -89,19 +89,15 @@ fn evaluate_position(board: &Vec<Vec<Stone>>, x: usize, y: usize, player: &Stone
             4 => 10_000,
             3 => 1_000,
             2 => 100,
-            1 => 10,
             _ => 0,
         };
-                // Check capture pattern in positive direction:
-        if can_capture(board, x, y, dx, dy, *player) {
-            score += 50000;  // assign your capture score here
-        }
 
-        // Check capture pattern in negative direction:
+        if can_capture(board, x, y, dx, dy, *player) {
+            score += 50000;
+        }
         if can_capture(board, x, y, -dx, -dy, *player) {
             score += 50000;
         }
-        // println!("Score: {}", score);
     }
 
     score
@@ -190,7 +186,7 @@ pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
     //     .iter()
     //     .map(|&(r, c)| {
     //         let score = evaluate_position(&state.board, r, c, &state.current_player);
-    //         println!("Move: ({}, {}), Score: {}", r, c, score);
+    //         // println!("Move: ({}, {}), Score: {}", r, c, score);
     //         ((r, c), score)
     //     })
     //     .collect();
@@ -199,7 +195,7 @@ pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
     // moves_with_scores.sort_by_key(|&(_, score)| -score);
 
     // // Extract just the sorted moves if you want
-    // let sorted_moves: Vec<(usize, usize)> = moves_with_scores
+    // let _sorted_moves: Vec<(usize, usize)> = moves_with_scores
     //     .into_iter()
     //     .map(|(mv, _score)| mv)
     //     .collect();
