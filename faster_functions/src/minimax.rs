@@ -9,7 +9,7 @@ use std::collections::HashSet;
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
-const MAX_DEPTH: usize = 7;
+const MAX_DEPTH: usize = 6;
 
 const BOARD_SIZE: usize = 19; 
 const DIRECTIONS: &[(i32, i32)] = &[

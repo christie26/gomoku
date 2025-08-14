@@ -169,7 +169,7 @@ impl Gomoku {
         for (i, row) in self.board.iter().enumerate() {
             print!("{:2} ", i);
             for cell in row {
-                print!("{:2} ", cell);
+                print!("{:2}  ", cell);
             }
             println!();
         }

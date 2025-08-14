@@ -83,4 +83,15 @@ fn main() {
     println!("Min duration: {:.3} s", min);
     println!("Max duration: {:.3} s", max);
     println!("Standard deviation: {:.3} s", stddev);
+    if durations.len() >= 10 {
+        println!("Mean duration of first 10 iterations: {:.3} s", durations[0..10].iter().sum::<f64>() / 10.0);
+    }
+
+    if durations.len() >= 20 {
+        println!("Mean duration of first 20 iterations: {:.3} s", durations[0..20].iter().sum::<f64>() / 20.0);
+    }
+
+    if durations.len() >= 30 {
+        println!("Mean duration of first 30 iterations: {:.3} s", durations[0..30].iter().sum::<f64>() / 30.0);
+    }
 }
