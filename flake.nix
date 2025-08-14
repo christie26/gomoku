@@ -44,6 +44,8 @@
           pkg-config
           openssl
           git
+          #profile
+          cargo-flamegraph
         ];
 
         shellHook = ''

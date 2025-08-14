@@ -1,12 +1,12 @@
 use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
 
-mod heuristic;
-mod minimax;
+pub mod heuristic;
+pub mod minimax;
 
 #[pyclass]
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum MoveResult {
+pub enum MoveResult {
     Valid = 0,
     OutOfBoard = 1,
     NotEmpty = 2,
@@ -67,7 +67,7 @@ type Pattern = Vec<Position>;
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 #[pyclass]
-enum Stone {
+pub enum Stone {
     Empty,
     Black,
     White,
@@ -95,7 +95,7 @@ impl Into<String> for Stone {
 pub struct Gomoku {
     size: usize,
     board: Vec<Vec<Stone>>,
-    current_player: Stone,
+    pub current_player: Stone,
     opponent_player: Stone,
     capture_count: HashMap<Stone, i32>,
     free_three: HashMap<Stone, Vec<Pattern>>,
@@ -112,7 +112,7 @@ pub struct Gomoku {
 impl Gomoku {
     #[new]
     #[pyo3(signature = (size = 19))]
-    fn new(size: usize) -> Self {
+    pub fn new(size: usize) -> Self {
         let board = vec![vec![Stone::Empty; size]; size];
         let mut capture_count = HashMap::new();
         capture_count.insert(Stone::Black, 0);
@@ -159,7 +159,7 @@ impl Gomoku {
         }
     }
 
-    fn print_board(&self) {
+    pub fn print_board(&self) {
         print!("  ");
         for i in 0..self.size {
             print!("{:2} ", i);
@@ -587,7 +587,7 @@ impl Gomoku {
             .extend(new_block_four_y);
     }
 
-    fn handle_move(&mut self, x: i32, y: i32) -> (MoveResult, i32) {
+    pub fn handle_move(&mut self, x: i32, y: i32) -> (MoveResult, i32) {
         let result = self.is_valid_move(x, y);
         let mut capture_count = 0;
 
@@ -617,7 +617,7 @@ impl Gomoku {
             .sum()
     }
 
-    fn get_winner(&self) -> Option<String> {
+    pub fn get_winner(&self) -> Option<String> {
         if let Some((x, y)) = self.current_move {
             // Check five captures
             if *self.capture_count.get(&self.current_player).unwrap() >= self.win_capture_count {
@@ -647,7 +647,7 @@ impl Gomoku {
         self.count_empty_spots() == 0
     }
 
-    fn switch_player(&mut self) {
+    pub fn switch_player(&mut self) {
         match self.current_player {
             Stone::Black => {
                 self.current_player = Stone::White;
