@@ -2,6 +2,7 @@ use crate::{Gomoku, Stone};
 use crate::heuristic::heuristic_evaluation;
 use crate::MoveResult;
 
+use linked_hash_set::LinkedHashSet;
 use pyo3::prelude::*;
 
 use std::cmp::{max, min};
@@ -105,9 +106,9 @@ fn evaluate_position(board: &Vec<Vec<Stone>>, x: usize, y: usize, player: &Stone
 
 
 fn get_critical_moves(
-    mut critical_moves: HashSet<(usize, usize)>,
+    mut critical_moves: LinkedHashSet<(usize, usize)>,
     state: &Gomoku,
-) -> HashSet<(usize, usize)> {
+) -> LinkedHashSet<(usize, usize)> {
     for player in [&state.opponent_player, &state.current_player] {
         for (pattern_type, patterns) in [
             ("block_four", &state.block_four),
@@ -134,10 +135,10 @@ fn get_critical_moves(
 }
 
 fn get_radius_moves(
-    mut radius_moves: HashSet<(usize, usize)>,
+    mut radius_moves: LinkedHashSet<(usize, usize)>,
     state: &Gomoku,
     radius: usize,
-) -> HashSet<(usize, usize)> {
+) -> LinkedHashSet<(usize, usize)> {
     let (rows, cols) = (state.board.len(), state.board[0].len());
 
     for row in 0..rows {
@@ -168,7 +169,7 @@ pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
 
     let radius = radius as usize;
 
-    let move_set = HashSet::new();
+    let move_set = LinkedHashSet::new();
     let move_set = get_critical_moves(move_set, state);
     let move_set = get_radius_moves(move_set, state, radius);
 
