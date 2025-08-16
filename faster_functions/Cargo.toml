@@ -7,7 +7,7 @@ edition = "2021"
 [lib]
 name = "faster_functions"
 path = "./src/lib.rs"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 
 [[bin]]

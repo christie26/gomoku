@@ -10,7 +10,7 @@ use std::collections::HashSet;
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
-const MAX_DEPTH: usize = 4;
+const MAX_DEPTH: usize = 6;
 
 const BOARD_SIZE: usize = 19;
 const DIRECTIONS: &[(i32, i32)] = &[(1, 0), (0, 1), (1, 1), (1, -1)];
@@ -177,7 +177,7 @@ pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
 
     let radius = radius as usize;
 
-    let radius = 3 as usize;
+    let radius = 1 as usize;
     let move_set = LinkedHashSet::new();
     let move_set = get_critical_moves(move_set, state);
     let move_set = get_radius_moves(move_set, state, radius);
@@ -240,18 +240,25 @@ pub fn get_ai_move(
 ) {
     let is_max_player = state.current_player == Stone::Black;
 
-    let mut best_value = if is_max_player { MIN_VALUE -1  } else { MAX_VALUE + 1 };
+    let mut best_value = if is_max_player {
+        MIN_VALUE - 1
+    } else {
+        MAX_VALUE + 1
+    };
     let mut alpha = MIN_VALUE;
     let mut beta = MAX_VALUE;
 
     let mut best_move: Option<(usize, usize, i32)> = None;
     let mut all_moves: Vec<(usize, usize, Option<i32>)> = get_candidate_moves(state, 1)
         .into_iter()
-        .map(|(x, y)| (x, y, None)).collect();
+        .map(|(x, y)| (x, y, None))
+        .collect();
+
+    let depth = if state.move_count < 4 { 3 } else { MAX_DEPTH };
 
     for (move_x, move_y, score) in all_moves.iter_mut() {
         let next_state = make_next_state(state, *move_x, *move_y);
-        let value = alphabeta(&next_state, alpha, beta, !is_max_player, 1);
+        let value = alphabeta(&next_state, alpha, beta, !is_max_player, depth);
         *score = Some(value);
 
         if is_max_player && value > best_value {
@@ -283,20 +290,24 @@ fn alphabeta(
         return state_value(state);
     }
 
-    if depth == MAX_DEPTH {
+    if depth == 1 {
         return heuristic_evaluation(state);
     }
 
-    let mut value = if is_max_player { MIN_VALUE - 1 } else { MAX_VALUE + 1 };
+    let mut value = if is_max_player {
+        MIN_VALUE - 1
+    } else {
+        MAX_VALUE + 1
+    };
 
     for (move_x, move_y) in get_candidate_moves(state, 1) {
         let next_state = make_next_state(state, move_x, move_y);
 
         if is_max_player {
-            value = max(value, alphabeta(&next_state, alpha, beta, false, depth + 1));
+            value = max(value, alphabeta(&next_state, alpha, beta, false, depth - 1));
             alpha = max(alpha, value);
         } else {
-            value = min(value, alphabeta(&next_state, alpha, beta, true, depth + 1));
+            value = min(value, alphabeta(&next_state, alpha, beta, true, depth - 1));
             beta = min(beta, value);
         }
 

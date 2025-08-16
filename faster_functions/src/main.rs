@@ -47,20 +47,21 @@ fn main() {
 
             // Check if task completed
             if handle.is_finished() {
-                res = handle.join().unwrap();
+                (res, _) = handle.join().unwrap();
                 break;
             }
 
             thread::sleep(Duration::from_millis(10));
         }
 
-        let Some((x, y)) = res else {
-            println!("Played the whole board!!");
+        let Some((x, y, score)) = res else {
+            println!("Played all possible valid moves!!");
             break;
         };
         let elapsed = start.elapsed().as_secs_f64(); // convert to milliseconds
         durations.push(elapsed);
-        println!("{} playing ({}, {})", game.current_player, x, y);
+        println!("{} playing ({}, {}) - {}pts", game.current_player, x, y, score);
+        game.print_board();
         game.handle_move(x as i32, y as i32);
         game.switch_player();
         if let Some(winner) = game.get_winner() {
