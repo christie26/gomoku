@@ -287,7 +287,7 @@ fn alphabeta(
         return heuristic_evaluation(state);
     }
 
-    let mut value = if is_max_player { MIN_VALUE -1 } else { MAX_VALUE +1 };
+    let mut value = if is_max_player { MIN_VALUE - 1 } else { MAX_VALUE + 1 };
 
     for (move_x, move_y) in get_candidate_moves(state, 1) {
         let next_state = make_next_state(state, move_x, move_y);

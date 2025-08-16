@@ -4,7 +4,7 @@ from faster_functions import Gomoku, MoveResult, get_ai_move
 import argparse
 import time
 
-CELL_SIZE = 60
+CELL_SIZE = 40
 BOARD_SIZE = 19
 PADDING = 20
 
@@ -129,13 +129,20 @@ class GomokuGUI:
 
         # Create stone with 50% opacity
         outline_color = "red" if selected else ""
-        self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, 
-                               fill=color, stipple="gray50", outline=outline_color)
+        self.canvas.create_oval(
+            cx - r,
+            cy - r,
+            cx + r,
+            cy + r,
+            fill=color,
+            stipple="gray50",
+            outline=outline_color,
+        )
         # Calculate appropriate font size based on stone size and number length
         number_str = str(number)
         # Base font size proportional to stone radius
         base_font_size = max(6, r // 2)
-        
+
         # Reduce font size for longer numbers
         if len(number_str) == 1:
             font_size = base_font_size
@@ -143,12 +150,12 @@ class GomokuGUI:
             font_size = max(6, int(base_font_size * 0.8))
         else:  # 3+ digits
             font_size = max(6, int(base_font_size * 0.6))
-        
+
         # Add numeric text in the center
         text_color = "white" if player == "X" else "black"
-        self.canvas.create_text(cx, cy, text=number_str, 
-                               fill=text_color, font=("Arial", font_size, "bold"))
-        
+        self.canvas.create_text(
+            cx, cy, text=number_str, fill=text_color, font=("Arial", font_size, "bold")
+        )
 
     def finish_game(self, winner):
         # # Create a toplevel window to act as overlay
@@ -234,13 +241,15 @@ class GomokuGUI:
 
         ai_time = time.time() - start_time
         self.update_ai_label(f"AI played in {ai_time:.4f}s")
-        print(f"AI chose to play {mv} in {ai_time:.4f}s out of {len(moves)} moves-------------------------")
-        print(self.game.print_state())
+        print(
+            f"AI chose to play {mv} in {ai_time:.4f}s out of {len(moves)} moves-------------------------"
+        )
+        # print(self.game.print_state())
 
         for m in moves:
             x1, y1, score1 = m
             selected = x == x1 and y == y1
-            self.draw_possible_stone(y1, x1, 'O', score1, selected)
+            self.draw_possible_stone(y1, x1, "O", score1, selected)
 
         # self.play_one_turn(x, y)
 

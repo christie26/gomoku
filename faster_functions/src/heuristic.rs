@@ -28,11 +28,12 @@ fn evaluate_player(state: &Gomoku, player: Stone) -> i32 {
 
 #[pyfunction]
 pub fn heuristic_evaluation(state: &Gomoku) -> i32 {
-    let current = evaluate_player(state, state.current_player);
-    let opponent = evaluate_player(state, state.opponent_player);
-    let heuristic = current - opponent;
 
-    // println!("Move: ({}), heuristic: {}\n",state.current_move.map(|x| 
+    let black_score = evaluate_player(state, Stone::Black);
+    let white_score = evaluate_player(state, Stone::White);
+    let heuristic = black_score - white_score;
+
+    // println!("Current: {:?}, Move: ({}), heuristic: {}\n",state.current_player, state.current_move.map(|x| 
     //   format!("{}, {}", x.0, x.1))
     //   .unwrap_or("null".to_string()) ,heuristic);
     heuristic
