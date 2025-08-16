@@ -65,7 +65,7 @@ impl MoveResult {
 type Position = (i32, i32);
 type Pattern = Vec<Position>;
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 #[pyclass]
 pub enum Stone {
     Empty,
@@ -90,7 +90,7 @@ impl Into<String> for Stone {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[pyclass]
 pub struct Gomoku {
     size: usize,
@@ -173,6 +173,23 @@ impl Gomoku {
             }
             println!();
         }
+    }
+
+    pub fn print_state(&self) {
+        self.print_board();
+        println!("size: {:?}", self.size);
+        println!("current_player: {:?}", self.current_player);
+        println!("opponent_player: {:?}", self.opponent_player);
+        println!("capture_count: {:?}", self.capture_count);
+        println!("free_three: {:?}", self.free_three);
+        println!("five_row: {:?}", self.five_row);
+        println!("open_two: {:?}", self.open_two);
+        println!("open_three: {:?}", self.open_three);
+        println!("open_four: {:?}", self.open_four);
+        println!("block_four: {:?}", self.block_four);
+        println!("win_capture_count: {:?}", self.win_capture_count);
+        println!("current_move: {:?}", self.current_move);
+
     }
 
     fn clone_gomoku(&self) -> Gomoku {

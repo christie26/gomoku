@@ -1,6 +1,6 @@
-use crate::{Gomoku, Stone};
 use crate::heuristic::heuristic_evaluation;
 use crate::MoveResult;
+use crate::{Gomoku, Stone};
 
 use linked_hash_set::LinkedHashSet;
 use pyo3::prelude::*;
@@ -10,18 +10,20 @@ use std::collections::HashSet;
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
-const MAX_DEPTH: usize = 6;
+const MAX_DEPTH: usize = 4;
 
-const BOARD_SIZE: usize = 19; 
-const DIRECTIONS: &[(i32, i32)] = &[
-    (1, 0),
-    (0, 1),
-    (1, 1),
-    (1, -1),
-];
+const BOARD_SIZE: usize = 19;
+const DIRECTIONS: &[(i32, i32)] = &[(1, 0), (0, 1), (1, 1), (1, -1)];
 
 // Count stones in one direction from (x,y) for player
-fn count_stones(board: &Vec<Vec<Stone>>, x: usize, y: usize, dx: i32, dy: i32, player: &Stone) -> i32 {
+fn count_stones(
+    board: &Vec<Vec<Stone>>,
+    x: usize,
+    y: usize,
+    dx: i32,
+    dy: i32,
+    player: &Stone,
+) -> i32 {
     let mut count = 0;
     for i in 1..5 {
         let nx = x as i32 + dx * i;
@@ -42,11 +44,18 @@ fn opponent(player: Stone) -> Stone {
     match player {
         Stone::Black => Stone::White,
         Stone::White => Stone::Black,
-        Stone::Empty => Stone::Empty,  // no opponent if empty
+        Stone::Empty => Stone::Empty, // no opponent if empty
     }
 }
 
-fn can_capture(board: &Vec<Vec<Stone>>, x: usize, y: usize, dx: i32, dy: i32, player: Stone) -> bool {
+fn can_capture(
+    board: &Vec<Vec<Stone>>,
+    x: usize,
+    y: usize,
+    dx: i32,
+    dy: i32,
+    player: Stone,
+) -> bool {
     let opp = opponent(player);
 
     // Positions to check:
@@ -70,9 +79,9 @@ fn can_capture(board: &Vec<Vec<Stone>>, x: usize, y: usize, dx: i32, dy: i32, pl
         return false;
     }
 
-    board[nx1 as usize][ny1 as usize] == opp &&
-    board[nx2 as usize][ny2 as usize] == opp &&
-    board[nx3 as usize][ny3 as usize] == player
+    board[nx1 as usize][ny1 as usize] == opp
+        && board[nx2 as usize][ny2 as usize] == opp
+        && board[nx3 as usize][ny3 as usize] == player
 }
 
 // Evaluate score for one position for one player
@@ -103,7 +112,6 @@ fn evaluate_position(board: &Vec<Vec<Stone>>, x: usize, y: usize, player: &Stone
 
     score
 }
-
 
 fn get_critical_moves(
     mut critical_moves: LinkedHashSet<(usize, usize)>,
@@ -169,6 +177,7 @@ pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
 
     let radius = radius as usize;
 
+    let radius = 3 as usize;
     let move_set = LinkedHashSet::new();
     let move_set = get_critical_moves(move_set, state);
     let move_set = get_radius_moves(move_set, state, radius);
@@ -178,9 +187,8 @@ pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
         .filter(|&(r, c)| state.is_valid_move(r as i32, c as i32) == MoveResult::Valid)
         .collect();
 
-    valid_moves.sort_by_key(|&(r, c)| {
-    -(evaluate_position(&state.board, r, c, &state.current_player))
-    });
+    valid_moves
+        .sort_by_key(|&(r, c)| -(evaluate_position(&state.board, r, c, &state.current_player)));
 
     // // Create a vector of (move, score)
     // let mut moves_with_scores: Vec<((usize, usize), i32)> = valid_moves
@@ -200,7 +208,6 @@ pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
     //     .into_iter()
     //     .map(|(mv, _score)| mv)
     //     .collect();
-
 
     valid_moves
 }
@@ -225,27 +232,36 @@ fn make_next_state(state: &Gomoku, move_x: usize, move_y: usize) -> Gomoku {
 }
 
 #[pyfunction]
-pub fn get_ai_move(state: &Gomoku) -> Option<(usize, usize)> {
+pub fn get_ai_move(
+    state: &Gomoku,
+) -> (
+    Option<(usize, usize, i32)>,
+    Vec<(usize, usize, Option<i32>)>,
+) {
     let is_max_player = state.current_player == Stone::Black;
 
-    let mut best_value = if is_max_player { MIN_VALUE } else { MAX_VALUE };
+    let mut best_value = if is_max_player { MIN_VALUE -1  } else { MAX_VALUE + 1 };
     let mut alpha = MIN_VALUE;
     let mut beta = MAX_VALUE;
 
-    let mut best_move: Option<(usize, usize)> = None;
+    let mut best_move: Option<(usize, usize, i32)> = None;
+    let mut all_moves: Vec<(usize, usize, Option<i32>)> = get_candidate_moves(state, 1)
+        .into_iter()
+        .map(|(x, y)| (x, y, None)).collect();
 
-    for (move_x, move_y) in get_candidate_moves(state, 1) {
-        let next_state = make_next_state(state, move_x, move_y);
+    for (move_x, move_y, score) in all_moves.iter_mut() {
+        let next_state = make_next_state(state, *move_x, *move_y);
         let value = alphabeta(&next_state, alpha, beta, !is_max_player, 1);
+        *score = Some(value);
 
         if is_max_player && value > best_value {
             best_value = value;
             alpha = max(alpha, best_value);
-            best_move = Some((move_x, move_y));
+            best_move = Some((*move_x, *move_y, value));
         } else if !is_max_player && value < best_value {
             best_value = value;
             beta = min(beta, best_value);
-            best_move = Some((move_x, move_y));
+            best_move = Some((*move_x, *move_y, value));
         }
 
         if alpha >= beta {
@@ -253,10 +269,16 @@ pub fn get_ai_move(state: &Gomoku) -> Option<(usize, usize)> {
         }
     }
 
-    best_move
+    (best_move, all_moves)
 }
 
-fn alphabeta(state: &Gomoku, mut alpha: i32, mut beta: i32, is_max_player: bool, depth: usize) -> i32 {
+fn alphabeta(
+    state: &Gomoku,
+    mut alpha: i32,
+    mut beta: i32,
+    is_max_player: bool,
+    depth: usize,
+) -> i32 {
     if is_terminal_state(state) {
         return state_value(state);
     }
@@ -265,7 +287,7 @@ fn alphabeta(state: &Gomoku, mut alpha: i32, mut beta: i32, is_max_player: bool,
         return heuristic_evaluation(state);
     }
 
-    let mut value = if is_max_player { MIN_VALUE } else { MAX_VALUE };
+    let mut value = if is_max_player { MIN_VALUE -1 } else { MAX_VALUE +1 };
 
     for (move_x, move_y) in get_candidate_moves(state, 1) {
         let next_state = make_next_state(state, move_x, move_y);
