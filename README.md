@@ -8,7 +8,7 @@ it will get installed in the venv that you entered thanks the command in the las
 
 Shell 2
 - In another shell, run `nix develop` again to be in the same venv
-- Run gomoku with `python -m cProfile -o profile.prof gomoku_gui.py --black 1 --white 1`.
+- Run gomoku with `python -m cProfile -o profile.prof gomoku_gui.py --black Etienne --white Yoonseo`.
 - The profile.prof file generated can be opened with snakeviz, by running `snakeviz profile.prof`
 
 if you want to enter zsh, do `nix develop -c zsh`
