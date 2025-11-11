@@ -6,13 +6,12 @@ use linked_hash_set::LinkedHashSet;
 use pyo3::prelude::*;
 
 use std::cmp::{max, min};
-use std::collections::HashSet;
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
-const MAX_DEPTH: usize = 6;
+const MAX_DEPTH: usize = 4;
 
-const BOARD_SIZE: usize = 19;
+pub const BOARD_SIZE: usize = 19;
 const DIRECTIONS: &[(i32, i32)] = &[(1, 0), (0, 1), (1, 1), (1, -1)];
 
 // Count stones in one direction from (x,y) for player
@@ -172,10 +171,10 @@ fn get_radius_moves(
 #[pyfunction]
 pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
     if state.count_empty_spots() as usize == state.size * state.size {
-        return vec![(9, 9)];
+        return vec![(state.size / 2, state.size / 2)];
     }
 
-    let radius = radius as usize;
+    let _radius = radius as usize;
 
     let radius = 1 as usize;
     let move_set = LinkedHashSet::new();

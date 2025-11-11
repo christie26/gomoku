@@ -12,3 +12,10 @@ Shell 2
 - The profile.prof file generated can be opened with snakeviz, by running `snakeviz profile.prof`
 
 if you want to enter zsh, do `nix develop -c zsh`
+
+#### Running the cli AI vs AI 
+
+- `nix develop` to enter the dev shell
+- Make sure to be in `cd faster_functions`
+- `cargo run` or `cargo run --release` (more compile time, but faster exec) to run it.
+

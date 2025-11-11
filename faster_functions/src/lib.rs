@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 use std::collections::HashMap;
+use colored::*;
 
 pub mod heuristic;
 pub mod minimax;
@@ -161,7 +162,7 @@ impl Gomoku {
         }
     }
 
-    pub fn print_board(&self) {
+    pub fn print_board(&self, highlight: Vec<(usize, usize)>) {
         print!("  ");
         for i in 0..self.size {
             print!("{:2} ", i);
@@ -170,15 +171,19 @@ impl Gomoku {
 
         for (i, row) in self.board.iter().enumerate() {
             print!("{:2} ", i);
-            for cell in row {
-                print!("{:2}  ", cell);
+            for (j, cell) in row.iter().enumerate() {
+                if highlight.iter().any(|u| *u == (i, j)) {
+                    print!("{}", format!("{:2}  ", cell).bold().yellow());
+                } else {
+                    print!("{:2}  ", cell);
+                }
             }
             println!();
         }
     }
 
     pub fn print_state(&self) {
-        self.print_board();
+        self.print_board(vec![]);
         println!("size: {:?}", self.size);
         println!("current_player: {:?}", self.current_player);
         println!("opponent_player: {:?}", self.opponent_player);
@@ -202,7 +207,7 @@ impl Gomoku {
     }
 
     fn is_valid_move(&self, x: i32, y: i32) -> MoveResult {
-        // return self.is_valid_move_simple_ruleset(x, y);
+        return self.is_valid_move_simple_ruleset(x, y);
         if !self.is_on_board(x, y) {
             return MoveResult::OutOfBoard;
         }
@@ -644,7 +649,7 @@ impl Gomoku {
     }
 
     pub fn handle_move(&mut self, x: i32, y: i32) -> (MoveResult, i32) {
-        // return self.handle_move_simple_ruleset(x, y);
+        return self.handle_move_simple_ruleset(x, y);
         let result = self.is_valid_move(x, y);
         let mut capture_count = 0;
 

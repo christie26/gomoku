@@ -1,5 +1,11 @@
-use signal_hook::{consts::{SIGINT, SIGTERM}, iterator::Signals};
-use faster_functions::{minimax, Gomoku};
+use faster_functions::{
+    minimax::{self, BOARD_SIZE},
+    Gomoku,
+};
+use signal_hook::{
+    consts::{SIGINT, SIGTERM},
+    iterator::Signals,
+};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -8,7 +14,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 fn main() {
-    let mut game = Gomoku::new(19);
+    let mut game = Gomoku::new(BOARD_SIZE);
 
     let mut durations = vec![];
     println!("Game start!");
@@ -17,13 +23,13 @@ fn main() {
 
     let r = running.clone();
     thread::spawn(move || {
-            let mut signals = Signals::new(&[SIGINT, SIGTERM]).expect("Failed to create signals");
-            for _ in signals.forever() {
-                println!("\nReceived Ctrl-C, shutting down...");
-                r.store(false, Ordering::SeqCst);
-            }
-        });
-    let r = running.clone();
+        let mut signals = Signals::new(&[SIGINT, SIGTERM]).expect("Failed to create signals");
+        for _ in signals.forever() {
+            println!("\nReceived Ctrl-C, shutting down...");
+            r.store(false, Ordering::SeqCst);
+        }
+    });
+    // let r = running.clone();
     // Set up Ctrl-C handler
     // ctrlc::set_handler(move || {
     //     println!("\nReceived Ctrl-C, stopping...");
@@ -31,6 +37,7 @@ fn main() {
     // })
     // .expect("Error setting Ctrl-C handler");
 
+    let mut move_history = vec![];
     loop {
         let start = Instant::now();
 
@@ -38,6 +45,7 @@ fn main() {
         let handle = thread::spawn(move || minimax::get_ai_move(&game_clone));
 
         let mut res = None;
+        let mut moves = vec![];
 
         loop {
             if !running.load(Ordering::SeqCst) {
@@ -47,7 +55,7 @@ fn main() {
 
             // Check if task completed
             if handle.is_finished() {
-                (res, _) = handle.join().unwrap();
+                (res, moves) = handle.join().unwrap();
                 break;
             }
 
@@ -55,14 +63,23 @@ fn main() {
         }
 
         let Some((x, y, score)) = res else {
-            println!("Played all possible valid moves!!");
+            println!("Played all possible valid moves or canceled");
             break;
         };
-        let elapsed = start.elapsed().as_secs_f64(); // convert to milliseconds
+        let elapsed = start.elapsed().as_secs_f64();
+        println!(
+            "{} playing ({}, {}) - {}pts (took {:.2}s and tested {} moves)",
+            game.current_player,
+            x,
+            y,
+            score,
+            elapsed,
+            moves.len()
+        );
         durations.push(elapsed);
-        println!("{} playing ({}, {}) - {}pts", game.current_player, x, y, score);
-        game.print_board();
         game.handle_move(x as i32, y as i32);
+        game.print_board(vec![(x, y)]);
+        move_history.push((x, y, score));
         game.switch_player();
         if let Some(winner) = game.get_winner() {
             println!("{winner} won");
@@ -70,7 +87,15 @@ fn main() {
         }
     }
 
-    game.print_board();
+    game.print_board(vec![]);
+    println!(
+        "move history: {}",
+        move_history
+            .iter()
+            .map(|u| format!("{u:?}"))
+            .collect::<Vec<String>>()
+            .join("->")
+    );
 
     let count = durations.len();
     let sum: f64 = durations.iter().sum();
@@ -85,14 +110,23 @@ fn main() {
     println!("Max duration: {:.3} s", max);
     println!("Standard deviation: {:.3} s", stddev);
     if durations.len() >= 10 {
-        println!("Mean duration of first 10 iterations: {:.3} s", durations[0..10].iter().sum::<f64>() / 10.0);
+        println!(
+            "Mean duration of first 10 iterations: {:.3} s",
+            durations[0..10].iter().sum::<f64>() / 10.0
+        );
     }
 
     if durations.len() >= 20 {
-        println!("Mean duration of first 20 iterations: {:.3} s", durations[0..20].iter().sum::<f64>() / 20.0);
+        println!(
+            "Mean duration of first 20 iterations: {:.3} s",
+            durations[0..20].iter().sum::<f64>() / 20.0
+        );
     }
 
     if durations.len() >= 30 {
-        println!("Mean duration of first 30 iterations: {:.3} s", durations[0..30].iter().sum::<f64>() / 30.0);
+        println!(
+            "Mean duration of first 30 iterations: {:.3} s",
+            durations[0..30].iter().sum::<f64>() / 30.0
+        );
     }
 }
