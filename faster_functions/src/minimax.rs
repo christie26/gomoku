@@ -9,9 +9,9 @@ use std::cmp::{max, min};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
-const MAX_VALUE: i32 = 100_000;
-const MIN_VALUE: i32 = -100_000;
-const MAX_DEPTH: usize = 5;
+const MAX_VALUE: i32 = 100_000 + MAX_DEPTH as i32;
+const MIN_VALUE: i32 = -100_000 - MAX_DEPTH as i32;
+const MAX_DEPTH: usize = 4;
 
 pub const BOARD_SIZE: usize = 19;
 const DIRECTIONS: &[(i32, i32)] = &[(1, 0), (0, 1), (1, 1), (1, -1)];
@@ -365,11 +365,19 @@ fn alphabeta(
     max_depth: usize,
 ) -> (i32, usize) {
     if is_terminal_state(state) {
-        return (state_value(state), depth);
+      if is_max_player {
+        return state_value(state) + (MAX_DEPTH as i32 - depth as i32) as i32 - 1;
+      } else {
+        return state_value(state) + (depth as i32 - MAX_DEPTH as i32) as i32 + 1;
+      }
     }
 
     if depth == max_depth {
-        return (heuristic_evaluation(state), depth);
+      if is_max_player {
+        return heuristic_evaluation(state) + (MAX_DEPTH as i32 - depth as i32) as i32 - 1;
+      } else {
+        return heuristic_evaluation(state) + (depth as i32 - MAX_DEPTH as i32) as i32 + 1;
+      }
     }
 
     let mut value = if is_max_player {
