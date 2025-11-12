@@ -15,7 +15,7 @@ class GomokuGUI:
     handles user interaction, board drawing, turn management, and displaying results.
     """
 
-    def __init__(self, root, player1, player2):
+    def __init__(self, root, player1, player2, history=None):
         """
         Initialize the GUI, canvas, labels, and player info.
 
@@ -56,9 +56,18 @@ class GomokuGUI:
         if player1 == None or player2 == None:
             self.ask_player_names()
 
+        # if user import history file, play those move first
+        if history:
+            for x, y in history:
+                self.play_one_turn(x, y)
+
         self.draw_board(self.game.board)
         self.update_info_label()
         self.update_turn_label()
+
+        self.root.update_idletasks()
+        self.ai_play()
+        self.root.update_idletasks()
 
         self.canvas.bind("<Button-1>", self.handle_click)
 
@@ -147,9 +156,9 @@ class GomokuGUI:
         if len(number_str) == 1:
             font_size = base_font_size
         elif len(number_str) == 2:
-            font_size = max(6, int(base_font_size * 0.8))
+            font_size = max(6, int(base_font_size))
         else:  # 3+ digits
-            font_size = max(6, int(base_font_size * 0.6))
+            font_size = max(6, int(base_font_size))
 
         # Add numeric text in the center
         text_color = "white" if player == "X" else "black"
@@ -206,6 +215,7 @@ class GomokuGUI:
         result = self.game.is_valid_move(x, y)
         self.update_alert_label("")
         if result == MoveResult.VALID:
+            print(f"{self.player_names[self.game.current_player]} played ({x},{y})")
             capture = self.game.handle_move(x, y)
             if capture:
                 self.update_info_label()
@@ -230,9 +240,11 @@ class GomokuGUI:
         start_time = time.time()
 
         self.update_ai_label("AI is thinking")
-        print("AI is thinking")
+        # print("AI is thinking")
 
         mv, moves = get_ai_move(self.game)
+        # print(f"mv: {mv}")
+        # print(f"moves: {moves}")
 
         if mv is None:
             print(f"Found no valid moves: {mv} - {moves}")
@@ -241,9 +253,9 @@ class GomokuGUI:
 
         ai_time = time.time() - start_time
         self.update_ai_label(f"AI played in {ai_time:.4f}s")
-        print(
-            f"AI chose to play {mv} in {ai_time:.4f}s out of {len(moves)} moves-------------------------"
-        )
+        # print(
+        #     f"AI chose to play {mv} in {ai_time:.4f}s out of {len(moves)} moves-------------------------"
+        # )
         # print(self.game.print_state())
 
         for m in moves:
@@ -284,6 +296,19 @@ def load_board_str(filepath):
         return content
 
 
+def load_history(filepath):
+    with open(filepath, "r") as f:
+        content = f.read()
+        historys = content.removeprefix("move history:").strip()
+        history_array = historys.split("->")
+        history_tuples = [
+            (int(array.strip("()").split(",")[0]), int(array.strip("()").split(",")[1]))
+            for array in history_array
+        ]
+
+        return history_tuples
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simple Gomoku Game")
 
@@ -295,6 +320,12 @@ if __name__ == "__main__":
         "--white", type=str, default=None, help="Name of white stone player (O)"
     )
     parser.add_argument("--board", type=str, help="Path to board file")
+
+    parser.add_argument("--history", type=str, help="Path to move history file")
+
+    parser.add_argument(
+        "--history-until", type=int, help="index of history where you want to stop"
+    )
 
     args = parser.parse_args()
 
@@ -310,8 +341,20 @@ if __name__ == "__main__":
             print(f"Failed to load board: {e}")
             exit(1)
 
+    if args.history:
+        try:
+            history = load_history(args.history)
+            print(history, len(history))
+            if args.history_until:
+                history = history[: args.history_until]
+                print(args.history_until)
+                print(history, len(history))
+        except Exception as e:
+            print(f"Failed to load history: {e}")
+            exit(1)
+
     root = tk.Tk()
-    app = GomokuGUI(root, args.black, args.white)
+    app = GomokuGUI(root, args.black, args.white, history)
 
     # if board is passed, update game state
     if board:
