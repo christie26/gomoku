@@ -4,9 +4,10 @@ from faster_functions import Gomoku, MoveResult, get_ai_move
 import argparse
 import time
 
-CELL_SIZE = 40
+CELL_SIZE = 35
 BOARD_SIZE = 19
-PADDING = 20
+PADDING = 30
+LABEL_PADDING = 17
 
 
 class GomokuGUI:
@@ -113,14 +114,36 @@ class GomokuGUI:
                 x, PADDING, x, PADDING + (BOARD_SIZE - 1) * CELL_SIZE
             )
 
-            # Row labels (A–S)
+            # Row labels (1–19)
             self.canvas.create_text(
-                PADDING - 5, y, text=str(i + 1), font=("Arial", 10), anchor="e"
+                PADDING - LABEL_PADDING,
+                y,
+                text=str(i + 1),
+                font=("Arial", 10),
+                anchor="e",
+            )
+            self.canvas.create_text(
+                BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
+                y,
+                text=str(i + 1),
+                font=("Arial", 10),
+                anchor="e",
             )
 
-            # Column labels (1–19)
+            # Column labels (A–S)
             self.canvas.create_text(
-                x, PADDING - 5, text=chr(ord("A") + i), font=("Arial", 10), anchor="s"
+                x,
+                PADDING - LABEL_PADDING,
+                text=chr(ord("A") + i),
+                font=("Arial", 10),
+                anchor="s",
+            )
+            self.canvas.create_text(
+                x,
+                BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
+                text=chr(ord("A") + i),
+                font=("Arial", 10),
+                anchor="s",
             )
 
     def draw_stone(self, x, y, player):
