@@ -143,7 +143,7 @@ class GomokuGUI:
                 BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
                 text=chr(ord("A") + i),
                 font=("Arial", 10),
-                anchor="s",
+                anchor="n",
             )
 
     def draw_stone(self, x, y, player):
