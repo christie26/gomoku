@@ -207,7 +207,7 @@ impl Gomoku {
     }
 
     fn is_valid_move(&self, x: i32, y: i32) -> MoveResult {
-        return self.is_valid_move_simple_ruleset(x, y);
+        // return self.is_valid_move_simple_ruleset(x, y);
         if !self.is_on_board(x, y) {
             return MoveResult::OutOfBoard;
         }
@@ -649,7 +649,7 @@ impl Gomoku {
     }
 
     pub fn handle_move(&mut self, x: i32, y: i32) -> (MoveResult, i32) {
-        return self.handle_move_simple_ruleset(x, y);
+        // return self.handle_move_simple_ruleset(x, y);
         let result = self.is_valid_move(x, y);
         let mut capture_count = 0;
 

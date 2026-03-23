@@ -341,6 +341,8 @@ if __name__ == "__main__":
             print(f"Failed to load board: {e}")
             exit(1)
 
+    history = None
+
     if args.history:
         try:
             history = load_history(args.history)
