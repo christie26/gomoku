@@ -689,19 +689,20 @@ impl Gomoku {
             }
 
             // 2. check opponent's five_row
-            if let Some(opponent_fives) = self.five_row.get(&self.opponent_player) {
-                for five_row in opponent_fives {
-                    let mut all_opponent = true;
-                    for &(fx, fy) in five_row {
-                        if self.board[fx as usize][fy as usize] != self.opponent_player {
-                            all_opponent = false;
-                            break;
-                        }
-                    }
-                    if all_opponent {
-                        return Some(self.opponent_player.to_string());
-                    }
-                }
+            if let Some(_opponent_fives) = self.five_row.get(&self.opponent_player) {
+                return Some(self.opponent_player.to_string());
+                // for five_row in opponent_fives {
+                //     let mut all_opponent = true;
+                //     for &(fx, fy) in five_row {
+                //         if self.board[fx as usize][fy as usize] != self.opponent_player {
+                //             all_opponent = false;
+                //             break;
+                //         }
+                //     }
+                //     if all_opponent {
+                //         return Some(self.opponent_player.to_string());
+                //     }
+                // }
             }
             // 3. check current's five_row
             if let Some(my_fives) = self.five_row.get(&self.current_player) {
