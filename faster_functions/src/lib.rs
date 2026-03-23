@@ -751,9 +751,12 @@ impl Gomoku {
             }
 
             // 2. check opponent's five_row
-            if let Some(_opponent_fives) = self.five_row.get(&self.opponent_player) {
-                return Some(self.opponent_player.to_string());
+            if let Some(opponent_fives) = self.five_row.get(&self.opponent_player) {
+                if !opponent_fives.is_empty() {
+                    return Some(self.opponent_player.to_string());
+                }
                 // for five_row in opponent_fives {
+                //     println!("five_row: {:?}", five_row);
                 //     let mut all_opponent = true;
                 //     for &(fx, fy) in five_row {
                 //         if self.board[fx as usize][fy as usize] != self.opponent_player {
