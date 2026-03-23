@@ -74,6 +74,13 @@ pub enum Stone {
     White,
 }
 
+pub fn position_name(pos: &(i32, i32)) -> String {
+        let (y, x) = pos;
+        let x = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().nth(*x as usize).unwrap_or('-');
+        let y = y + 1;
+        format!("{x}{y}")
+}
+
 impl std::fmt::Display for Stone {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let c = match self {
