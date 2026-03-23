@@ -227,8 +227,8 @@ class GomokuGUI:
                     self.draw_stone(x, y, cell)
 
     def handle_click(self, event):
-        x = event.x // CELL_SIZE
-        y = event.y // CELL_SIZE
+        x = round((event.x - PADDING) / CELL_SIZE)
+        y = round((event.y - PADDING) / CELL_SIZE)
         self.play_one_turn(y, x)  # note: board is row (y), col (x)
         self.root.update_idletasks()
         self.ai_play()
