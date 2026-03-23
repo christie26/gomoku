@@ -127,7 +127,7 @@ class GomokuGUI:
                 y,
                 text=str(i + 1),
                 font=("Arial", 10),
-                anchor="e",
+                anchor="w",
             )
 
             # Column labels (A–S)
