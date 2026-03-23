@@ -617,31 +617,109 @@ impl Gomoku {
             .sum()
     }
 
+
+
+    fn in_bounds(&self, x: i32, y: i32) -> bool {
+        x >= 0 && y >= 0
+            && (x as usize) < self.board.len()
+            && (y as usize) < self.board[0].len()
+    }
+
+    fn cell_eq(&self, x: i32, y: i32, who: &Stone) -> bool {
+        self.in_bounds(x, y) && self.board[x as usize][y as usize] == *who
+    }
+
+    fn is_empty(&self, x: i32, y: i32) -> bool {
+        self.in_bounds(x, y) && self.board[x as usize][y as usize] == Stone::Empty
+    }
+
+    // (p0, p1)가 인접한 내 돌 두 개(PP)일 때, OPP-PP-EMPTY 또는 EMPTY-PP-OPP 패턴인지 검사
+    fn is_pair_capturable(&self, p0: (i32, i32), p1: (i32, i32)) -> bool {
+        let (x0, y0) = p0;
+        let (x1, y1) = p1;
+
+        // 방향 벡터(인접 전제)
+        let dx = (x1 - x0).clamp(-1, 1);
+        let dy = (y1 - y0).clamp(-1, 1);
+
+
+        // 패턴 A: OPP - P(x0,y0) - P(x1,y1) - EMPTY
+        let a_left_x = x0 - dx;
+        let a_left_y = y0 - dy;
+        let a_right_x = x1 + dx;
+        let a_right_y = y1 + dy;
+
+        let pattern_a =
+            self.cell_eq(a_left_x, a_left_y, &self.opponent_player) &&
+            self.is_empty(a_right_x, a_right_y);
+
+        // 패턴 B: EMPTY - P(x0,y0) - P(x1,y1) - OPP
+        let pattern_b =
+            self.is_empty(a_left_x, a_left_y) &&
+            self.cell_eq(a_right_x, a_right_y, &self.opponent_player);
+
+        pattern_a || pattern_b
+    }
+
+    fn stone_in_capturable_pair(&self, x: i32, y: i32) -> bool {
+        if !self.cell_eq(x, y, &self.current_player) { return false; }
+        const DIRS: [(i32, i32); 4] = [(1,0), (0,1), (1,1), (1,-1)];
+
+        for (dx, dy) in DIRS {
+            // (x,y) - (x+dx,y+dy) 가 PP
+            let nx = x + dx;
+            let ny = y + dy;
+            if self.cell_eq(nx, ny, &self.current_player) && self.is_pair_capturable((x, y), (nx, ny)) {
+                return true;
+            }
+            // (x-dx,y-dy) - (x,y) 가 PP
+            let px = x - dx;
+            let py = y - dy;
+            if self.cell_eq(px, py, &self.current_player) && self.is_pair_capturable((px, py), (x, y)) {
+                return true;
+            }
+        }
+        false
+    }
     pub fn get_winner(&self) -> Option<String> {
         if let Some((_x, _y)) = self.current_move {
-            // Check five captures
+            // 1. check current's five capture
             if *self.capture_count.get(&self.current_player).unwrap() >= self.win_capture_count {
                 return Some(self.current_player.to_string());
             }
 
-            // Check if opponent has five in a row
-            if !self.five_row.get(&self.opponent_player).unwrap().is_empty() {
-                for five_row in self.five_row.get(&self.opponent_player).unwrap() {
-                    let mut all_opponent = true;
+            // 2. check opponent's five_row
+            if let Some(_opponent_fives) = self.five_row.get(&self.opponent_player) {
+                return Some(self.opponent_player.to_string());
+                // for five_row in opponent_fives {
+                //     let mut all_opponent = true;
+                //     for &(fx, fy) in five_row {
+                //         if self.board[fx as usize][fy as usize] != self.opponent_player {
+                //             all_opponent = false;
+                //             break;
+                //         }
+                //     }
+                //     if all_opponent {
+                //         return Some(self.opponent_player.to_string());
+                //     }
+                // }
+            }
+            // 3. check current's five_row
+            if let Some(my_fives) = self.five_row.get(&self.current_player) {
+                'each_five: for five_row in my_fives {
                     for &(fx, fy) in five_row {
-                        if self.board[fx as usize][fy as usize] != self.opponent_player {
-                            all_opponent = false;
-                            break;
+                        if self.stone_in_capturable_pair(fx as i32, fy as i32) {
+                            continue 'each_five;
                         }
                     }
-                    if all_opponent {
-                        return Some(self.opponent_player.to_string());
-                    }
+                    return Some(self.current_player.to_string());
                 }
             }
         }
+        // 4. other than 3 cases, there's no winner
         None
     }
+
 
     fn check_draw(&self) -> bool {
         self.count_empty_spots() == 0
