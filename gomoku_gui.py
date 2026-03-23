@@ -115,12 +115,12 @@ class GomokuGUI:
 
             # Row labels (A–S)
             self.canvas.create_text(
-                PADDING - 5, y, text=str(i), font=("Arial", 10), anchor="e"
+                PADDING - 5, y, text=str(i + 1), font=("Arial", 10), anchor="e"
             )
 
             # Column labels (1–19)
             self.canvas.create_text(
-                x, PADDING - 5, text=str(i), font=("Arial", 10), anchor="s"
+                x, PADDING - 5, text=chr(ord("A") + i), font=("Arial", 10), anchor="s"
             )
 
     def draw_stone(self, x, y, player):
@@ -215,7 +215,9 @@ class GomokuGUI:
         result = self.game.is_valid_move(x, y)
         self.update_alert_label("")
         if result == MoveResult.VALID:
-            print(f"{self.player_names[self.game.current_player]} played ({x},{y})")
+            print(
+                f"{self.player_names[self.game.current_player]} played {chr(ord('A') + y)}{x + 1}"
+            )
             capture = self.game.handle_move(x, y)
             if capture:
                 self.update_info_label()
