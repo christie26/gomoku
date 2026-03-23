@@ -687,19 +687,8 @@ impl Gomoku {
             if *self.capture_count.get(&self.current_player).unwrap() >= self.win_capture_count {
                 return Some(self.current_player.to_string());
             }
-            // 2. check current's five_row
-            if let Some(my_fives) = self.five_row.get(&self.current_player) {
-                'each_five: for five_row in my_fives {
-                    for &(fx, fy) in five_row {
-                        if self.stone_in_capturable_pair(fx as i32, fy as i32) {
-                            continue 'each_five;
-                        }
-                    }
-                    return Some(self.current_player.to_string());
-                }
-            }
 
-            // 3. check opponent's five_row
+            // 2. check opponent's five_row
             if let Some(opponent_fives) = self.five_row.get(&self.opponent_player) {
                 for five_row in opponent_fives {
                     let mut all_opponent = true;
@@ -714,9 +703,19 @@ impl Gomoku {
                     }
                 }
             }
+            // 3. check current's five_row
+            if let Some(my_fives) = self.five_row.get(&self.current_player) {
+                'each_five: for five_row in my_fives {
+                    for &(fx, fy) in five_row {
+                        if self.stone_in_capturable_pair(fx as i32, fy as i32) {
+                            continue 'each_five;
+                        }
+                    }
+                    return Some(self.current_player.to_string());
+                }
+            }
         }
-
-        // 3. 그 외 승자 없음
+        // 4. other than 3 cases, there's no winner
         None
     }
 
