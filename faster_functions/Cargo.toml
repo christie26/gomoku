@@ -7,7 +7,7 @@ edition = "2021"
 [lib]
 name = "faster_functions"
 path = "./src/lib.rs"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 
 [[bin]]
@@ -22,3 +22,4 @@ pyo3 = "0.24.0"
 ctrlc = "3"
 signal-hook = "0.3.18"
 linked_hash_set = "0.1.5"
+colored = "3.0.0"

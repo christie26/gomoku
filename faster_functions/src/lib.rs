@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
-use std::collections::{HashMap};
+use std::collections::HashMap;
+use colored::*;
 
 pub mod heuristic;
 pub mod minimax;
@@ -65,7 +66,7 @@ impl MoveResult {
 type Position = (i32, i32);
 type Pattern = Vec<Position>;
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 #[pyclass]
 pub enum Stone {
     Empty,
@@ -90,7 +91,7 @@ impl Into<String> for Stone {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[pyclass]
 pub struct Gomoku {
     size: usize,
@@ -106,6 +107,7 @@ pub struct Gomoku {
     block_four: HashMap<Stone, Vec<Pattern>>,
     win_capture_count: i32,
     current_move: Option<Position>,
+    move_count: usize,
 }
 
 #[pymethods]
@@ -156,10 +158,11 @@ impl Gomoku {
             block_four,
             win_capture_count: 5,
             current_move: None,
+            move_count: 0,
         }
     }
 
-    pub fn print_board(&self) {
+    pub fn print_board(&self, highlight: Vec<(usize, usize)>) {
         print!("  ");
         for i in 0..self.size {
             print!("{:2} ", i);
@@ -168,11 +171,31 @@ impl Gomoku {
 
         for (i, row) in self.board.iter().enumerate() {
             print!("{:2} ", i);
-            for cell in row {
-                print!("{:2}  ", cell);
+            for (j, cell) in row.iter().enumerate() {
+                if highlight.iter().any(|u| *u == (i, j)) {
+                    print!("{}", format!("{:2}  ", cell).bold().yellow());
+                } else {
+                    print!("{:2}  ", cell);
+                }
             }
             println!();
         }
+    }
+
+    pub fn print_state(&self) {
+        self.print_board(vec![]);
+        println!("size: {:?}", self.size);
+        println!("current_player: {:?}", self.current_player);
+        println!("opponent_player: {:?}", self.opponent_player);
+        println!("capture_count: {:?}", self.capture_count);
+        println!("free_three: {:?}", self.free_three);
+        println!("five_row: {:?}", self.five_row);
+        println!("open_two: {:?}", self.open_two);
+        println!("open_three: {:?}", self.open_three);
+        println!("open_four: {:?}", self.open_four);
+        println!("block_four: {:?}", self.block_four);
+        println!("win_capture_count: {:?}", self.win_capture_count);
+        println!("current_move: {:?}", self.current_move);
     }
 
     fn clone_gomoku(&self) -> Gomoku {
@@ -184,6 +207,7 @@ impl Gomoku {
     }
 
     fn is_valid_move(&self, x: i32, y: i32) -> MoveResult {
+        // return self.is_valid_move_simple_ruleset(x, y);
         if !self.is_on_board(x, y) {
             return MoveResult::OutOfBoard;
         }
@@ -587,12 +611,51 @@ impl Gomoku {
             .extend(new_block_four_y);
     }
 
+    fn is_valid_move_simple_ruleset(&self, x: i32, y: i32) -> MoveResult {
+        if !self.is_on_board(x, y) {
+            return MoveResult::OutOfBoard;
+        }
+        if self.board[x as usize][y as usize] != Stone::Empty {
+            return MoveResult::NotEmpty;
+        }
+        // if self.is_double_three_move(x, y) {
+        //     return MoveResult::DoubleThree;
+        // }
+        MoveResult::Valid
+    }
+
+    pub fn handle_move_simple_ruleset(&mut self, x: i32, y: i32) -> (MoveResult, i32) {
+        let result = self.is_valid_move_simple_ruleset(x, y);
+        let mut capture_count = 0;
+
+        if result == MoveResult::Valid {
+            self.current_move = Some((x, y));
+            self.move_count += 1;
+            self.board[x as usize][y as usize] = self.current_player.clone();
+
+            // self.remove_free_three(x, y, &self.opponent_player.clone());
+            self.remove_opens(x, y);
+
+            // self.add_free_threes(
+            //     self.get_free_threes_from_move(x, y),
+            //     &self.current_player.clone(),
+            // );
+            self.add_opens_from_move(x, y);
+
+            // capture_count = self.capture_center(x, y);
+        }
+
+        (result, capture_count)
+    }
+
     pub fn handle_move(&mut self, x: i32, y: i32) -> (MoveResult, i32) {
+        // return self.handle_move_simple_ruleset(x, y);
         let result = self.is_valid_move(x, y);
         let mut capture_count = 0;
 
         if result == MoveResult::Valid {
             self.current_move = Some((x, y));
+            self.move_count += 1;
             self.board[x as usize][y as usize] = self.current_player.clone();
 
             self.remove_free_three(x, y, &self.opponent_player.clone());
@@ -617,12 +680,8 @@ impl Gomoku {
             .sum()
     }
 
-
-
     fn in_bounds(&self, x: i32, y: i32) -> bool {
-        x >= 0 && y >= 0
-            && (x as usize) < self.board.len()
-            && (y as usize) < self.board[0].len()
+        x >= 0 && y >= 0 && (x as usize) < self.board.len() && (y as usize) < self.board[0].len()
     }
 
     fn cell_eq(&self, x: i32, y: i32, who: &Stone) -> bool {
@@ -642,40 +701,43 @@ impl Gomoku {
         let dx = (x1 - x0).clamp(-1, 1);
         let dy = (y1 - y0).clamp(-1, 1);
 
-
         // 패턴 A: OPP - P(x0,y0) - P(x1,y1) - EMPTY
         let a_left_x = x0 - dx;
         let a_left_y = y0 - dy;
         let a_right_x = x1 + dx;
         let a_right_y = y1 + dy;
 
-        let pattern_a =
-            self.cell_eq(a_left_x, a_left_y, &self.opponent_player) &&
-            self.is_empty(a_right_x, a_right_y);
+        let pattern_a = self.cell_eq(a_left_x, a_left_y, &self.opponent_player)
+            && self.is_empty(a_right_x, a_right_y);
 
         // 패턴 B: EMPTY - P(x0,y0) - P(x1,y1) - OPP
-        let pattern_b =
-            self.is_empty(a_left_x, a_left_y) &&
-            self.cell_eq(a_right_x, a_right_y, &self.opponent_player);
+        let pattern_b = self.is_empty(a_left_x, a_left_y)
+            && self.cell_eq(a_right_x, a_right_y, &self.opponent_player);
 
         pattern_a || pattern_b
     }
 
     fn stone_in_capturable_pair(&self, x: i32, y: i32) -> bool {
-        if !self.cell_eq(x, y, &self.current_player) { return false; }
-        const DIRS: [(i32, i32); 4] = [(1,0), (0,1), (1,1), (1,-1)];
+        if !self.cell_eq(x, y, &self.current_player) {
+            return false;
+        }
+        const DIRS: [(i32, i32); 4] = [(1, 0), (0, 1), (1, 1), (1, -1)];
 
         for (dx, dy) in DIRS {
             // (x,y) - (x+dx,y+dy) 가 PP
             let nx = x + dx;
             let ny = y + dy;
-            if self.cell_eq(nx, ny, &self.current_player) && self.is_pair_capturable((x, y), (nx, ny)) {
+            if self.cell_eq(nx, ny, &self.current_player)
+                && self.is_pair_capturable((x, y), (nx, ny))
+            {
                 return true;
             }
             // (x-dx,y-dy) - (x,y) 가 PP
             let px = x - dx;
             let py = y - dy;
-            if self.cell_eq(px, py, &self.current_player) && self.is_pair_capturable((px, py), (x, y)) {
+            if self.cell_eq(px, py, &self.current_player)
+                && self.is_pair_capturable((px, py), (x, y))
+            {
                 return true;
             }
         }
@@ -719,7 +781,6 @@ impl Gomoku {
         // 4. other than 3 cases, there's no winner
         None
     }
-
 
     fn check_draw(&self) -> bool {
         self.count_empty_spots() == 0
@@ -838,16 +899,12 @@ impl Gomoku {
     }
 }
 
-
-
-
 #[pymodule]
 fn faster_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<MoveResult>()?;
     m.add_class::<Gomoku>()?;
     m.add_function(wrap_pyfunction!(heuristic::heuristic_evaluation, m)?)?;
     m.add_function(wrap_pyfunction!(minimax::get_ai_move, m)?)?;
-    
 
     let gomoku_class = m.getattr("Gomoku")?;
     gomoku_class.setattr("__module__", "faster_functions")?;

@@ -1,27 +1,30 @@
-use crate::{Gomoku, Stone};
 use crate::heuristic::heuristic_evaluation;
 use crate::MoveResult;
+use crate::{Gomoku, Stone};
 
 use linked_hash_set::LinkedHashSet;
 use pyo3::prelude::*;
 
 use std::cmp::{max, min};
-use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
+use std::thread::{self, JoinHandle};
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
-const MAX_DEPTH: usize = 6;
+const MAX_DEPTH: usize = 5;
 
-const BOARD_SIZE: usize = 19; 
-const DIRECTIONS: &[(i32, i32)] = &[
-    (1, 0),
-    (0, 1),
-    (1, 1),
-    (1, -1),
-];
+pub const BOARD_SIZE: usize = 19;
+const DIRECTIONS: &[(i32, i32)] = &[(1, 0), (0, 1), (1, 1), (1, -1)];
 
 // Count stones in one direction from (x,y) for player
-fn count_stones(board: &Vec<Vec<Stone>>, x: usize, y: usize, dx: i32, dy: i32, player: &Stone) -> i32 {
+fn count_stones(
+    board: &Vec<Vec<Stone>>,
+    x: usize,
+    y: usize,
+    dx: i32,
+    dy: i32,
+    player: &Stone,
+) -> i32 {
     let mut count = 0;
     for i in 1..5 {
         let nx = x as i32 + dx * i;
@@ -42,11 +45,18 @@ fn opponent(player: Stone) -> Stone {
     match player {
         Stone::Black => Stone::White,
         Stone::White => Stone::Black,
-        Stone::Empty => Stone::Empty,  // no opponent if empty
+        Stone::Empty => Stone::Empty, // no opponent if empty
     }
 }
 
-fn can_capture(board: &Vec<Vec<Stone>>, x: usize, y: usize, dx: i32, dy: i32, player: Stone) -> bool {
+fn can_capture(
+    board: &Vec<Vec<Stone>>,
+    x: usize,
+    y: usize,
+    dx: i32,
+    dy: i32,
+    player: Stone,
+) -> bool {
     let opp = opponent(player);
 
     // Positions to check:
@@ -70,9 +80,9 @@ fn can_capture(board: &Vec<Vec<Stone>>, x: usize, y: usize, dx: i32, dy: i32, pl
         return false;
     }
 
-    board[nx1 as usize][ny1 as usize] == opp &&
-    board[nx2 as usize][ny2 as usize] == opp &&
-    board[nx3 as usize][ny3 as usize] == player
+    board[nx1 as usize][ny1 as usize] == opp
+        && board[nx2 as usize][ny2 as usize] == opp
+        && board[nx3 as usize][ny3 as usize] == player
 }
 
 // Evaluate score for one position for one player
@@ -103,7 +113,6 @@ fn evaluate_position(board: &Vec<Vec<Stone>>, x: usize, y: usize, player: &Stone
 
     score
 }
-
 
 fn get_critical_moves(
     mut critical_moves: LinkedHashSet<(usize, usize)>,
@@ -164,11 +173,12 @@ fn get_radius_moves(
 #[pyfunction]
 pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
     if state.count_empty_spots() as usize == state.size * state.size {
-        return vec![(9, 9)];
+        return vec![(state.size / 2, state.size / 2)];
     }
 
-    let radius = radius as usize;
+    let _radius = radius as usize;
 
+    let radius = 2 as usize;
     let move_set = LinkedHashSet::new();
     let move_set = get_critical_moves(move_set, state);
     let move_set = get_radius_moves(move_set, state, radius);
@@ -178,9 +188,8 @@ pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
         .filter(|&(r, c)| state.is_valid_move(r as i32, c as i32) == MoveResult::Valid)
         .collect();
 
-    valid_moves.sort_by_key(|&(r, c)| {
-    -(evaluate_position(&state.board, r, c, &state.current_player))
-    });
+    valid_moves
+        .sort_by_key(|&(r, c)| -(evaluate_position(&state.board, r, c, &state.current_player)));
 
     // // Create a vector of (move, score)
     // let mut moves_with_scores: Vec<((usize, usize), i32)> = valid_moves
@@ -200,7 +209,6 @@ pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
     //     .into_iter()
     //     .map(|(mv, _score)| mv)
     //     .collect();
-
 
     valid_moves
 }
@@ -225,57 +233,166 @@ fn make_next_state(state: &Gomoku, move_x: usize, move_y: usize) -> Gomoku {
 }
 
 #[pyfunction]
-pub fn get_ai_move(state: &Gomoku) -> Option<(usize, usize)> {
+pub fn get_ai_move(
+    state: &Gomoku,
+) -> (
+    Option<(usize, usize, i32)>,
+    Vec<(usize, usize, Option<i32>)>,
+) {
     let is_max_player = state.current_player == Stone::Black;
 
-    let mut best_value = if is_max_player { MIN_VALUE } else { MAX_VALUE };
-    let mut alpha = MIN_VALUE;
-    let mut beta = MAX_VALUE;
+    let mut best_value = if is_max_player {
+        MIN_VALUE - 1
+    } else {
+        MAX_VALUE + 1
+    };
+    let mut alpha: Arc<Mutex<i32>> = Arc::new(Mutex::new(MIN_VALUE));
+    let mut beta: Arc<Mutex<i32>> = Arc::new(Mutex::new(MAX_VALUE));
+    // let mut alpha = MIN_VALUE;
+    // let mut beta = MAX_VALUE;
 
-    let mut best_move: Option<(usize, usize)> = None;
+    let mut best_move: Option<(usize, usize, i32)> = None;
+    let mut all_moves: Vec<(usize, usize, Option<i32>)> = get_candidate_moves(state, 3)
+        .into_iter()
+        .map(|(x, y)| (x, y, None))
+        .collect();
 
-    for (move_x, move_y) in get_candidate_moves(state, 1) {
-        let next_state = make_next_state(state, move_x, move_y);
-        let value = alphabeta(&next_state, alpha, beta, !is_max_player, 1);
+    let max_depth = if state.move_count < 4 { 3 } else { MAX_DEPTH };
 
-        if is_max_player && value > best_value {
-            best_value = value;
-            alpha = max(alpha, best_value);
-            best_move = Some((move_x, move_y));
-        } else if !is_max_player && value < best_value {
-            best_value = value;
-            beta = min(beta, best_value);
-            best_move = Some((move_x, move_y));
-        }
+    let handles: Vec<_> = all_moves
+        .clone()
+        .into_iter()
+        .map(|(move_x, move_y, _)| {
+            let next_state = make_next_state(state, move_x, move_y);
+            let is_max_player2 = is_max_player.clone();
+            let max_depth2 = max_depth.clone();
+            let alpha = alpha.clone();
+            let beta = beta.clone();
+            thread::spawn(move || {
+                let alpha_val = *alpha.lock().unwrap();
+                let beta_val = *beta.lock().unwrap();
+                let (value, depth) = alphabeta(
+                    &next_state,
+                    // alpha_val,
+                    // beta_val,
+                    MIN_VALUE,
+                    MAX_VALUE,
+                    !is_max_player2,
+                    1,
+                    max_depth2,
+                );
 
-        if alpha >= beta {
-            break;
-        }
-    }
+                let depth: i32 = depth.try_into().unwrap();
+                let value = if value > depth {
+                    value - depth
+                } else if value < -depth {
+                    value + depth
+                } else {
+                    value
+                };
 
-    best_move
+                let score = Some(value);
+
+                let mut alpha_lock = alpha.lock().unwrap();
+                let mut beta_lock = beta.lock().unwrap();
+                if is_max_player2 && value > best_value {
+                    if *alpha_lock > value {
+                        *alpha_lock = value;
+                    }
+                } else if !is_max_player2 && value < best_value {
+                    if *beta_lock > value {
+                        *beta_lock = value;
+                    }
+                }
+
+                if *alpha_lock >= *beta_lock {
+                    println!("SHOULD HAVE ENDED!");
+                }
+                (move_x, move_y, score)
+            })
+        })
+        .collect();
+
+    let scored_moves: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+
+    return (
+        scored_moves
+            .iter()
+            .filter_map(|(x, y, s)| s.map(|s| (x.clone(), y.clone(), s.clone())))
+            .max_by_key(|a| if is_max_player {a.2} else {-a.2}),
+        scored_moves,
+    );
+    //
+    // for (move_x, move_y, score) in all_moves.iter_mut() {
+    //     let next_state = make_next_state(state, *move_x, *move_y);
+    //     let (value, depth) = alphabeta(&next_state, alpha, beta, !is_max_player, 1, max_depth);
+    //
+    //     let depth: i32 = depth.try_into().unwrap();
+    //     let value = if value > depth {
+    //         value - depth
+    //     } else if value < -depth {
+    //         value + depth
+    //     } else {
+    //         value
+    //     };
+    //
+    //     *score = Some(value);
+    //
+    //     if is_max_player && value > best_value {
+    //         best_value = value;
+    //         alpha = max(alpha, best_value);
+    //         best_move = Some((*move_x, *move_y, value));
+    //     } else if !is_max_player && value < best_value {
+    //         best_value = value;
+    //         beta = min(beta, best_value);
+    //         best_move = Some((*move_x, *move_y, value));
+    //     }
+    //
+    //     if alpha >= beta {
+    //         break;
+    //     }
+    // }
+    //
+    // (best_move, all_moves)
 }
 
-fn alphabeta(state: &Gomoku, mut alpha: i32, mut beta: i32, is_max_player: bool, depth: usize) -> i32 {
+fn alphabeta(
+    state: &Gomoku,
+    mut alpha: i32,
+    mut beta: i32,
+    is_max_player: bool,
+    depth: usize,
+    max_depth: usize,
+) -> (i32, usize) {
     if is_terminal_state(state) {
-        return state_value(state);
+        return (state_value(state), depth);
     }
 
-    if depth == MAX_DEPTH {
-        return heuristic_evaluation(state);
+    if depth == max_depth {
+        return (heuristic_evaluation(state), depth);
     }
 
-    let mut value = if is_max_player { MIN_VALUE } else { MAX_VALUE };
+    let mut value = if is_max_player {
+        (MIN_VALUE - 1, max_depth)
+    } else {
+        (MAX_VALUE + 1, max_depth)
+    };
 
-    for (move_x, move_y) in get_candidate_moves(state, 1) {
+    for (move_x, move_y) in get_candidate_moves(state, 3) {
         let next_state = make_next_state(state, move_x, move_y);
 
         if is_max_player {
-            value = max(value, alphabeta(&next_state, alpha, beta, false, depth + 1));
-            alpha = max(alpha, value);
+            value = max(
+                value,
+                alphabeta(&next_state, alpha, beta, false, depth + 1, max_depth),
+            );
+            alpha = max(alpha, value.0);
         } else {
-            value = min(value, alphabeta(&next_state, alpha, beta, true, depth + 1));
-            beta = min(beta, value);
+            value = min(
+                value,
+                alphabeta(&next_state, alpha, beta, true, depth + 1, max_depth),
+            );
+            beta = min(beta, value.0);
         }
 
         if alpha >= beta {

@@ -4,7 +4,7 @@ from faster_functions import Gomoku, MoveResult, get_ai_move
 import argparse
 import time
 
-CELL_SIZE = 30
+CELL_SIZE = 40
 BOARD_SIZE = 19
 PADDING = 20
 
@@ -15,7 +15,7 @@ class GomokuGUI:
     handles user interaction, board drawing, turn management, and displaying results.
     """
 
-    def __init__(self, root, player1, player2):
+    def __init__(self, root, player1, player2, history=None):
         """
         Initialize the GUI, canvas, labels, and player info.
 
@@ -26,8 +26,8 @@ class GomokuGUI:
         """
         self.root = root
         self.root.title("Gomoku")
-        self.cell_size = 30
-        self.board_size = 19
+        self.cell_size = CELL_SIZE
+        self.board_size = BOARD_SIZE
         self.canvas_size = self.cell_size * (self.board_size - 1) + PADDING * 2
 
         # Create board and canvas
@@ -56,9 +56,18 @@ class GomokuGUI:
         if player1 == None or player2 == None:
             self.ask_player_names()
 
+        # if user import history file, play those move first
+        if history:
+            for x, y in history:
+                self.play_one_turn(x, y)
+
         self.draw_board(self.game.board)
         self.update_info_label()
         self.update_turn_label()
+
+        self.root.update_idletasks()
+        self.ai_play()
+        self.root.update_idletasks()
 
         self.canvas.bind("<Button-1>", self.handle_click)
 
@@ -121,6 +130,42 @@ class GomokuGUI:
         r = CELL_SIZE // 2 - 2
         self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=color)
 
+    def draw_possible_stone(self, x, y, player, number, selected):
+        color = "black" if player == "X" else "white"
+        cx = PADDING + x * CELL_SIZE
+        cy = PADDING + y * CELL_SIZE
+        r = CELL_SIZE // 2 - 2
+
+        # Create stone with 50% opacity
+        outline_color = "red" if selected else ""
+        self.canvas.create_oval(
+            cx - r,
+            cy - r,
+            cx + r,
+            cy + r,
+            fill=color,
+            stipple="gray50",
+            outline=outline_color,
+        )
+        # Calculate appropriate font size based on stone size and number length
+        number_str = str(number)
+        # Base font size proportional to stone radius
+        base_font_size = max(6, r // 2)
+
+        # Reduce font size for longer numbers
+        if len(number_str) == 1:
+            font_size = base_font_size
+        elif len(number_str) == 2:
+            font_size = max(6, int(base_font_size))
+        else:  # 3+ digits
+            font_size = max(6, int(base_font_size))
+
+        # Add numeric text in the center
+        text_color = "white" if player == "X" else "black"
+        self.canvas.create_text(
+            cx, cy, text=number_str, fill=text_color, font=("Arial", font_size, "bold")
+        )
+
     def finish_game(self, winner):
         # # Create a toplevel window to act as overlay
         # overlay = tk.Toplevel(root)
@@ -170,6 +215,7 @@ class GomokuGUI:
         result = self.game.is_valid_move(x, y)
         self.update_alert_label("")
         if result == MoveResult.VALID:
+            print(f"{self.player_names[self.game.current_player]} played ({x},{y})")
             capture = self.game.handle_move(x, y)
             if capture:
                 self.update_info_label()
@@ -194,15 +240,30 @@ class GomokuGUI:
         start_time = time.time()
 
         self.update_ai_label("AI is thinking")
-        print("AI is thinking")
+        # print("AI is thinking")
 
-        x, y = get_ai_move(self.game)
+        mv, moves = get_ai_move(self.game)
+        # print(f"mv: {mv}")
+        # print(f"moves: {moves}")
+
+        if mv is None:
+            print(f"Found no valid moves: {mv} - {moves}")
+
+        x, y, score = mv
 
         ai_time = time.time() - start_time
         self.update_ai_label(f"AI played in {ai_time:.4f}s")
-        print(f"AI played in {ai_time:.4f}s-------------------------")
+        # print(
+        #     f"AI chose to play {mv} in {ai_time:.4f}s out of {len(moves)} moves-------------------------"
+        # )
+        # print(self.game.print_state())
 
-        self.play_one_turn(x, y)
+        for m in moves:
+            x1, y1, score1 = m
+            selected = x == x1 and y == y1
+            self.draw_possible_stone(y1, x1, "O", score1, selected)
+
+        # self.play_one_turn(x, y)
 
 
 def load_and_validate_board(filepath):
@@ -235,6 +296,19 @@ def load_board_str(filepath):
         return content
 
 
+def load_history(filepath):
+    with open(filepath, "r") as f:
+        content = f.read()
+        historys = content.removeprefix("move history:").strip()
+        history_array = historys.split("->")
+        history_tuples = [
+            (int(array.strip("()").split(",")[0]), int(array.strip("()").split(",")[1]))
+            for array in history_array
+        ]
+
+        return history_tuples
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simple Gomoku Game")
 
@@ -246,6 +320,12 @@ if __name__ == "__main__":
         "--white", type=str, default=None, help="Name of white stone player (O)"
     )
     parser.add_argument("--board", type=str, help="Path to board file")
+
+    parser.add_argument("--history", type=str, help="Path to move history file")
+
+    parser.add_argument(
+        "--history-until", type=int, help="index of history where you want to stop"
+    )
 
     args = parser.parse_args()
 
@@ -261,8 +341,22 @@ if __name__ == "__main__":
             print(f"Failed to load board: {e}")
             exit(1)
 
+    history = None
+
+    if args.history:
+        try:
+            history = load_history(args.history)
+            print(history, len(history))
+            if args.history_until:
+                history = history[: args.history_until]
+                print(args.history_until)
+                print(history, len(history))
+        except Exception as e:
+            print(f"Failed to load history: {e}")
+            exit(1)
+
     root = tk.Tk()
-    app = GomokuGUI(root, args.black, args.white)
+    app = GomokuGUI(root, args.black, args.white, history)
 
     # if board is passed, update game state
     if board:
