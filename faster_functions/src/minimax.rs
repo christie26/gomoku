@@ -11,7 +11,7 @@ use std::thread::{self, JoinHandle};
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
-const MAX_DEPTH: usize = 5;
+const MAX_DEPTH: usize = 10;
 
 pub const BOARD_SIZE: usize = 19;
 const DIRECTIONS: &[(i32, i32)] = &[(1, 0), (0, 1), (1, 1), (1, -1)];
@@ -176,9 +176,9 @@ pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
         return vec![(state.size / 2, state.size / 2)];
     }
 
-    let _radius = radius as usize;
+    let radius = radius as usize;
 
-    let radius = 2 as usize;
+    // let radius = 2 as usize;
     let move_set = LinkedHashSet::new();
     let move_set = get_critical_moves(move_set, state);
     let move_set = get_radius_moves(move_set, state, radius);
@@ -233,8 +233,29 @@ fn make_next_state(state: &Gomoku, move_x: usize, move_y: usize) -> Gomoku {
 }
 
 #[pyfunction]
+pub fn get_ai_move_iterative_deepening(state: &Gomoku) -> (
+    Option<(usize, usize, i32)>,
+    Vec<(usize, usize, Option<i32>)>,
+) {
+    let max_depth = if state.move_count < 4 { 3 } else { MAX_DEPTH };
+    let mut recommended_move = (0, 0);
+    for iterative_depth in 1..(max_depth + 1) {
+        let (new_recommended_move, other_moves) = get_ai_move(&state.clone(), iterative_depth, recommended_move);
+        if iterative_depth == max_depth {
+            return (new_recommended_move, other_moves);
+        }
+        if let Some(m) = new_recommended_move {
+            recommended_move = (m.0, m.1);
+        }
+    }
+
+    return (None, vec![]);
+}
+
 pub fn get_ai_move(
     state: &Gomoku,
+    max_depth: usize,
+    recommended_move: (usize, usize),
 ) -> (
     Option<(usize, usize, i32)>,
     Vec<(usize, usize, Option<i32>)>,
@@ -246,18 +267,15 @@ pub fn get_ai_move(
     } else {
         MAX_VALUE + 1
     };
-    let mut alpha: Arc<Mutex<i32>> = Arc::new(Mutex::new(MIN_VALUE));
-    let mut beta: Arc<Mutex<i32>> = Arc::new(Mutex::new(MAX_VALUE));
+    let alpha: Arc<Mutex<i32>> = Arc::new(Mutex::new(MIN_VALUE));
+    let beta: Arc<Mutex<i32>> = Arc::new(Mutex::new(MAX_VALUE));
     // let mut alpha = MIN_VALUE;
     // let mut beta = MAX_VALUE;
 
-    let mut best_move: Option<(usize, usize, i32)> = None;
-    let mut all_moves: Vec<(usize, usize, Option<i32>)> = get_candidate_moves(state, 3)
-        .into_iter()
+    let all_moves: Vec<(usize, usize, Option<i32>)> = std::iter::once(recommended_move)
+        .chain(get_candidate_moves(state, 3).into_iter())
         .map(|(x, y)| (x, y, None))
         .collect();
-
-    let max_depth = if state.move_count < 4 { 3 } else { MAX_DEPTH };
 
     let handles: Vec<_> = all_moves
         .clone()
@@ -273,10 +291,10 @@ pub fn get_ai_move(
                 let beta_val = *beta.lock().unwrap();
                 let (value, depth) = alphabeta(
                     &next_state,
-                    // alpha_val,
-                    // beta_val,
-                    MIN_VALUE,
-                    MAX_VALUE,
+                    alpha_val,
+                    beta_val,
+                    // MIN_VALUE,
+                    // MAX_VALUE,
                     !is_max_player2,
                     1,
                     max_depth2,
@@ -296,10 +314,12 @@ pub fn get_ai_move(
                 let mut alpha_lock = alpha.lock().unwrap();
                 let mut beta_lock = beta.lock().unwrap();
                 if is_max_player2 && value > best_value {
-                    if *alpha_lock > value {
+                    best_value = value;
+                    if *alpha_lock < value {
                         *alpha_lock = value;
                     }
                 } else if !is_max_player2 && value < best_value {
+                    best_value = value;
                     if *beta_lock > value {
                         *beta_lock = value;
                     }
@@ -319,7 +339,7 @@ pub fn get_ai_move(
         scored_moves
             .iter()
             .filter_map(|(x, y, s)| s.map(|s| (x.clone(), y.clone(), s.clone())))
-            .max_by_key(|a| if is_max_player {a.2} else {-a.2}),
+            .max_by_key(|a| if is_max_player { a.2 } else { -a.2 }),
         scored_moves,
     );
     //
@@ -378,7 +398,14 @@ fn alphabeta(
         (MAX_VALUE + 1, max_depth)
     };
 
-    for (move_x, move_y) in get_candidate_moves(state, 3) {
+    let radius = if depth < 5 {
+        3
+    } else if depth < 7 {
+        2
+    } else {
+        1
+    };
+    for (move_x, move_y) in get_candidate_moves(state, radius) {
         let next_state = make_next_state(state, move_x, move_y);
 
         if is_max_player {

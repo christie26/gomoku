@@ -42,7 +42,7 @@ fn main() {
         let start = Instant::now();
 
         let game_clone = game.clone();
-        let handle = thread::spawn(move || minimax::get_ai_move(&game_clone));
+        let handle = thread::spawn(move || minimax::get_ai_move_iterative_deepening(&game_clone));
 
         let mut res = None;
         let mut moves = vec![];

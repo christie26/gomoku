@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import simpledialog
-from faster_functions import Gomoku, MoveResult, get_ai_move
+from faster_functions import Gomoku, MoveResult, get_ai_move_iterative_deepening
 import argparse
 import time
 
@@ -242,7 +242,7 @@ class GomokuGUI:
         self.update_ai_label("AI is thinking")
         # print("AI is thinking")
 
-        mv, moves = get_ai_move(self.game)
+        mv, moves = get_ai_move_iterative_deepening(self.game)
         # print(f"mv: {mv}")
         # print(f"moves: {moves}")
 

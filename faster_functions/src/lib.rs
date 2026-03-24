@@ -907,7 +907,7 @@ fn faster_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<MoveResult>()?;
     m.add_class::<Gomoku>()?;
     m.add_function(wrap_pyfunction!(heuristic::heuristic_evaluation, m)?)?;
-    m.add_function(wrap_pyfunction!(minimax::get_ai_move, m)?)?;
+    m.add_function(wrap_pyfunction!(minimax::get_ai_move_iterative_deepening, m)?)?;
 
     let gomoku_class = m.getattr("Gomoku")?;
     gomoku_class.setattr("__module__", "faster_functions")?;
