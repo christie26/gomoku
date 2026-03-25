@@ -1,5 +1,5 @@
 from typing import Optional
-from faster_functions import (
+from lib_gomoku import (
     Gomoku,
     MoveResult,
     get_candidate_moves,

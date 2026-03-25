@@ -5,9 +5,9 @@
 ```
 nix develop
 ```
-- Go to faster_functions
+- Go to lib_gomoku
 ```
-cd faster_functions
+cd lib_gomoku
 ```
 - Run
 ```
@@ -40,7 +40,7 @@ nix develop -c zsh
 
 ```
 nix develop
-cd faster_functions
+cd lib_gomoku
 cargo run --release
 ```
 

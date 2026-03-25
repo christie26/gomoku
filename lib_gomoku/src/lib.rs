@@ -910,16 +910,16 @@ impl Gomoku {
 }
 
 #[pymodule]
-fn faster_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn lib_gomoku(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<MoveResult>()?;
     m.add_class::<Gomoku>()?;
     m.add_function(wrap_pyfunction!(heuristic::heuristic_evaluation, m)?)?;
     m.add_function(wrap_pyfunction!(minimax::get_ai_move, m)?)?;
 
     let gomoku_class = m.getattr("Gomoku")?;
-    gomoku_class.setattr("__module__", "faster_functions")?;
+    gomoku_class.setattr("__module__", "lib_gomoku")?;
 
     let move_result_class = m.getattr("MoveResult")?;
-    move_result_class.setattr("__module__", "faster_functions")?;
+    move_result_class.setattr("__module__", "lib_gomoku")?;
     Ok(())
 }

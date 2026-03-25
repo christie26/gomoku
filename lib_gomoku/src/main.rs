@@ -1,4 +1,4 @@
-use faster_functions::{
+use lib_gomoku::{
     minimax::{self, BOARD_SIZE},
     Gomoku,
 };

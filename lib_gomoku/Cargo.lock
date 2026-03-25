@@ -46,17 +46,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "faster_functions"
-version = "0.1.0"
-dependencies = [
- "colored",
- "ctrlc",
- "linked_hash_set",
- "pyo3",
- "signal-hook",
-]
-
-[[package]]
 name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -67,6 +56,17 @@ name = "indoc"
 version = "2.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4c7245a08504955605670dbf141fceab975f15ca21570696aebe9d2e71576bd"
+
+[[package]]
+name = "lib_gomoku"
+version = "0.1.0"
+dependencies = [
+ "colored",
+ "ctrlc",
+ "linked_hash_set",
+ "pyo3",
+ "signal-hook",
+]
 
 [[package]]
 name = "libc"
