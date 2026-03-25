@@ -4,9 +4,10 @@ from faster_functions import Gomoku, MoveResult, get_ai_move
 import argparse
 import time
 
-CELL_SIZE = 40
+CELL_SIZE = 35
 BOARD_SIZE = 19
-PADDING = 20
+PADDING = 30
+LABEL_PADDING = 17
 
 
 class GomokuGUI:
@@ -113,14 +114,36 @@ class GomokuGUI:
                 x, PADDING, x, PADDING + (BOARD_SIZE - 1) * CELL_SIZE
             )
 
-            # Row labels (A–S)
+            # Row labels (1–19)
             self.canvas.create_text(
-                PADDING - 5, y, text=str(i), font=("Arial", 10), anchor="e"
+                PADDING - LABEL_PADDING,
+                y,
+                text=str(i + 1),
+                font=("Arial", 10),
+                anchor="e",
+            )
+            self.canvas.create_text(
+                BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
+                y,
+                text=str(i + 1),
+                font=("Arial", 10),
+                anchor="w",
             )
 
-            # Column labels (1–19)
+            # Column labels (A–S)
             self.canvas.create_text(
-                x, PADDING - 5, text=str(i), font=("Arial", 10), anchor="s"
+                x,
+                PADDING - LABEL_PADDING,
+                text=chr(ord("A") + i),
+                font=("Arial", 10),
+                anchor="s",
+            )
+            self.canvas.create_text(
+                x,
+                BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
+                text=chr(ord("A") + i),
+                font=("Arial", 10),
+                anchor="n",
             )
 
     def draw_stone(self, x, y, player):
@@ -204,8 +227,8 @@ class GomokuGUI:
                     self.draw_stone(x, y, cell)
 
     def handle_click(self, event):
-        x = event.x // CELL_SIZE
-        y = event.y // CELL_SIZE
+        x = round((event.x - PADDING) / CELL_SIZE)
+        y = round((event.y - PADDING) / CELL_SIZE)
         self.play_one_turn(y, x)  # note: board is row (y), col (x)
         self.root.update_idletasks()
         self.ai_play()
@@ -215,7 +238,9 @@ class GomokuGUI:
         result = self.game.is_valid_move(x, y)
         self.update_alert_label("")
         if result == MoveResult.VALID:
-            print(f"{self.player_names[self.game.current_player]} played ({x},{y})")
+            print(
+                f"{self.player_names[self.game.current_player]} played {chr(ord('A') + y)}{x + 1}"
+            )
             capture = self.game.handle_move(x, y)
             if capture:
                 self.update_info_label()
