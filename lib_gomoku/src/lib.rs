@@ -186,8 +186,15 @@ impl Gomoku {
                     print!("{:2}  ", cell);
                 }
             }
+            print!("{:<2} ", i + 1);
             println!();
         }
+        print!("  ");
+        for i in 0..self.size {
+            let c = "abcdefghijklmnopqrstuvwxyz".chars().nth(i).unwrap_or('-');
+            print!(" {:2}", c);
+        }
+        println!();
     }
 
     pub fn print_state(&self) {
