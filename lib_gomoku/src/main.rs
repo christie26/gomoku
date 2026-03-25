@@ -1,6 +1,5 @@
 use lib_gomoku::{
-    minimax::{self, BOARD_SIZE},
-    Gomoku,
+    minimax::{self, BOARD_SIZE}, position_name, Gomoku
 };
 use signal_hook::{
     consts::{SIGINT, SIGTERM},
@@ -68,11 +67,10 @@ fn main() {
         };
         let elapsed = start.elapsed().as_secs_f64();
         println!(
-            "Turn {}: {} playing ({}, {}) - {}pts (took {:.2}s and tested {} moves)",
+            "Turn {}: {} playing {} - {}pts (took {:.2}s and tested {} moves)",
             durations.len() + 1,
             game.current_player,
-            x,
-            y,
+            position_name(&(x as i32, y as i32)),
             score,
             elapsed,
             moves.len()
