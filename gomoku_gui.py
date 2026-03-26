@@ -3,111 +3,208 @@ from tkinter import simpledialog
 from lib_gomoku import Gomoku, MoveResult, get_ai_move
 import argparse
 import time
-from utils import load_and_validate_board, load_board_str, load_history
 
-CELL_SIZE = 35
+CELL_SIZE = 32
+LABEL_PADDING = 10
 BOARD_SIZE = 19
 PADDING = 30
-LABEL_PADDING = 17
+
+LIGHT_BACKGROUND = "#FAEBD7"
+BORDER_COLOR = "#6f5c43"
 
 
 class GomokuGUI:
-    """
-    A GUI class for playing Gomoku using Tkinter. Supports human and AI players,
-    handles user interaction, board drawing, turn management, and displaying results.
-    """
-
     def __init__(self, root, player1, player2, history=None):
-        """
-        Initialize the GUI, canvas, labels, and player info.
-
-        Args:
-            root: The Tkinter root window.
-            player1 (str or None): Name of player X, or None to ask.
-            player2 (str or None): Name of player O, or None to ask.
-        """
         self.root = root
         self.root.title("Gomoku")
+
         self.cell_size = CELL_SIZE
         self.board_size = BOARD_SIZE
         self.canvas_size = self.cell_size * (self.board_size - 1) + PADDING * 2
 
-        # Create board and canvas
         self.game = Gomoku(size=self.board_size)
 
-        self.canvas = tk.Canvas(
-            root, width=self.canvas_size, height=self.canvas_size, bg="burlywood"
+        # ===== MAIN LAYOUT =====
+        self.main_frame = tk.Frame(root)
+        self.main_frame.pack()
+
+        self.left_frame = tk.Frame(self.main_frame)
+        self.left_frame.pack(side="left")
+
+        self.right_frame = tk.Frame(self.main_frame, padx=5)
+        self.right_frame.pack(side="right", fill="y")
+        self.right_frame.config(
+            background=LIGHT_BACKGROUND,
+            highlightbackground=BORDER_COLOR,
+            highlightthickness=3,
         )
-        self.canvas.pack(pady=0, padx=0)
 
-        self.info_label = tk.Label(root, text="", font=("Arial", 20))
-        self.info_label.pack(pady=5)
+        # ===== CANVAS =====
+        self.canvas = tk.Canvas(
+            self.left_frame,
+            width=self.canvas_size,
+            height=self.canvas_size,
+            bg="burlywood",
+        )
+        self.canvas.config(
+            highlightbackground=BORDER_COLOR,
+            highlightthickness=3,
+        )
+        self.canvas.pack()
 
-        self.turn_label = tk.Label(root, text="", font=("Arial", 20))
-        self.turn_label.pack(pady=5)
-
-        self.alert_label = tk.Label(root, text="", font=("Arial", 20))
-        self.alert_label.pack(pady=5)
-
-        self.ai_label = tk.Label(root, text="", font=("Arial", 20))
-        self.ai_label.pack(pady=5)
-
-        # Player names
+        # ===== PLAYER NAMES =====
         self.player_names = {"X": player1, "O": player2}
 
-        if player1 == None or player2 == None:
+        if player1 is None or player2 is None:
             self.ask_player_names()
 
-        # if user import history file, play those move first
-        if history:
-            for x, y in history:
-                self.play_one_turn(x, y)
+        # ===== PLAYER BOXES =====
+        self.player_frames = {}
+
+        for p in ["X", "O"]:
+            frame = tk.Frame(self.right_frame, padx=10, pady=10)
+            frame.pack(fill="x", pady=5)
+
+            # ⚫ / ⚪
+            stone = "⚫" if p == "X" else "⚪"
+            icon_label = tk.Label(
+                frame, text=stone, font=("Arial", 16), background=LIGHT_BACKGROUND
+            )
+            icon_label.pack(side="left")
+
+            # name
+            name_label = tk.Label(
+                frame,
+                text=f"Player {p}",
+                font=("Arial", 12),
+                background=LIGHT_BACKGROUND,
+            )
+            name_label.pack(side="left", padx=5)
+
+            # time
+            time_label = tk.Label(
+                frame, text="0ms", font=("Arial", 12), background=LIGHT_BACKGROUND
+            )
+            time_label.pack(side="right")
+
+            self.player_frames[p] = {
+                "frame": frame,
+                "name": name_label,
+                "time": time_label,
+                "start_time": None,
+            }
+            self.player_frames[p]["frame"].config(
+                background=LIGHT_BACKGROUND,
+                highlightbackground=BORDER_COLOR,
+                highlightthickness=1,
+            )
+
+        self.init_player_boxes()
+
+        # ===== SETTINGS =====
+        self.settings_frame = tk.LabelFrame(
+            self.right_frame, text="Settings", padx=10, pady=10
+        )
+        self.settings_frame.pack(fill="x", pady=10)
+
+        tk.Label(self.settings_frame, text="Ruleset").pack(anchor="w")
+        self.ruleset_var = tk.StringVar(value="Standard")
+        tk.OptionMenu(self.settings_frame, self.ruleset_var, "Standard", "Pro").pack(
+            fill="x"
+        )
+
+        self.debug_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            self.settings_frame,
+            text="Debug Mode",
+            variable=self.debug_var,
+            command=self.on_toggle_debug,
+        ).pack(anchor="w")
+
+        # ===== INIT BOARD =====
+        # if history:
+        #     for x, y in history:
+        #         self.play_one_turn(x, y)
 
         self.draw_board(self.game.board)
-        self.update_info_label()
-        self.update_turn_label()
 
-        self.root.update_idletasks()
-        self.ai_play()
-        self.root.update_idletasks()
+        self.start_turn_timer()
+        self.update_live_timer()
 
         self.canvas.bind("<Button-1>", self.handle_click)
 
+    # ===== PLAYER SETUP =====
     def ask_player_names(self):
         self.player_names["X"] = (
-            simpledialog.askstring("Player X", "Enter name for Player X (black):")
-            or "Player X"
+            simpledialog.askstring("Player X", "Enter name for Player X") or "Player X"
         )
         self.player_names["O"] = (
-            simpledialog.askstring("Player O", "Enter name for Player O (white):")
-            or "Player O"
+            simpledialog.askstring("Player O", "Enter name for Player O") or "Player O"
         )
 
-    def update_info_label(self):
-        self.info_label.config(
-            text=(
-                f"⚫ {self.player_names['X']} (captures: {self.game.capture_count['X']}) "
-                f"vs {self.player_names['O']} (captures: {self.game.capture_count['O']}) ⚪"
-            )
-        )
+    def init_player_boxes(self):
+        for p in ["X", "O"]:
+            name = self.player_names[p]
+            label = f"{name} (AI)" if name.lower() == "ai" else name
+            self.player_frames[p]["name"].config(text=label)
 
-    def update_turn_label(self):
-        turn_name = self.player_names[self.game.current_player]
-        turn_color = "⚫" if self.game.current_player == "X" else "⚪"
-        self.turn_label.config(text=f"{turn_name}'s Turn {turn_color}")
+    # ===== TIMER =====
+    def start_turn_timer(self):
+        p = self.game.current_player
+        self.player_frames[p]["start_time"] = time.time()
+        # print(f"{p} timer started, {self.player_frames[p]['start_time']}")
 
-    def update_alert_label(self, message):
-        self.alert_label.config(text=message)
+    def end_turn_timer(self):
+        p = self.game.current_player
+        start = self.player_frames[p]["start_time"]
 
-    def update_ai_label(self, message):
-        self.ai_label.config(text=message)
+        elapsed = (time.time() - start) * 1000
+        self.player_frames[p]["time"].config(text=f"Time: {elapsed:.0f} ms")
+        self.player_frames[p]["start_time"] = time.time()
 
+    def update_live_timer(self):
+        p = self.game.current_player
+        start = self.player_frames[p]["start_time"]
+
+        if start:
+            elapsed = (time.time() - start) * 1000
+
+            self.player_frames[p]["time"].config(text=f"Time: {elapsed:.0f} ms")
+
+        self.root.after(100, self.update_live_timer)
+
+    # ===== UI UPDATES =====
+    def highlight_active_player(self):
+        # print(f"highlight_active_player {self.game.current_player}")
+        for p in ["X", "O"]:
+            if p == self.game.current_player:
+                self.player_frames[p]["frame"].config(
+                    background=LIGHT_BACKGROUND,
+                    highlightbackground=BORDER_COLOR,
+                    highlightthickness=3,
+                )
+            else:
+                self.player_frames[p]["frame"].config(
+                    background=LIGHT_BACKGROUND,
+                    highlightbackground=BORDER_COLOR,
+                    highlightthickness=1,
+                )
+
+    # def update_alert_label(self, msg):
+    #     self.alert_label.config(text=msg)
+
+    # def update_ai_label(self, msg):
+    #     self.ai_label.config(text=msg)
+
+    def on_toggle_debug(self):
+        print("Debug mode:", self.debug_var.get())
+
+    # ===== DRAWING =====
     def draw_grid(self):
         for i in range(BOARD_SIZE):
             x = PADDING + i * CELL_SIZE
             y = PADDING + i * CELL_SIZE
 
-            # Grid lines
             self.canvas.create_line(
                 PADDING, y, PADDING + (BOARD_SIZE - 1) * CELL_SIZE, y
             )
@@ -115,13 +212,13 @@ class GomokuGUI:
                 x, PADDING, x, PADDING + (BOARD_SIZE - 1) * CELL_SIZE
             )
 
-            # Row labels (1–19)
             self.canvas.create_text(
                 PADDING - LABEL_PADDING,
                 y,
                 text=str(i + 1),
                 font=("Arial", 10),
                 anchor="e",
+                fill=BORDER_COLOR,
             )
             self.canvas.create_text(
                 BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
@@ -129,21 +226,22 @@ class GomokuGUI:
                 text=str(i + 1),
                 font=("Arial", 10),
                 anchor="w",
+                fill=BORDER_COLOR,
             )
-
-            # Column labels (A–S)
             self.canvas.create_text(
                 x,
                 PADDING - LABEL_PADDING,
                 text=chr(ord("A") + i),
                 font=("Arial", 10),
                 anchor="s",
+                fill=BORDER_COLOR,
             )
             self.canvas.create_text(
                 x,
                 BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
                 text=chr(ord("A") + i),
                 font=("Arial", 10),
+                fill=BORDER_COLOR,
                 anchor="n",
             )
 
@@ -154,71 +252,6 @@ class GomokuGUI:
         r = CELL_SIZE // 2 - 2
         self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=color)
 
-    def draw_possible_stone(self, x, y, player, number, selected):
-        color = "black" if player == "X" else "white"
-        cx = PADDING + x * CELL_SIZE
-        cy = PADDING + y * CELL_SIZE
-        r = CELL_SIZE // 2 - 2
-
-        # Create stone with 50% opacity
-        outline_color = "red" if selected else ""
-        self.canvas.create_oval(
-            cx - r,
-            cy - r,
-            cx + r,
-            cy + r,
-            fill=color,
-            stipple="gray50",
-            outline=outline_color,
-        )
-        # Calculate appropriate font size based on stone size and number length
-        number_str = str(number)
-        # Base font size proportional to stone radius
-        base_font_size = max(6, r // 2)
-
-        # Reduce font size for longer numbers
-        if len(number_str) == 1:
-            font_size = base_font_size
-        elif len(number_str) == 2:
-            font_size = max(6, int(base_font_size))
-        else:  # 3+ digits
-            font_size = max(6, int(base_font_size))
-
-        # Add numeric text in the center
-        text_color = "white" if player == "X" else "black"
-        self.canvas.create_text(
-            cx, cy, text=number_str, fill=text_color, font=("Arial", font_size, "bold")
-        )
-
-    def finish_game(self, winner):
-        # # Create a toplevel window to act as overlay
-        # overlay = tk.Toplevel(root)
-        #
-        # overlay.geometry(
-        #     f"{self.canvas_size}x{self.canvas_size}+{root.winfo_rootx() + self.canvas.winfo_x()}+{root.winfo_rooty() + self.canvas.winfo_y()}"
-        # )
-        # overlay.overrideredirect(True)
-        # overlay.attributes("-topmost", True)
-        # overlay.attributes("-alpha", 0.3)  # 30% opaque (i.e. 70% transparent)
-        # overlay.configure(bg="black")
-        #
-        # def update_overlay_position():
-        #     overlay.geometry(
-        #         f"{self.canvas_size}x{self.canvas_size}+{root.winfo_rootx() + self.canvas.winfo_x()}+{root.winfo_rooty() + self.canvas.winfo_y()}"
-        #     )
-        #     root.after(50, update_overlay_position)
-        #
-        # update_overlay_position()
-
-        # Display the result text in the center
-        self.result_text = self.canvas.create_text(
-            self.canvas_size // 2,
-            self.canvas_size // 2,
-            text=f"{self.player_names[winner]} wins",
-            fill="white",
-            font=("Helvetica", 32, "bold"),
-        )
-
     def draw_board(self, board):
         self.canvas.delete("all")
         self.draw_grid()
@@ -227,127 +260,71 @@ class GomokuGUI:
                 if cell != ".":
                     self.draw_stone(x, y, cell)
 
+    # ===== GAME FLOW =====
     def handle_click(self, event):
         x = round((event.x - PADDING) / CELL_SIZE)
         y = round((event.y - PADDING) / CELL_SIZE)
-        self.play_one_turn(y, x)  # note: board is row (y), col (x)
-        self.root.update_idletasks()
+        self.play_one_turn(y, x)
+
+        # assume that we are in human vs ai mode
         self.ai_play()
-        self.root.update_idletasks()
 
-    def play_one_turn(self, x, y) -> int:
+    def play_one_turn(self, x, y):
         result = self.game.is_valid_move(x, y)
-        self.update_alert_label("")
-        if result == MoveResult.VALID:
-            print(
-                f"{self.player_names[self.game.current_player]} played {chr(ord('A') + y)}{x + 1}"
-            )
-            capture = self.game.handle_move(x, y)
-            if capture:
-                self.update_info_label()
+        # self.update_alert_label("")
 
-                self.update_alert_label(
-                    f"{self.player_names[self.game.current_player]} captures {self.player_names[self.game.opponent_player]}"
-                )
+        if result == MoveResult.VALID:
+            capture = self.game.handle_move(x, y)
+
             self.draw_board(self.game.board)
+
             winner = self.game.get_winner()
-            if winner != None:
+            if winner:
                 self.finish_game(winner)
             else:
-                self.game.switch_player()
-                self.update_turn_label()
-        else:
-            self.update_alert_label(
-                f"Invalid move: {result.name.replace('_', ' ').title()}"
-            )
-        return result
+                self.change_turn()
+                # self.start_turn_timer()
+        # else:
+        # self.update_alert_label(f"Invalid: {result.name}")
+
+    def change_turn(self):
+        self.end_turn_timer()
+
+        self.game.switch_player()
+
+        self.highlight_active_player()
+        self.start_turn_timer()
+        self.update_live_timer()
 
     def ai_play(self):
-        start_time = time.time()
+        start = time.time()
+        # self.update_ai_label("AI thinking...")
 
-        self.update_ai_label("AI is thinking")
-        # print("AI is thinking")
+        mv, _ = get_ai_move(self.game)
+        if mv:
+            x, y, _ = mv
+            self.play_one_turn(x, y)
 
-        mv, moves = get_ai_move(self.game)
-        # print(f"mv: {mv}")
-        # print(f"moves: {moves}")
+        # self.update_ai_label(f"AI time: {(time.time() - start):.3f}s")
 
-        if mv is None:
-            print(f"Found no valid moves: {mv} - {moves}")
-
-        x, y, score = mv
-
-        ai_time = time.time() - start_time
-        self.update_ai_label(f"AI played in {ai_time:.4f}s")
-        # print(
-        #     f"AI chose to play {mv} in {ai_time:.4f}s out of {len(moves)} moves-------------------------"
-        # )
-        # print(self.game.print_state())
-
-        for m in moves:
-            x1, y1, score1 = m
-            selected = x == x1 and y == y1
-            self.draw_possible_stone(y1, x1, "O", score1, selected)
-
-        # self.play_one_turn(x, y)
+    def finish_game(self, winner):
+        self.canvas.create_text(
+            self.canvas_size // 2,
+            self.canvas_size // 2,
+            text=f"{self.player_names[winner]} wins",
+            fill="white",
+            font=("Helvetica", 32, "bold"),
+        )
 
 
+# ===== MAIN =====
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Simple Gomoku Game")
-
-    parser.add_argument("--size", type=int, default=19, help="Board size (default: 19)")
-    parser.add_argument(
-        "--black", type=str, default=None, help="Name of black stone player (X)"
-    )
-    parser.add_argument(
-        "--white", type=str, default=None, help="Name of white stone player (O)"
-    )
-    parser.add_argument("--board", type=str, help="Path to board file")
-
-    parser.add_argument("--history", type=str, help="Path to move history file")
-
-    parser.add_argument(
-        "--history-until", type=int, help="index of history where you want to stop"
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--black", type=str, default=None)
+    parser.add_argument("--white", type=str, default=None)
 
     args = parser.parse_args()
 
-    board = None
-    current_player = "X"  # default
-
-    if args.board:
-        try:
-            # board, current_player = load_and_validate_board(args.board)
-            board = load_board_str(args.board)
-            print(f"Loaded board from {args.board}")
-        except Exception as e:
-            print(f"Failed to load board: {e}")
-            exit(1)
-
-    history = None
-
-    if args.history:
-        try:
-            history = load_history(args.history)
-            print(history, len(history))
-            if args.history_until:
-                history = history[: args.history_until]
-                print(args.history_until)
-                print(history, len(history))
-        except Exception as e:
-            print(f"Failed to load history: {e}")
-            exit(1)
-
     root = tk.Tk()
-    app = GomokuGUI(root, args.black, args.white, history)
-
-    # if board is passed, update game state
-    if board:
-        app.game.parse_board(board)
-        # app.game.board = board
-        # app.game.current_player = current_player
-        # app.game.opponent_player = "O" if current_player == "X" else "X"
-        app.draw_board(app.game.board)
-        app.update_turn_label()
-
+    app = GomokuGUI(root, args.black, args.white)
     root.mainloop()
