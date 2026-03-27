@@ -76,7 +76,7 @@ pub enum Stone {
 
 pub fn position_name(pos: &(i32, i32)) -> String {
         let (y, x) = pos;
-        let x = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().nth(*x as usize).unwrap_or('-');
+        let x = "abcdefghijklmnopqrstuvwxyz".chars().nth(*x as usize).unwrap_or('-');
         let y = y + 1;
         format!("{x}{y}")
 }
@@ -172,12 +172,13 @@ impl Gomoku {
     pub fn print_board(&self, highlight: Vec<(usize, usize)>) {
         print!("  ");
         for i in 0..self.size {
-            print!("{:2} ", i);
+            let c = "abcdefghijklmnopqrstuvwxyz".chars().nth(i).unwrap_or('-');
+            print!(" {:2}", c);
         }
         println!();
 
         for (i, row) in self.board.iter().enumerate() {
-            print!("{:2} ", i);
+            print!("{:2} ", i + 1);
             for (j, cell) in row.iter().enumerate() {
                 if highlight.iter().any(|u| *u == (i, j)) {
                     print!("{}", format!("{:2}  ", cell).bold().yellow());
@@ -185,8 +186,15 @@ impl Gomoku {
                     print!("{:2}  ", cell);
                 }
             }
+            print!("{:<2} ", i + 1);
             println!();
         }
+        print!("  ");
+        for i in 0..self.size {
+            let c = "abcdefghijklmnopqrstuvwxyz".chars().nth(i).unwrap_or('-');
+            print!(" {:2}", c);
+        }
+        println!();
     }
 
     pub fn print_state(&self) {
