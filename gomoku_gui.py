@@ -3,6 +3,7 @@ from tkinter import simpledialog
 from lib_gomoku import Gomoku, MoveResult, get_ai_move
 import argparse
 import time
+import threading
 
 CELL_SIZE = 32
 LABEL_PADDING = 10
@@ -11,6 +12,12 @@ PADDING = 30
 
 LIGHT_BACKGROUND = "#FAEBD7"
 BORDER_COLOR = "#6f5c43"
+
+
+class Player:
+    def __init__(self, name: str, is_human: bool):
+        self.name = name
+        self.is_human = is_human
 
 
 class GomokuGUI:
@@ -52,11 +59,11 @@ class GomokuGUI:
         )
         self.canvas.pack()
 
-        # ===== PLAYER NAMES =====
-        self.player_names = {"X": player1, "O": player2}
+        # ===== PLAYER =====
+        # if player1 is None or player2 is None:
+        #     self.ask_player_names()
 
-        if player1 is None or player2 is None:
-            self.ask_player_names()
+        self.players = {"X": Player(player1, True), "O": Player(player2, False)}
 
         # ===== PLAYER BOXES =====
         self.player_frames = {}
@@ -134,17 +141,17 @@ class GomokuGUI:
         self.canvas.bind("<Button-1>", self.handle_click)
 
     # ===== PLAYER SETUP =====
-    def ask_player_names(self):
-        self.player_names["X"] = (
-            simpledialog.askstring("Player X", "Enter name for Player X") or "Player X"
-        )
-        self.player_names["O"] = (
-            simpledialog.askstring("Player O", "Enter name for Player O") or "Player O"
-        )
+    # def ask_player_names(self):
+    #     self.player_names["X"] = (
+    #         simpledialog.askstring("Player X", "Enter name for Player X") or "Player X"
+    #     )
+    #     self.player_names["O"] = (
+    #         simpledialog.askstring("Player O", "Enter name for Player O") or "Player O"
+    #     )
 
     def init_player_boxes(self):
         for p in ["X", "O"]:
-            name = self.player_names[p]
+            name = self.players[p].name
             label = f"{name} (AI)" if name.lower() == "ai" else name
             self.player_frames[p]["name"].config(text=label)
 
@@ -152,7 +159,6 @@ class GomokuGUI:
     def start_turn_timer(self):
         p = self.game.current_player
         self.player_frames[p]["start_time"] = time.time()
-        # print(f"{p} timer started, {self.player_frames[p]['start_time']}")
 
     def end_turn_timer(self):
         p = self.game.current_player
@@ -175,7 +181,6 @@ class GomokuGUI:
 
     # ===== UI UPDATES =====
     def highlight_active_player(self):
-        # print(f"highlight_active_player {self.game.current_player}")
         for p in ["X", "O"]:
             if p == self.game.current_player:
                 self.player_frames[p]["frame"].config(
@@ -262,12 +267,12 @@ class GomokuGUI:
 
     # ===== GAME FLOW =====
     def handle_click(self, event):
-        x = round((event.x - PADDING) / CELL_SIZE)
-        y = round((event.y - PADDING) / CELL_SIZE)
-        self.play_one_turn(y, x)
-
-        # assume that we are in human vs ai mode
-        self.ai_play()
+        if self.players[self.game.current_player].is_human:
+            x = round((event.x - PADDING) / CELL_SIZE)
+            y = round((event.y - PADDING) / CELL_SIZE)
+            self.play_one_turn(y, x)
+        else:
+            return
 
     def play_one_turn(self, x, y):
         result = self.game.is_valid_move(x, y)
@@ -283,7 +288,8 @@ class GomokuGUI:
                 self.finish_game(winner)
             else:
                 self.change_turn()
-                # self.start_turn_timer()
+                if not self.players[self.game.current_player].is_human:
+                    self.ai_play()
         # else:
         # self.update_alert_label(f"Invalid: {result.name}")
 
@@ -297,21 +303,19 @@ class GomokuGUI:
         self.update_live_timer()
 
     def ai_play(self):
-        start = time.time()
-        # self.update_ai_label("AI thinking...")
+        def run_ai():
+            mv, _ = get_ai_move(self.game)
+            if mv:
+                x, y, _ = mv
+                self.root.after(0, lambda: self.play_one_turn(x, y))
 
-        mv, _ = get_ai_move(self.game)
-        if mv:
-            x, y, _ = mv
-            self.play_one_turn(x, y)
-
-        # self.update_ai_label(f"AI time: {(time.time() - start):.3f}s")
+        threading.Thread(target=run_ai, daemon=True).start()
 
     def finish_game(self, winner):
         self.canvas.create_text(
             self.canvas_size // 2,
             self.canvas_size // 2,
-            text=f"{self.player_names[winner]} wins",
+            text=f"{self.players[winner].name} wins",
             fill="white",
             font=("Helvetica", 32, "bold"),
         )
