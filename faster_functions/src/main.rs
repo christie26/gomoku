@@ -1,5 +1,6 @@
 use faster_functions::{
-    minimax::{self, BOARD_SIZE},
+    minimax,
+    search_state::BOARD_SIZE,
     Gomoku,
 };
 use signal_hook::{

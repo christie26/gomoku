@@ -1,425 +1,319 @@
-use crate::heuristic::heuristic_evaluation;
-use crate::MoveResult;
-use crate::{Gomoku, Stone};
+use crate::search_state::{zobrist, SearchState, BOARD_SIZE};
+use crate::Gomoku;
 
-use linked_hash_set::LinkedHashSet;
 use pyo3::prelude::*;
 
 use std::cmp::{max, min};
-use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::thread;
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
-const MAX_DEPTH: usize = 10;
+const MAX_DEPTH: usize = 8;
 
-pub const BOARD_SIZE: usize = 19;
-const DIRECTIONS: &[(i32, i32)] = &[(1, 0), (0, 1), (1, 1), (1, -1)];
+const TT_SIZE: usize = 1 << 22; // 4M entries, ~64 MB
+const MAX_PLY: usize = 64;
 
-// Count stones in one direction from (x,y) for player
-fn count_stones(
-    board: &Vec<Vec<Stone>>,
-    x: usize,
-    y: usize,
-    dx: i32,
-    dy: i32,
-    player: &Stone,
-) -> i32 {
-    let mut count = 0;
-    for i in 1..5 {
-        let nx = x as i32 + dx * i;
-        let ny = y as i32 + dy * i;
-        if nx < 0 || nx >= BOARD_SIZE as i32 || ny < 0 || ny >= BOARD_SIZE as i32 {
-            break;
-        }
-        if board[nx as usize][ny as usize] == *player {
-            count += 1;
-        } else {
-            break;
+// ---- Search Context (killer moves + history heuristic) ----
+
+struct SearchContext {
+    killer_moves: [[Option<(u8, u8)>; 2]; MAX_PLY],
+    history: [[[i32; BOARD_SIZE]; BOARD_SIZE]; 2], // [color_idx][row][col]
+}
+
+impl SearchContext {
+    fn new() -> Self {
+        SearchContext {
+            killer_moves: [[None; 2]; MAX_PLY],
+            history: [[[0i32; BOARD_SIZE]; BOARD_SIZE]; 2],
         }
     }
-    count
-}
 
-fn opponent(player: Stone) -> Stone {
-    match player {
-        Stone::Black => Stone::White,
-        Stone::White => Stone::Black,
-        Stone::Empty => Stone::Empty, // no opponent if empty
+    fn decay_history(&mut self) {
+        for color in 0..2 {
+            for r in 0..BOARD_SIZE {
+                for c in 0..BOARD_SIZE {
+                    self.history[color][r][c] /= 2;
+                }
+            }
+        }
+    }
+
+    fn update_killer(&mut self, ply: usize, mov: (u8, u8)) {
+        if ply < MAX_PLY && self.killer_moves[ply][0] != Some(mov) {
+            self.killer_moves[ply][1] = self.killer_moves[ply][0];
+            self.killer_moves[ply][0] = Some(mov);
+        }
+    }
+
+    fn update_history(&mut self, is_black: bool, mov: (u8, u8), depth: usize) {
+        let cidx = if is_black { 0 } else { 1 };
+        self.history[cidx][mov.0 as usize][mov.1 as usize] += (depth * depth) as i32;
     }
 }
 
-fn can_capture(
-    board: &Vec<Vec<Stone>>,
-    x: usize,
-    y: usize,
-    dx: i32,
-    dy: i32,
-    player: Stone,
-) -> bool {
-    let opp = opponent(player);
+// ---- Transposition Table ----
 
-    // Positions to check:
-    // (x + dx, y + dy), (x + 2*dx, y + 2*dy) - opponent stones
-    // (x + 3*dx, y + 3*dy) - player stone
-
-    let nx1 = x as i32 + dx;
-    let ny1 = y as i32 + dy;
-    let nx2 = x as i32 + 2 * dx;
-    let ny2 = y as i32 + 2 * dy;
-    let nx3 = x as i32 + 3 * dx;
-    let ny3 = y as i32 + 3 * dy;
-
-    if nx3 < 0 || nx3 >= BOARD_SIZE as i32 || ny3 < 0 || ny3 >= BOARD_SIZE as i32 {
-        return false;
-    }
-    if nx2 < 0 || nx2 >= BOARD_SIZE as i32 || ny2 < 0 || ny2 >= BOARD_SIZE as i32 {
-        return false;
-    }
-    if nx1 < 0 || nx1 >= BOARD_SIZE as i32 || ny1 < 0 || ny1 >= BOARD_SIZE as i32 {
-        return false;
-    }
-
-    board[nx1 as usize][ny1 as usize] == opp
-        && board[nx2 as usize][ny2 as usize] == opp
-        && board[nx3 as usize][ny3 as usize] == player
+#[derive(Clone, Copy, PartialEq)]
+#[repr(u8)]
+enum TTFlag {
+    Exact = 0,
+    LowerBound = 1,
+    UpperBound = 2,
 }
 
-// Evaluate score for one position for one player
-fn evaluate_position(board: &Vec<Vec<Stone>>, x: usize, y: usize, player: &Stone) -> i32 {
-    let mut score = 0;
+#[derive(Clone, Copy)]
+struct TTEntry {
+    hash: u64,
+    score: i32,
+    depth: u8,
+    flag: TTFlag,
+    best_move: Option<(u8, u8)>,
+}
 
-    for &(dx, dy) in DIRECTIONS {
-        let mut count = 1; // Count the current spot as occupied (hypothetically)
+impl TTEntry {
+    fn pack_data(&self) -> u64 {
+        let mut data: u64 = self.score as u32 as u64;
+        data |= (self.depth as u64) << 32;
+        data |= (self.flag as u64) << 40;
+        if let Some((x, y)) = self.best_move {
+            data |= (x as u64) << 42;
+            data |= (y as u64) << 47;
+            data |= 1u64 << 52;
+        }
+        data
+    }
 
-        count += count_stones(board, x, y, dx, dy, player);
-        count += count_stones(board, x, y, -dx, -dy, player);
-
-        score += match count {
-            n if n >= 5 => 100_000,
-            4 => 10_000,
-            3 => 1_000,
-            2 => 100,
-            _ => 0,
+    fn unpack(hash: u64, data: u64) -> Self {
+        let score = data as u32 as i32;
+        let depth = ((data >> 32) & 0xFF) as u8;
+        let flag = match (data >> 40) & 0x03 {
+            1 => TTFlag::LowerBound,
+            2 => TTFlag::UpperBound,
+            _ => TTFlag::Exact,
         };
+        let has_best = ((data >> 52) & 1) != 0;
+        let best_move = if has_best {
+            Some((((data >> 42) & 0x1F) as u8, ((data >> 47) & 0x1F) as u8))
+        } else {
+            None
+        };
+        TTEntry { hash, score, depth, flag, best_move }
+    }
+}
 
-        if can_capture(board, x, y, dx, dy, *player) {
-            score += 50000;
+struct TTSlot {
+    key: AtomicU64,
+    data: AtomicU64,
+}
+
+struct TranspositionTable {
+    slots: Vec<TTSlot>,
+    mask: usize,
+}
+
+unsafe impl Sync for TranspositionTable {}
+unsafe impl Send for TranspositionTable {}
+
+impl TranspositionTable {
+    fn new(size: usize) -> Self {
+        let mut slots = Vec::with_capacity(size);
+        for _ in 0..size {
+            slots.push(TTSlot {
+                key: AtomicU64::new(0),
+                data: AtomicU64::new(0),
+            });
         }
-        if can_capture(board, x, y, -dx, -dy, *player) {
-            score += 50000;
+        TranspositionTable { slots, mask: size - 1 }
+    }
+
+    fn probe(&self, hash: u64) -> Option<TTEntry> {
+        let index = (hash as usize) & self.mask;
+        let slot = &self.slots[index];
+        let stored_key = slot.key.load(Ordering::Relaxed);
+        let stored_data = slot.data.load(Ordering::Relaxed);
+        let recovered_hash = stored_key ^ stored_data;
+        if recovered_hash == hash {
+            Some(TTEntry::unpack(hash, stored_data))
+        } else {
+            None
         }
     }
 
-    score
-}
-
-fn get_critical_moves(
-    mut critical_moves: LinkedHashSet<(usize, usize)>,
-    state: &Gomoku,
-) -> LinkedHashSet<(usize, usize)> {
-    for player in [&state.opponent_player, &state.current_player] {
-        for (pattern_type, patterns) in [
-            ("block_four", &state.block_four),
-            ("open_four", &state.open_four),
-            ("open_three", &state.open_three),
-            ("open_two", &state.open_two),
-            ("free_three", &state.free_three),
-        ] {
-            for pattern in patterns.get(player).unwrap() {
-                let points: Vec<(i32, i32)> = if pattern_type == "free_three" {
-                    pattern.clone()
-                } else {
-                    vec![pattern[0], pattern[pattern.len() - 1]]
-                };
-
-                for (x, y) in points {
-                    critical_moves.insert((x as usize, y as usize));
-                }
-            }
-        }
+    fn store(&self, entry: &TTEntry) {
+        let index = (entry.hash as usize) & self.mask;
+        let slot = &self.slots[index];
+        let data = entry.pack_data();
+        slot.key.store(entry.hash ^ data, Ordering::Relaxed);
+        slot.data.store(data, Ordering::Relaxed);
     }
-
-    return critical_moves;
 }
 
-fn get_radius_moves(
-    mut radius_moves: LinkedHashSet<(usize, usize)>,
-    state: &Gomoku,
-    radius: usize,
-) -> LinkedHashSet<(usize, usize)> {
-    let (rows, cols) = (state.board.len(), state.board[0].len());
-
-    for row in 0..rows {
-        for col in 0..cols {
-            if state.board[row][col] != Stone::Empty {
-                let start_row = row.saturating_sub(radius);
-                let end_row = (row + radius + 1).min(rows);
-                let start_col = col.saturating_sub(radius);
-                let end_col = (col + radius + 1).min(cols);
-
-                for r in start_row..end_row {
-                    for c in start_col..end_col {
-                        radius_moves.insert((r, c));
-                    }
-                }
-            }
-        }
-    }
-
-    radius_moves
-}
+// ---- Public API (still wraps Gomoku for Python) ----
 
 #[pyfunction]
 pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
-    if state.count_empty_spots() as usize == state.size * state.size {
-        return vec![(state.size / 2, state.size / 2)];
-    }
-
-    let radius = radius as usize;
-
-    // let radius = 2 as usize;
-    let move_set = LinkedHashSet::new();
-    let move_set = get_critical_moves(move_set, state);
-    let move_set = get_radius_moves(move_set, state, radius);
-
-    let mut valid_moves: Vec<_> = move_set
+    let ss = SearchState::from_gomoku(state);
+    ss.get_candidate_moves(radius as usize)
         .into_iter()
-        .filter(|&(r, c)| state.is_valid_move(r as i32, c as i32) == MoveResult::Valid)
-        .collect();
-
-    valid_moves
-        .sort_by_key(|&(r, c)| -(evaluate_position(&state.board, r, c, &state.current_player)));
-
-    // // Create a vector of (move, score)
-    // let mut moves_with_scores: Vec<((usize, usize), i32)> = valid_moves
-    //     .iter()
-    //     .map(|&(r, c)| {
-    //         let score = evaluate_position(&state.board, r, c, &state.current_player);
-    //         // println!("Move: ({}, {}), Score: {}", r, c, score);
-    //         ((r, c), score)
-    //     })
-    //     .collect();
-
-    // // Sort descending by score
-    // moves_with_scores.sort_by_key(|&(_, score)| -score);
-
-    // // Extract just the sorted moves if you want
-    // let _sorted_moves: Vec<(usize, usize)> = moves_with_scores
-    //     .into_iter()
-    //     .map(|(mv, _score)| mv)
-    //     .collect();
-
-    valid_moves
-}
-
-fn is_terminal_state(state: &Gomoku) -> bool {
-    state.check_draw() || state.get_winner().is_some()
-}
-
-fn state_value(state: &Gomoku) -> i32 {
-    match state.get_winner() {
-        None => 0,
-        Some(winner) if winner == "X" => MAX_VALUE,
-        Some(_) => MIN_VALUE,
-    }
-}
-
-fn make_next_state(state: &Gomoku, move_x: usize, move_y: usize) -> Gomoku {
-    let mut new_state = state.clone_gomoku();
-    new_state.handle_move(move_x.try_into().unwrap(), move_y.try_into().unwrap());
-    new_state.switch_player();
-    new_state
+        .map(|(r, c)| (r as usize, c as usize))
+        .collect()
 }
 
 #[pyfunction]
-pub fn get_ai_move_iterative_deepening(state: &Gomoku) -> (
-    Option<(usize, usize, i32)>,
-    Vec<(usize, usize, Option<i32>)>,
-) {
-    let max_depth = if state.move_count < 4 { 3 } else { MAX_DEPTH };
-    let mut recommended_move = (0, 0);
-    for iterative_depth in 1..(max_depth + 1) {
-        let (new_recommended_move, other_moves) = get_ai_move(&state.clone(), iterative_depth, recommended_move);
-        if iterative_depth == max_depth {
-            return (new_recommended_move, other_moves);
-        }
-        if let Some(m) = new_recommended_move {
-            recommended_move = (m.0, m.1);
-        }
+pub fn get_ai_move_iterative_deepening(
+    state: &Gomoku,
+) -> (Option<(usize, usize, i32)>, Vec<(usize, usize, Option<i32>)>) {
+    let _ = zobrist();
+
+    let ss = SearchState::from_gomoku(state);
+    let max_depth = if ss.move_count < 4 { 3 } else { MAX_DEPTH };
+    let num_threads = thread::available_parallelism()
+        .map(|n| n.get().min(8))
+        .unwrap_or(4);
+
+    let tt = Arc::new(TranspositionTable::new(TT_SIZE));
+
+    let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
+    for _ in 1..num_threads {
+        let tt_clone = Arc::clone(&tt);
+        let ss_clone = ss.clone();
+        handles.push(thread::spawn(move || {
+            worker_iterative_deepening(ss_clone, max_depth, &tt_clone);
+        }));
     }
 
-    return (None, vec![]);
+    let result = main_thread_iterative_deepening(ss, max_depth, &tt);
+
+    for h in handles {
+        let _ = h.join();
+    }
+
+    result
 }
 
-pub fn get_ai_move(
-    state: &Gomoku,
-    max_depth: usize,
-    recommended_move: (usize, usize),
-) -> (
-    Option<(usize, usize, i32)>,
-    Vec<(usize, usize, Option<i32>)>,
-) {
-    let is_max_player = state.current_player == Stone::Black;
+// ---- Iterative Deepening ----
 
-    let mut best_value = if is_max_player {
-        MIN_VALUE - 1
-    } else {
-        MAX_VALUE + 1
-    };
-    let alpha: Arc<Mutex<i32>> = Arc::new(Mutex::new(MIN_VALUE));
-    let beta: Arc<Mutex<i32>> = Arc::new(Mutex::new(MAX_VALUE));
-    // let mut alpha = MIN_VALUE;
-    // let mut beta = MAX_VALUE;
+fn worker_iterative_deepening(mut ss: SearchState, max_depth: usize, tt: &TranspositionTable) {
+    let is_max_player = ss.is_black_turn;
+    let mut previous_ordering: Option<Vec<(u8, u8)>> = None;
+    let mut ctx = SearchContext::new();
 
-    let all_moves: Vec<(usize, usize, Option<i32>)> = std::iter::once(recommended_move)
-        .chain(get_candidate_moves(state, 3).into_iter())
-        .map(|(x, y)| (x, y, None))
-        .collect();
-
-    let handles: Vec<_> = all_moves
-        .clone()
-        .into_iter()
-        .map(|(move_x, move_y, _)| {
-            let next_state = make_next_state(state, move_x, move_y);
-            let is_max_player2 = is_max_player.clone();
-            let max_depth2 = max_depth.clone();
-            let alpha = alpha.clone();
-            let beta = beta.clone();
-            thread::spawn(move || {
-                let alpha_val = *alpha.lock().unwrap();
-                let beta_val = *beta.lock().unwrap();
-                let (value, depth) = alphabeta(
-                    &next_state,
-                    alpha_val,
-                    beta_val,
-                    // MIN_VALUE,
-                    // MAX_VALUE,
-                    !is_max_player2,
-                    1,
-                    max_depth2,
-                );
-
-                let depth: i32 = depth.try_into().unwrap();
-                let value = if value > depth {
-                    value - depth
-                } else if value < -depth {
-                    value + depth
-                } else {
-                    value
-                };
-
-                let score = Some(value);
-
-                let mut alpha_lock = alpha.lock().unwrap();
-                let mut beta_lock = beta.lock().unwrap();
-                if is_max_player2 && value > best_value {
-                    best_value = value;
-                    if *alpha_lock < value {
-                        *alpha_lock = value;
-                    }
-                } else if !is_max_player2 && value < best_value {
-                    best_value = value;
-                    if *beta_lock > value {
-                        *beta_lock = value;
-                    }
-                }
-
-                if *alpha_lock >= *beta_lock {
-                    println!("SHOULD HAVE ENDED!");
-                }
-                (move_x, move_y, score)
-            })
-        })
-        .collect();
-
-    let scored_moves: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
-
-    return (
-        scored_moves
-            .iter()
-            .filter_map(|(x, y, s)| s.map(|s| (x.clone(), y.clone(), s.clone())))
-            .max_by_key(|a| if is_max_player { a.2 } else { -a.2 }),
-        scored_moves,
-    );
-    //
-    // for (move_x, move_y, score) in all_moves.iter_mut() {
-    //     let next_state = make_next_state(state, *move_x, *move_y);
-    //     let (value, depth) = alphabeta(&next_state, alpha, beta, !is_max_player, 1, max_depth);
-    //
-    //     let depth: i32 = depth.try_into().unwrap();
-    //     let value = if value > depth {
-    //         value - depth
-    //     } else if value < -depth {
-    //         value + depth
-    //     } else {
-    //         value
-    //     };
-    //
-    //     *score = Some(value);
-    //
-    //     if is_max_player && value > best_value {
-    //         best_value = value;
-    //         alpha = max(alpha, best_value);
-    //         best_move = Some((*move_x, *move_y, value));
-    //     } else if !is_max_player && value < best_value {
-    //         best_value = value;
-    //         beta = min(beta, best_value);
-    //         best_move = Some((*move_x, *move_y, value));
-    //     }
-    //
-    //     if alpha >= beta {
-    //         break;
-    //     }
-    // }
-    //
-    // (best_move, all_moves)
+    for iterative_depth in 1..=max_depth {
+        ctx.decay_history();
+        let (_, all_moves) =
+            get_ai_move_internal(&mut ss, iterative_depth, &previous_ordering, tt, &mut ctx);
+        let mut scored = all_moves;
+        scored.sort_by(|a, b| {
+            let sa = a.2.unwrap_or(if is_max_player { MIN_VALUE - 1 } else { MAX_VALUE + 1 });
+            let sb = b.2.unwrap_or(if is_max_player { MIN_VALUE - 1 } else { MAX_VALUE + 1 });
+            if is_max_player { sb.cmp(&sa) } else { sa.cmp(&sb) }
+        });
+        previous_ordering =
+            Some(scored.into_iter().map(|(r, c, _)| (r as u8, c as u8)).collect());
+    }
 }
 
-fn alphabeta(
-    state: &Gomoku,
-    mut alpha: i32,
-    mut beta: i32,
-    is_max_player: bool,
-    depth: usize,
+fn main_thread_iterative_deepening(
+    mut ss: SearchState,
     max_depth: usize,
-) -> (i32, usize) {
-    if is_terminal_state(state) {
-        return (state_value(state), depth);
+    tt: &TranspositionTable,
+) -> (Option<(usize, usize, i32)>, Vec<(usize, usize, Option<i32>)>) {
+    let is_max_player = ss.is_black_turn;
+    let mut previous_ordering: Option<Vec<(u8, u8)>> = None;
+    let mut last_result: (Option<(usize, usize, i32)>, Vec<(usize, usize, Option<i32>)>) =
+        (None, vec![]);
+    let mut ctx = SearchContext::new();
+
+    for iterative_depth in 1..=max_depth {
+        ctx.decay_history();
+        let (best_move, all_moves) =
+            get_ai_move_internal(&mut ss, iterative_depth, &previous_ordering, tt, &mut ctx);
+
+        let mut scored = all_moves.clone();
+        scored.sort_by(|a, b| {
+            let sa = a.2.unwrap_or(if is_max_player { MIN_VALUE - 1 } else { MAX_VALUE + 1 });
+            let sb = b.2.unwrap_or(if is_max_player { MIN_VALUE - 1 } else { MAX_VALUE + 1 });
+            if is_max_player { sb.cmp(&sa) } else { sa.cmp(&sb) }
+        });
+        previous_ordering =
+            Some(scored.into_iter().map(|(r, c, _)| (r as u8, c as u8)).collect());
+
+        last_result = (best_move, all_moves);
     }
 
-    if depth == max_depth {
-        return (heuristic_evaluation(state), depth);
+    last_result
+}
+
+// ---- Root search ----
+
+fn get_ai_move_internal(
+    ss: &mut SearchState,
+    max_depth: usize,
+    previous_ordering: &Option<Vec<(u8, u8)>>,
+    tt: &TranspositionTable,
+    ctx: &mut SearchContext,
+) -> (Option<(usize, usize, i32)>, Vec<(usize, usize, Option<i32>)>) {
+    let is_max_player = ss.is_black_turn;
+
+    let mut best_value = if is_max_player { MIN_VALUE - 1 } else { MAX_VALUE + 1 };
+    let mut alpha = MIN_VALUE;
+    let mut beta = MAX_VALUE;
+    let mut best_move: Option<(usize, usize, i32)> = None;
+
+    let candidate_moves = ss.get_candidate_moves(3);
+    let ordered_moves: Vec<(u8, u8)> = match previous_ordering {
+        Some(prev) => {
+            let prev_set: std::collections::HashSet<(u8, u8)> = prev.iter().cloned().collect();
+            let mut moves = prev.clone();
+            for m in candidate_moves {
+                if !prev_set.contains(&m) {
+                    moves.push(m);
+                }
+            }
+            moves
+        }
+        None => candidate_moves,
+    };
+
+    let mut ordered_moves = ordered_moves;
+    if ordered_moves.len() > 30 {
+        ordered_moves.truncate(30);
     }
 
-    let mut value = if is_max_player {
-        (MIN_VALUE - 1, max_depth)
-    } else {
-        (MAX_VALUE + 1, max_depth)
-    };
+    let mut all_moves: Vec<(usize, usize, Option<i32>)> = ordered_moves
+        .iter()
+        .map(|&(r, c)| (r as usize, c as usize, None))
+        .collect();
 
-    let radius = if depth < 5 {
-        3
-    } else if depth < 7 {
-        2
-    } else {
-        1
-    };
-    for (move_x, move_y) in get_candidate_moves(state, radius) {
-        let next_state = make_next_state(state, move_x, move_y);
+    for entry in all_moves.iter_mut() {
+        let (move_r, move_c) = (entry.0 as u8, entry.1 as u8);
 
-        if is_max_player {
-            value = max(
-                value,
-                alphabeta(&next_state, alpha, beta, false, depth + 1, max_depth),
-            );
-            alpha = max(alpha, value.0);
+        let undo = ss.make_move(move_r, move_c);
+        let (value, depth) =
+            alphabeta(ss, alpha, beta, !is_max_player, 1, max_depth, tt, ctx);
+        ss.unmake_move(undo);
+
+        let depth_i32: i32 = depth as i32;
+        let value = if value > depth_i32 {
+            value - depth_i32
+        } else if value < -depth_i32 {
+            value + depth_i32
         } else {
-            value = min(
-                value,
-                alphabeta(&next_state, alpha, beta, true, depth + 1, max_depth),
-            );
-            beta = min(beta, value.0);
+            value
+        };
+
+        entry.2 = Some(value);
+
+        if is_max_player && value > best_value {
+            best_value = value;
+            alpha = max(alpha, best_value);
+            best_move = Some((entry.0, entry.1, value));
+        } else if !is_max_player && value < best_value {
+            best_value = value;
+            beta = min(beta, best_value);
+            best_move = Some((entry.0, entry.1, value));
         }
 
         if alpha >= beta {
@@ -427,5 +321,220 @@ fn alphabeta(
         }
     }
 
-    value
+    (best_move, all_moves)
 }
+
+// ---- Alpha-Beta with make/unmake ----
+
+fn alphabeta(
+    state: &mut SearchState,
+    mut alpha: i32,
+    mut beta: i32,
+    is_max_player: bool,
+    depth: usize,
+    max_depth: usize,
+    tt: &TranspositionTable,
+    ctx: &mut SearchContext,
+) -> (i32, usize) {
+    // Terminal check
+    if let Some(val) = state.terminal_value() {
+        return (val, depth);
+    }
+
+    if depth == max_depth {
+        return (state.heuristic_eval(), depth);
+    }
+
+    // TT probe
+    let hash = state.zobrist_hash;
+    let remaining_depth = (max_depth - depth) as u8;
+    let mut tt_best_move: Option<(u8, u8)> = None;
+
+    if let Some(entry) = tt.probe(hash) {
+        tt_best_move = entry.best_move;
+        if entry.depth >= remaining_depth {
+            match entry.flag {
+                TTFlag::Exact => return (entry.score, depth),
+                TTFlag::LowerBound => {
+                    if entry.score >= beta {
+                        return (entry.score, depth);
+                    }
+                    alpha = max(alpha, entry.score);
+                }
+                TTFlag::UpperBound => {
+                    if entry.score <= alpha {
+                        return (entry.score, depth);
+                    }
+                    beta = min(beta, entry.score);
+                }
+            }
+            if alpha >= beta {
+                return (entry.score, depth);
+            }
+        }
+    }
+
+    let remaining = max_depth - depth;
+
+    let original_alpha = alpha;
+    let original_beta = beta;
+
+    // Move generation (minimum radius of 2 to avoid missing blocking moves)
+    let radius = if depth < 3 { 3 } else { 2 };
+    let scored_moves = state.get_candidate_moves_scored(radius);
+
+    // Split into moves and scores (already sorted by score descending)
+    let mut moves: Vec<(u8, u8)> = scored_moves.iter().map(|&(r, c, _)| (r, c)).collect();
+    let mut move_scores: Vec<i32> = scored_moves.iter().map(|&(_, _, s)| s).collect();
+    let max_score = move_scores.first().copied().unwrap_or(0);
+    let is_tactical = max_score >= 800_000;
+
+    // Null move pruning: skip if position is tactical (top move is a threat/block)
+    if remaining >= 3 && !is_tactical && state.captures(!state.is_black_turn) < 3 {
+        let z = zobrist();
+        state.is_black_turn = !state.is_black_turn;
+        state.zobrist_hash ^= z.side_to_move;
+
+        let null_reduction = 2;
+        let (null_val, _) = alphabeta(
+            state,
+            alpha,
+            beta,
+            !is_max_player,
+            depth + 1 + null_reduction,
+            max_depth,
+            tt,
+            ctx,
+        );
+
+        state.is_black_turn = !state.is_black_turn;
+        state.zobrist_hash ^= z.side_to_move;
+
+        if is_max_player && null_val >= beta {
+            return (beta, depth);
+        }
+        if !is_max_player && null_val <= alpha {
+            return (alpha, depth);
+        }
+    }
+
+    // TT best-move ordering: use remove+insert to preserve sort order
+    if let Some((br, bc)) = tt_best_move {
+        if let Some(pos) = moves.iter().position(|&(r, c)| r == br && c == bc) {
+            let m = moves.remove(pos);
+            let s = move_scores.remove(pos);
+            moves.insert(0, m);
+            move_scores.insert(0, s);
+        }
+    }
+
+    // Killer move ordering: insert killers at positions 1-2 (after TT move)
+    if depth < MAX_PLY {
+        let mut insert_pos = 1usize.min(moves.len());
+        for k in 0..2 {
+            if let Some(km) = ctx.killer_moves[depth][k] {
+                if let Some(pos) = moves[insert_pos..].iter().position(|&(r, c)| r == km.0 && c == km.1) {
+                    let m = moves.remove(insert_pos + pos);
+                    let s = move_scores.remove(insert_pos + pos);
+                    moves.insert(insert_pos, m);
+                    move_scores.insert(insert_pos, s);
+                    insert_pos += 1;
+                }
+            }
+        }
+    }
+
+    // Move count caps (based on remaining depth)
+    let max_moves = if is_tactical {
+        match remaining {
+            0..=1 => 7,
+            2..=3 => 9,
+            4..=5 => 11,
+            _ => 15,
+        }
+    } else {
+        match remaining {
+            0..=1 => 5,
+            2..=3 => 7,
+            4..=5 => 9,
+            _ => 12,
+        }
+    };
+    moves.truncate(max_moves);
+    move_scores.truncate(max_moves);
+
+    let mut best_score = if is_max_player { MIN_VALUE - 1 } else { MAX_VALUE + 1 };
+    let mut best_depth = max_depth;
+    let mut best_move_found: Option<(u8, u8)> = None;
+
+    for (move_idx, (move_r, move_c)) in moves.into_iter().enumerate() {
+        let undo = state.make_move(move_r, move_c);
+
+        // LMR: reduce depth for late moves at sufficient depth
+        // Skip LMR for high-priority moves (threats/blocks scoring >= 800K)
+        let move_score = move_scores[move_idx];
+        let (val, d) = if move_idx >= 2 && remaining >= 3 && move_score < 800_000 {
+            let r = ((remaining as f64).sqrt() * (move_idx as f64).sqrt() / 2.0) as usize;
+            let reduction = r.max(1).min(remaining - 1);
+            let reduced_max = max_depth - reduction;
+
+            let (v, d) = alphabeta(
+                state, alpha, beta, !is_max_player, depth + 1, reduced_max, tt, ctx,
+            );
+
+            // Re-search at full depth if reduced search improved alpha/beta
+            if (is_max_player && v > alpha) || (!is_max_player && v < beta) {
+                alphabeta(state, alpha, beta, !is_max_player, depth + 1, max_depth, tt, ctx)
+            } else {
+                (v, d)
+            }
+        } else {
+            alphabeta(state, alpha, beta, !is_max_player, depth + 1, max_depth, tt, ctx)
+        };
+
+        state.unmake_move(undo);
+
+        if is_max_player {
+            if val > best_score || (val == best_score && d < best_depth) {
+                best_score = val;
+                best_depth = d;
+                best_move_found = Some((move_r, move_c));
+            }
+            alpha = max(alpha, best_score);
+        } else {
+            if val < best_score || (val == best_score && d < best_depth) {
+                best_score = val;
+                best_depth = d;
+                best_move_found = Some((move_r, move_c));
+            }
+            beta = min(beta, best_score);
+        }
+
+        if alpha >= beta {
+            // Update killer moves and history on beta cutoff
+            ctx.update_killer(depth, (move_r, move_c));
+            ctx.update_history(state.is_black_turn, (move_r, move_c), remaining);
+            break;
+        }
+    }
+
+    // TT store
+    let flag = if best_score <= original_alpha {
+        TTFlag::UpperBound
+    } else if best_score >= original_beta {
+        TTFlag::LowerBound
+    } else {
+        TTFlag::Exact
+    };
+
+    tt.store(&TTEntry {
+        hash,
+        score: best_score,
+        depth: remaining_depth,
+        flag,
+        best_move: best_move_found,
+    });
+
+    (best_score, best_depth)
+}
+

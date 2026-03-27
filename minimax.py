@@ -15,7 +15,7 @@ from concurrent.futures import ProcessPoolExecutor
 MAX_VALUE = 100000
 MIN_VALUE = -100000
 
-MAX_DEPTH = 6
+MAX_DEPTH = 10
 
 
 def is_terminal_state(state: Gomoku):

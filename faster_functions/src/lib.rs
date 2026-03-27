@@ -4,6 +4,7 @@ use colored::*;
 
 pub mod heuristic;
 pub mod minimax;
+pub mod search_state;
 
 #[pyclass]
 #[derive(Clone, Copy, Debug, PartialEq)]
