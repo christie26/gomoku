@@ -6,8 +6,6 @@ use linked_hash_set::LinkedHashSet;
 use pyo3::prelude::*;
 
 use std::cmp::{max, min};
-use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
@@ -241,17 +239,6 @@ pub fn get_ai_move(
 ) {
     let is_max_player = state.current_player == Stone::Black;
 
-    let mut best_value = if is_max_player {
-        MIN_VALUE - 1
-    } else {
-        MAX_VALUE + 1
-    };
-    let mut alpha: Arc<Mutex<i32>> = Arc::new(Mutex::new(MIN_VALUE));
-    let mut beta: Arc<Mutex<i32>> = Arc::new(Mutex::new(MAX_VALUE));
-    // let mut alpha = MIN_VALUE;
-    // let mut beta = MAX_VALUE;
-
-    let mut best_move: Option<(usize, usize, i32)> = None;
     let mut all_moves: Vec<(usize, usize, Option<i32>)> = get_candidate_moves(state, 3)
         .into_iter()
         .map(|(x, y)| (x, y, None))
@@ -259,101 +246,69 @@ pub fn get_ai_move(
 
     let max_depth = if state.move_count < 4 { 3 } else { MAX_DEPTH };
 
-    let handles: Vec<_> = all_moves
-        .clone()
-        .into_iter()
-        .map(|(move_x, move_y, _)| {
-            let next_state = make_next_state(state, move_x, move_y);
-            let is_max_player2 = is_max_player.clone();
-            let max_depth2 = max_depth.clone();
-            let alpha = alpha.clone();
-            let beta = beta.clone();
-            thread::spawn(move || {
-                let alpha_val = *alpha.lock().unwrap();
-                let beta_val = *beta.lock().unwrap();
-                let (value, depth) = alphabeta(
-                    &next_state,
-                    // alpha_val,
-                    // beta_val,
-                    MIN_VALUE,
-                    MAX_VALUE,
-                    !is_max_player2,
-                    1,
-                    max_depth2,
-                );
+    let mut best_move: Option<(usize, usize, i32)> = None;
 
-                let depth: i32 = depth.try_into().unwrap();
-                let value = if value > depth {
-                    value - depth
-                } else if value < -depth {
-                    value + depth
-                } else {
-                    value
-                };
+    // Iterative deepening: search at increasing depths
+    for depth in 1..=max_depth {
+        let mut alpha = MIN_VALUE;
+        let mut beta = MAX_VALUE;
+        let mut best_value = if is_max_player {
+            MIN_VALUE - 1
+        } else {
+            MAX_VALUE + 1
+        };
+        let mut iteration_best_move: Option<(usize, usize, i32)> = None;
 
-                let score = Some(value);
+        for (move_x, move_y, score) in all_moves.iter_mut() {
+            let next_state = make_next_state(state, *move_x, *move_y);
+            let (value, d) = alphabeta(&next_state, alpha, beta, !is_max_player, 1, depth);
 
-                let mut alpha_lock = alpha.lock().unwrap();
-                let mut beta_lock = beta.lock().unwrap();
-                if is_max_player2 && value > best_value {
-                    if *alpha_lock > value {
-                        *alpha_lock = value;
-                    }
-                } else if !is_max_player2 && value < best_value {
-                    if *beta_lock > value {
-                        *beta_lock = value;
-                    }
-                }
+            let d: i32 = d.try_into().unwrap();
+            let value = if value > d {
+                value - d
+            } else if value < -d {
+                value + d
+            } else {
+                value
+            };
 
-                if *alpha_lock >= *beta_lock {
-                    println!("SHOULD HAVE ENDED!");
-                }
-                (move_x, move_y, score)
-            })
-        })
-        .collect();
+            *score = Some(value);
 
-    let scored_moves: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+            if is_max_player && value > best_value {
+                best_value = value;
+                alpha = max(alpha, best_value);
+                iteration_best_move = Some((*move_x, *move_y, value));
+            } else if !is_max_player && value < best_value {
+                best_value = value;
+                beta = min(beta, best_value);
+                iteration_best_move = Some((*move_x, *move_y, value));
+            }
 
-    return (
-        scored_moves
-            .iter()
-            .filter_map(|(x, y, s)| s.map(|s| (x.clone(), y.clone(), s.clone())))
-            .max_by_key(|a| if is_max_player {a.2} else {-a.2}),
-        scored_moves,
-    );
-    //
-    // for (move_x, move_y, score) in all_moves.iter_mut() {
-    //     let next_state = make_next_state(state, *move_x, *move_y);
-    //     let (value, depth) = alphabeta(&next_state, alpha, beta, !is_max_player, 1, max_depth);
-    //
-    //     let depth: i32 = depth.try_into().unwrap();
-    //     let value = if value > depth {
-    //         value - depth
-    //     } else if value < -depth {
-    //         value + depth
-    //     } else {
-    //         value
-    //     };
-    //
-    //     *score = Some(value);
-    //
-    //     if is_max_player && value > best_value {
-    //         best_value = value;
-    //         alpha = max(alpha, best_value);
-    //         best_move = Some((*move_x, *move_y, value));
-    //     } else if !is_max_player && value < best_value {
-    //         best_value = value;
-    //         beta = min(beta, best_value);
-    //         best_move = Some((*move_x, *move_y, value));
-    //     }
-    //
-    //     if alpha >= beta {
-    //         break;
-    //     }
-    // }
-    //
-    // (best_move, all_moves)
+            if alpha >= beta {
+                break;
+            }
+        }
+
+        best_move = iteration_best_move;
+
+        // Reorder moves for next iteration: best-scored moves first
+        // This improves pruning at the next deeper search
+        if is_max_player {
+            all_moves.sort_by(|a, b| {
+                let sa = a.2.unwrap_or(MIN_VALUE);
+                let sb = b.2.unwrap_or(MIN_VALUE);
+                sb.cmp(&sa) // descending for maximizer
+            });
+        } else {
+            all_moves.sort_by(|a, b| {
+                let sa = a.2.unwrap_or(MAX_VALUE);
+                let sb = b.2.unwrap_or(MAX_VALUE);
+                sa.cmp(&sb) // ascending for minimizer
+            });
+        }
+    }
+
+    (best_move, all_moves)
 }
 
 fn alphabeta(
