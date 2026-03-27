@@ -13,6 +13,10 @@ PADDING = 30
 LIGHT_BACKGROUND = "#FAEBD7"
 BORDER_COLOR = "#6f5c43"
 
+LABEL_FONT = "Phosphate"
+NAME_FONT = "Rockwell"
+TIMER_FONT = "Skia"
+
 
 class Player:
     def __init__(self, name: str, is_human: bool):
@@ -38,13 +42,14 @@ class GomokuGUI:
         self.left_frame = tk.Frame(self.main_frame)
         self.left_frame.pack(side="left")
 
-        self.right_frame = tk.Frame(self.main_frame, padx=5)
+        self.right_frame = tk.Frame(self.main_frame, padx=5, width=250)
         self.right_frame.pack(side="right", fill="y")
         self.right_frame.config(
             background=LIGHT_BACKGROUND,
             highlightbackground=BORDER_COLOR,
             highlightthickness=3,
         )
+        self.right_frame.pack_propagate(False)
 
         # ===== CANVAS =====
         self.canvas = tk.Canvas(
@@ -83,14 +88,14 @@ class GomokuGUI:
             name_label = tk.Label(
                 frame,
                 text=f"Player {p}",
-                font=("Arial", 12),
+                font=(NAME_FONT, 12),
                 background=LIGHT_BACKGROUND,
             )
             name_label.pack(side="left", padx=5)
 
             # time
             time_label = tk.Label(
-                frame, text="0ms", font=("Arial", 12), background=LIGHT_BACKGROUND
+                frame, text="0ms", font=(TIMER_FONT, 12), background=LIGHT_BACKGROUND
             )
             time_label.pack(side="right")
 
@@ -135,6 +140,7 @@ class GomokuGUI:
 
         self.draw_board(self.game.board)
 
+        self.highlight_active_player()
         self.start_turn_timer()
         self.update_live_timer()
 
@@ -165,7 +171,7 @@ class GomokuGUI:
         start = self.player_frames[p]["start_time"]
 
         elapsed = (time.time() - start) * 1000
-        self.player_frames[p]["time"].config(text=f"Time: {elapsed:.0f} ms")
+        self.player_frames[p]["time"].config(text=f"{elapsed:.0f} ms")
         self.player_frames[p]["start_time"] = time.time()
 
     def update_live_timer(self):
@@ -175,7 +181,7 @@ class GomokuGUI:
         if start:
             elapsed = (time.time() - start) * 1000
 
-            self.player_frames[p]["time"].config(text=f"Time: {elapsed:.0f} ms")
+            self.player_frames[p]["time"].config(text=f"{elapsed:.0f} ms")
 
         self.root.after(100, self.update_live_timer)
 
@@ -221,7 +227,7 @@ class GomokuGUI:
                 PADDING - LABEL_PADDING,
                 y,
                 text=str(i + 1),
-                font=("Arial", 10),
+                font=(LABEL_FONT, 10),
                 anchor="e",
                 fill=BORDER_COLOR,
             )
@@ -229,7 +235,7 @@ class GomokuGUI:
                 BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
                 y,
                 text=str(i + 1),
-                font=("Arial", 10),
+                font=(LABEL_FONT, 10),
                 anchor="w",
                 fill=BORDER_COLOR,
             )
@@ -237,7 +243,7 @@ class GomokuGUI:
                 x,
                 PADDING - LABEL_PADDING,
                 text=chr(ord("A") + i),
-                font=("Arial", 10),
+                font=(LABEL_FONT, 10),
                 anchor="s",
                 fill=BORDER_COLOR,
             )
@@ -245,7 +251,7 @@ class GomokuGUI:
                 x,
                 BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
                 text=chr(ord("A") + i),
-                font=("Arial", 10),
+                font=(LABEL_FONT, 10),
                 fill=BORDER_COLOR,
                 anchor="n",
             )
