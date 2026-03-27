@@ -234,11 +234,13 @@ fn make_next_state(state: &Gomoku, move_x: usize, move_y: usize) -> Gomoku {
 
 #[pyfunction]
 pub fn get_ai_move(
+    py: Python,
     state: &Gomoku,
 ) -> (
     Option<(usize, usize, i32)>,
     Vec<(usize, usize, Option<i32>)>,
 ) {
+    py.allow_threads(|| {
     let is_max_player = state.current_player == Stone::Black;
 
     let mut best_value = if is_max_player {
@@ -354,6 +356,8 @@ pub fn get_ai_move(
     // }
     //
     // (best_move, all_moves)
+
+  })
 }
 
 fn alphabeta(
