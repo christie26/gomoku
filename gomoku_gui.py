@@ -212,6 +212,21 @@ class GomokuGUI:
 
     # ===== DRAWING =====
     def draw_grid(self):
+        DOT_RADIUS = 4
+        points = [3, 9, 15]
+
+        for row in points:
+            for col in points:
+                x = PADDING + col * CELL_SIZE
+                y = PADDING + row * CELL_SIZE
+
+                self.canvas.create_oval(
+                    x - DOT_RADIUS,
+                    y - DOT_RADIUS,
+                    x + DOT_RADIUS,
+                    y + DOT_RADIUS,
+                    fill="black",
+                )
         for i in range(BOARD_SIZE):
             x = PADDING + i * CELL_SIZE
             y = PADDING + i * CELL_SIZE
@@ -222,21 +237,6 @@ class GomokuGUI:
             self.canvas.create_line(
                 x, PADDING, x, PADDING + (BOARD_SIZE - 1) * CELL_SIZE
             )
-            DOT_RADIUS = 4
-            points = [3, 9, 15]
-
-            for row in points:
-                for col in points:
-                    x = PADDING + col * CELL_SIZE
-                    y = PADDING + row * CELL_SIZE
-
-                    self.canvas.create_oval(
-                        x - DOT_RADIUS,
-                        y - DOT_RADIUS,
-                        x + DOT_RADIUS,
-                        y + DOT_RADIUS,
-                        fill="black",
-                    )
 
             self.canvas.create_text(
                 PADDING - LABEL_PADDING,
