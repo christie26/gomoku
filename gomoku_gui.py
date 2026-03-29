@@ -80,9 +80,21 @@ class GomokuGUI:
         # Undo/Redo buttons
         btn_frame = tk.Frame(root)
         btn_frame.pack(pady=5)
-        self.undo_btn = tk.Button(btn_frame, text="Undo", font=("Arial", 14), command=self.undo, state=tk.DISABLED)
+        self.undo_btn = tk.Button(
+            btn_frame,
+            text="Undo",
+            font=("Arial", 14),
+            command=self.undo,
+            state=tk.DISABLED,
+        )
         self.undo_btn.pack(side=tk.LEFT, padx=5)
-        self.redo_btn = tk.Button(btn_frame, text="Redo", font=("Arial", 14), command=self.redo, state=tk.DISABLED)
+        self.redo_btn = tk.Button(
+            btn_frame,
+            text="Redo",
+            font=("Arial", 14),
+            command=self.redo,
+            state=tk.DISABLED,
+        )
         self.redo_btn.pack(side=tk.LEFT, padx=5)
 
         self.info_label = tk.Label(root, text="", font=("Arial", 20))
@@ -423,24 +435,26 @@ class GomokuGUI:
                 self.change_turn()
                 if not self.players[self.game.current_player].is_human:
                     self.ai_play()
-        # else:
-        # self.update_alert_label(f"Invalid: {result.name}")
-                self.game.switch_player()
-                self.update_turn_label()
+
             # Record state for undo/redo
-            self.state_history = self.state_history[:self.history_index + 1]
+            self.state_history = self.state_history[: self.history_index + 1]
             self.state_history.append(self.game.clone_gomoku())
             self.history_index += 1
             self.update_undo_redo_buttons()
-        else:
-            self.update_alert_label(
-                f"Invalid move: {result.name.replace('_', ' ').title()}"
-            )
-        return result
+        # else:
+        # self.update_alert_label(
+        #     f"Invalid move: {result.name.replace('_', ' ').title()}"
+        # )
 
     def update_undo_redo_buttons(self):
         self.undo_btn.config(state=tk.NORMAL if self.history_index > 0 else tk.DISABLED)
-        self.redo_btn.config(state=tk.NORMAL if self.history_index < len(self.state_history) - 1 else tk.DISABLED)
+        self.redo_btn.config(
+            state=(
+                tk.NORMAL
+                if self.history_index < len(self.state_history) - 1
+                else tk.DISABLED
+            )
+        )
 
     def undo(self):
         if self.history_index <= 0:
@@ -463,7 +477,6 @@ class GomokuGUI:
         self.update_turn_label()
         self.update_alert_label("")
         self.update_undo_redo_buttons()
-
 
     def change_turn(self):
         self.end_turn_timer()
@@ -493,14 +506,65 @@ class GomokuGUI:
         )
 
 
+def load_board_str(filepath):
+    with open(filepath, "r") as f:
+        content = f.read()
+        return content
+
+
+def load_history(filepath):
+    with open(filepath, "r") as f:
+        content = f.read()
+        historys = content.removeprefix("move history:").strip()
+        history_array = historys.split("->")
+        history_tuples = [
+            (int(array.strip("()").split(",")[0]), int(array.strip("()").split(",")[1]))
+            for array in history_array
+        ]
+
+        return history_tuples
+
+
 # ===== MAIN =====
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--black", type=str, default=None)
     parser.add_argument("--white", type=str, default=None)
 
-    args = parser.parse_args()
+    parser.add_argument("--board", type=str, help="Path to board file")
 
+    parser.add_argument("--history", type=str, help="Path to move history file")
+
+    parser.add_argument(
+        "--history-until", type=int, help="index of history where you want to stop"
+    )
+
+    args = parser.parse_args()
+    board = None
+    current_player = "X"  # default
+
+    if args.board:
+        try:
+            # board, current_player = load_and_validate_board(args.board)
+            board = load_board_str(args.board)
+            print(f"Loaded board from {args.board}")
+        except Exception as e:
+            print(f"Failed to load board: {e}")
+            exit(1)
+
+    history = None
+
+    if args.history:
+        try:
+            history = load_history(args.history)
+            print(history, len(history))
+            if args.history_until:
+                history = history[: args.history_until]
+                print(args.history_until)
+                print(history, len(history))
+        except Exception as e:
+            print(f"Failed to load history: {e}")
+            exit(1)
     root = tk.Tk()
     app = GomokuGUI(root, args.black, args.white, history)
 
