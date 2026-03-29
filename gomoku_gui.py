@@ -4,7 +4,7 @@ from lib_gomoku import Gomoku, MoveResult, get_ai_move
 import argparse
 import time
 
-CELL_SIZE = 35
+CELL_SIZE = 65
 BOARD_SIZE = 19
 PADDING = 30
 LABEL_PADDING = 17
@@ -72,6 +72,7 @@ class GomokuGUI:
         # if user import history file, play those move first
         if history:
             for x, y in history:
+
                 self.play_one_turn(x, y)
 
         self.draw_board(self.game.board)
@@ -363,14 +364,27 @@ def load_board_str(filepath):
         content = f.read()
         return content
 
+def chess_to_xy(coord: str):
+     """Convert chess coordinate (e.g. 'a1', 's19') to (y, x) 0-indexed."""
+     col = ord(coord[0].lower()) - ord('a')
+     row = int(coord[1:]) - 1
+     if not (0 <= col < 19 and 0 <= row < 19):
+         raise ValueError(f"Coordinate {coord} out of bounds for 19x19 board")
+     return row, col
 
 def load_history(filepath):
     with open(filepath, "r") as f:
         content = f.read()
+        lines = content.splitlines()
+        for line in lines:
+            if line.strip() != "":
+                content = line
+                break
         historys = content.removeprefix("move history:").strip()
         history_array = historys.split("->")
         history_tuples = [
-            (int(array.strip("()").split(",")[0]), int(array.strip("()").split(",")[1]))
+            # (int(array.strip("()").split(",")[0]), int(array.strip("()").split(",")[1]))
+            chess_to_xy(array)
             for array in history_array
         ]
 
