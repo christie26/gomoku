@@ -89,9 +89,12 @@ class GomokuGUI:
             icon_label.pack(side="left")
 
             # name
+            label = (
+                f"Player {self.players[p].name}" if self.players[p].is_human else "AI"
+            )
             name_label = tk.Label(
                 frame,
-                text=f"Player {p}",
+                text=label,
                 font=(NAME_FONT, 12),
                 background=LIGHT_BACKGROUND,
             )
@@ -115,13 +118,12 @@ class GomokuGUI:
                 highlightthickness=1,
             )
 
-        self.init_player_boxes()
-
         # ===== SETTINGS =====
         self.settings_frame = tk.LabelFrame(
             self.right_frame, text="Settings", padx=10, pady=10
         )
-        self.settings_frame.pack(fill="x", pady=10)
+        # self.settings_frame.pack(fill="x", pady=10)
+        # self.settings_frame.place(x=10, y=150)
 
         tk.Label(self.settings_frame, text="Ruleset").pack(anchor="w")
         self.ruleset_var = tk.StringVar(value="Standard")
@@ -158,12 +160,6 @@ class GomokuGUI:
     #     self.player_names["O"] = (
     #         simpledialog.askstring("Player O", "Enter name for Player O") or "Player O"
     #     )
-
-    def init_player_boxes(self):
-        for p in ["X", "O"]:
-            name = self.players[p].name
-            label = f"{name} (AI)" if name.lower() == "ai" else name
-            self.player_frames[p]["name"].config(text=label)
 
     # ===== TIMER =====
     def start_turn_timer(self):
