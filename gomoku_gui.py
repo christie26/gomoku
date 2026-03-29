@@ -57,9 +57,6 @@ class GomokuGUI:
         self.right_frame.pack_propagate(False)
 
         # ===== CANVAS =====
-        # Undo/redo state history
-        self.state_history = [self.game.clone_gomoku()]
-        self.history_index = 0
 
         self.canvas = tk.Canvas(
             self.left_frame,
@@ -77,6 +74,11 @@ class GomokuGUI:
         # ===== PLAYER =====
         # if player1 is None or player2 is None:
         #     self.ask_player_names()
+
+        # ===== UNDO/REDO =====
+        self.state_history = [self.game.clone_gomoku()]
+        self.history_index = 0
+
         # Undo/Redo buttons
         btn_frame = tk.Frame(root)
         btn_frame.pack(pady=5)
@@ -100,7 +102,7 @@ class GomokuGUI:
         self.info_label = tk.Label(root, text="", font=("Arial", 20))
         self.info_label.pack(pady=5)
 
-        self.players = {"X": Player(player1, True), "O": Player(player2, True)}
+        self.players = {"X": Player(player1, True), "O": Player(player2, False)}
 
         # ===== PLAYER BOXES =====
         self.player_frames = {}
@@ -217,6 +219,11 @@ class GomokuGUI:
         self.highlight_active_player()
         self.start_turn_timer()
         self.update_live_timer()
+
+        # ===== HISTORY =====
+        if history:
+            for x, y in history:
+                self.play_one_turn(x, y)
 
         self.canvas.bind("<Button-1>", self.handle_click)
         self.canvas.bind("<Motion>", self.handle_hover)
@@ -382,6 +389,42 @@ class GomokuGUI:
             else:
                 canvas.itemconfig(c, fill="")
 
+    def draw_possible_stone(self, x, y, player, number, selected):
+        color = "black" if player == "X" else "white"
+        cx = PADDING + x * CELL_SIZE
+        cy = PADDING + y * CELL_SIZE
+        r = CELL_SIZE // 2 - 2
+
+        # Create stone with 50% opacity
+        outline_color = "red" if selected else ""
+        self.canvas.create_oval(
+            cx - r,
+            cy - r,
+            cx + r,
+            cy + r,
+            fill=color,
+            stipple="gray50",
+            outline=outline_color,
+        )
+        # Calculate appropriate font size based on stone size and number length
+        number_str = str(number)
+        # Base font size proportional to stone radius
+        base_font_size = max(6, r // 2)
+
+        # Reduce font size for longer numbers
+        if len(number_str) == 1:
+            font_size = base_font_size
+        elif len(number_str) == 2:
+            font_size = max(6, int(base_font_size))
+        else:  # 3+ digits
+            font_size = max(6, int(base_font_size))
+
+        # Add numeric text in the center
+        text_color = "white" if player == "X" else "black"
+        self.canvas.create_text(
+            cx, cy, text=number_str, fill=text_color, font=("Arial", font_size, "bold")
+        )
+
     # ===== HANDLE INPUT ====
     def handle_hover(self, event):
         x = round((event.x - PADDING) / CELL_SIZE)
@@ -461,10 +504,7 @@ class GomokuGUI:
             return
         self.history_index -= 1
         self.game = self.state_history[self.history_index].clone_gomoku()
-        self.draw_board(self.game.board)
-        self.update_info_label()
-        self.update_turn_label()
-        self.update_alert_label("")
+        self.draw_stones(self.game.board)
         self.update_undo_redo_buttons()
 
     def redo(self):
@@ -472,10 +512,7 @@ class GomokuGUI:
             return
         self.history_index += 1
         self.game = self.state_history[self.history_index].clone_gomoku()
-        self.draw_board(self.game.board)
-        self.update_info_label()
-        self.update_turn_label()
-        self.update_alert_label("")
+        self.draw_stones(self.game.board)
         self.update_undo_redo_buttons()
 
     def change_turn(self):
@@ -489,9 +526,14 @@ class GomokuGUI:
 
     def ai_play(self):
         def run_ai():
-            mv, _ = get_ai_move(self.game)
+            mv, moves = get_ai_move(self.game)
+
             if mv:
                 x, y, _ = mv
+                for m in moves:
+                    x1, y1, score1 = m
+                    selected = x == x1 and y == y1
+                    self.draw_possible_stone(y1, x1, "O", score1, selected)
                 self.root.after(0, lambda: self.play_one_turn(x, y))
 
         threading.Thread(target=run_ai, daemon=True).start()
@@ -575,7 +617,6 @@ if __name__ == "__main__":
         # app.game.current_player = current_player
         # app.game.opponent_player = "O" if current_player == "X" else "X"
         app.draw_board(app.game.board)
-        app.update_turn_label()
         # Reset history to match the loaded board
         app.state_history = [app.game.clone_gomoku()]
         app.history_index = 0
