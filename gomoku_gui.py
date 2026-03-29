@@ -67,6 +67,7 @@ class GomokuGUI:
             highlightthickness=2,
         )
         self.canvas.pack()
+        self.draw_grid()
 
         # ===== PLAYER =====
         # if player1 is None or player2 is None:
@@ -139,18 +140,14 @@ class GomokuGUI:
             command=self.on_toggle_debug,
         ).pack(anchor="w")
 
-        # ===== INIT BOARD =====
-        # if history:
-        #     for x, y in history:
-        #         self.play_one_turn(x, y)
-
-        self.draw_board(self.game.board)
-
+        # ===== INIT TIMER =====
         self.highlight_active_player()
         self.start_turn_timer()
         self.update_live_timer()
 
         self.canvas.bind("<Button-1>", self.handle_click)
+
+        self.canvas.bind("<Motion>", self.handle_hover)
 
     # ===== PLAYER SETUP =====
     # def ask_player_names(self):
@@ -185,7 +182,10 @@ class GomokuGUI:
 
         self.root.after(100, self.update_live_timer)
 
-    # ===== UI UPDATES =====
+    def on_toggle_debug(self):
+        print("Debug mode:", self.debug_var.get())
+
+    # ===== DRAWING =====
     def highlight_active_player(self):
         for p in ["X", "O"]:
             if p == self.game.current_player:
@@ -201,16 +201,6 @@ class GomokuGUI:
                     highlightthickness=1,
                 )
 
-    # def update_alert_label(self, msg):
-    #     self.alert_label.config(text=msg)
-
-    # def update_ai_label(self, msg):
-    #     self.ai_label.config(text=msg)
-
-    def on_toggle_debug(self):
-        print("Debug mode:", self.debug_var.get())
-
-    # ===== DRAWING =====
     def draw_grid(self):
         DOT_RADIUS = 4
         points = [3, 9, 15]
@@ -226,16 +216,17 @@ class GomokuGUI:
                     x + DOT_RADIUS,
                     y + DOT_RADIUS,
                     fill="black",
+                    tags="grid",
                 )
         for i in range(BOARD_SIZE):
             x = PADDING + i * CELL_SIZE
             y = PADDING + i * CELL_SIZE
 
             self.canvas.create_line(
-                PADDING, y, PADDING + (BOARD_SIZE - 1) * CELL_SIZE, y
+                PADDING, y, PADDING + (BOARD_SIZE - 1) * CELL_SIZE, y, tags="grid"
             )
             self.canvas.create_line(
-                x, PADDING, x, PADDING + (BOARD_SIZE - 1) * CELL_SIZE
+                x, PADDING, x, PADDING + (BOARD_SIZE - 1) * CELL_SIZE, tags="grid"
             )
 
             self.canvas.create_text(
@@ -245,6 +236,7 @@ class GomokuGUI:
                 font=(LABEL_FONT, 10),
                 anchor="e",
                 fill=BORDER_COLOR,
+                tags="grid",
             )
             self.canvas.create_text(
                 BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
@@ -253,6 +245,7 @@ class GomokuGUI:
                 font=(LABEL_FONT, 10),
                 anchor="w",
                 fill=BORDER_COLOR,
+                tags="grid",
             )
             self.canvas.create_text(
                 x,
@@ -261,6 +254,7 @@ class GomokuGUI:
                 font=(LABEL_FONT, 10),
                 anchor="s",
                 fill=BORDER_COLOR,
+                tags="grid",
             )
             self.canvas.create_text(
                 x,
@@ -269,24 +263,65 @@ class GomokuGUI:
                 font=(LABEL_FONT, 10),
                 fill=BORDER_COLOR,
                 anchor="n",
+                tags="grid",
             )
+
+    def draw_stones(self, board):
+        self.canvas.delete("stone")
+        for y, row in enumerate(board):
+            for x, cell in enumerate(row):
+                if cell != ".":
+                    self.draw_stone(x, y, cell)
 
     def draw_stone(self, x, y, player):
         color = "black" if player == "X" else "white"
         cx = PADDING + x * CELL_SIZE
         cy = PADDING + y * CELL_SIZE
         r = CELL_SIZE // 2 - 2
-        self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=color)
+        self.canvas.create_oval(
+            cx - r, cy - r, cx + r, cy + r, fill=color, tags="stone"
+        )
 
-    def draw_board(self, board):
-        self.canvas.delete("all")
-        self.draw_grid()
-        for y, row in enumerate(board):
-            for x, cell in enumerate(row):
-                if cell != ".":
-                    self.draw_stone(x, y, cell)
+    def draw_last_move(self, row, col):
+        cx = PADDING + row * CELL_SIZE
+        cy = PADDING + col * CELL_SIZE
+        r = CELL_SIZE // 2 - 12
+        self.canvas.delete("last-move")
 
-    # ===== GAME FLOW =====
+        self.last_move_marker = self.canvas.create_oval(
+            cx - r,
+            cy - r,
+            cx + r,
+            cy + r,
+            fill="red",
+            outline="red",
+            tags="last-move",
+        )
+
+    # ===== HANDLE INPUT ====
+    def handle_hover(self, event):
+        x = round((event.x - PADDING) / CELL_SIZE)
+        y = round((event.y - PADDING) / CELL_SIZE)
+
+        self.canvas.delete("hover")
+
+        if not (0 <= x < BOARD_SIZE and 0 <= y < BOARD_SIZE):
+            return
+
+        cx = PADDING + x * CELL_SIZE
+        cy = PADDING + y * CELL_SIZE
+        r = CELL_SIZE // 2 - 2
+
+        self.canvas.create_oval(
+            cx - r,
+            cy - r,
+            cx + r,
+            cy + r,
+            fill="lightgray",
+            width=1,
+            tags="hover",
+        )
+
     def handle_click(self, event):
         if self.players[self.game.current_player].is_human:
             x = round((event.x - PADDING) / CELL_SIZE)
@@ -295,16 +330,17 @@ class GomokuGUI:
         else:
             return
 
+    # ===== GAME FLOW =====
     def play_one_turn(self, x, y):
         result = self.game.is_valid_move(x, y)
-        # self.update_alert_label("")
 
         if result == MoveResult.VALID:
             capture = self.game.handle_move(x, y)
 
-            self.draw_board(self.game.board)
+            self.draw_stones(self.game.board)
 
             winner = self.game.get_winner()
+            self.draw_last_move(y, x)
             if winner:
                 self.finish_game(winner)
             else:
