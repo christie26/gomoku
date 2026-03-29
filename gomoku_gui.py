@@ -82,20 +82,27 @@ class GomokuGUI:
             frame = tk.Frame(self.right_frame, padx=10, pady=10)
             frame.pack(fill="x", pady=5)
 
+            top_frame = tk.Frame(frame, bg=LIGHT_BACKGROUND)
+            top_frame.pack(fill="x")
+
+            bottom_frame = tk.Frame(frame, bg=LIGHT_BACKGROUND)
+            bottom_frame.pack(fill="x", pady=(5, 0))
+
             # ⚫ / ⚪
             stone = "⚫" if p == "X" else "⚪"
             icon_label = tk.Label(
-                frame, text=stone, font=("Arial", 16), background=LIGHT_BACKGROUND
+                top_frame, text=stone, font=("Arial", 16), background=LIGHT_BACKGROUND
             )
             icon_label.pack(side="left")
 
             # name
-            label = (
-                f"Player {self.players[p].name}" if self.players[p].is_human else "AI"
-            )
             name_label = tk.Label(
-                frame,
-                text=label,
+                top_frame,
+                text=(
+                    f"Player {self.players[p].name}"
+                    if self.players[p].is_human
+                    else "AI"
+                ),
                 font=(NAME_FONT, 12),
                 background=LIGHT_BACKGROUND,
             )
@@ -103,15 +110,35 @@ class GomokuGUI:
 
             # time
             time_label = tk.Label(
-                frame, text="0ms", font=(TIMER_FONT, 12), background=LIGHT_BACKGROUND
+                top_frame,
+                text="0ms",
+                font=(TIMER_FONT, 12),
+                background=LIGHT_BACKGROUND,
             )
             time_label.pack(side="right")
+
+            # capture
+            capture_frame = tk.Frame(bottom_frame, bg=LIGHT_BACKGROUND)
+            capture_frame.pack(side="right", padx=10)
+
+            circles = []
+            for i in range(5):
+                c = tk.Label(
+                    capture_frame,
+                    text="○",
+                    font=("Arial", 12),
+                    bg=LIGHT_BACKGROUND,
+                )
+                c.pack(side="left", padx=1)
+                circles.append(c)
 
             self.player_frames[p] = {
                 "frame": frame,
                 "name": name_label,
                 "time": time_label,
                 "start_time": None,
+                "captures": 0,
+                "capture_icons": circles,
             }
             self.player_frames[p]["frame"].config(
                 background=LIGHT_BACKGROUND,
@@ -146,7 +173,6 @@ class GomokuGUI:
         self.update_live_timer()
 
         self.canvas.bind("<Button-1>", self.handle_click)
-
         self.canvas.bind("<Motion>", self.handle_hover)
 
     # ===== PLAYER SETUP =====
