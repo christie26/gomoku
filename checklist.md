@@ -13,6 +13,5 @@ DONE - draw small black circle to make grid prettier
 DONE - show position of last move 
 - handle invalid move
 
-History
-- add history in rust code
-- 
+redo/undo
+- update red point properly

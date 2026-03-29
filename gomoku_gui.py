@@ -405,6 +405,7 @@ class GomokuGUI:
             fill=color,
             stipple="gray50",
             outline=outline_color,
+            tags="debug",
         )
         # Calculate appropriate font size based on stone size and number length
         number_str = str(number)
@@ -422,7 +423,12 @@ class GomokuGUI:
         # Add numeric text in the center
         text_color = "white" if player == "X" else "black"
         self.canvas.create_text(
-            cx, cy, text=number_str, fill=text_color, font=("Arial", font_size, "bold")
+            cx,
+            cy,
+            text=number_str,
+            fill=text_color,
+            font=("Arial", font_size, "bold"),
+            tags="debug",
         )
 
     # ===== HANDLE INPUT ====
@@ -529,6 +535,7 @@ class GomokuGUI:
             mv, moves = get_ai_move(self.game)
 
             if mv:
+                self.canvas.delete("debug")
                 x, y, _ = mv
                 for m in moves:
                     x1, y1, score1 = m
