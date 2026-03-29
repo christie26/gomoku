@@ -176,7 +176,7 @@ pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
 
     let _radius = radius as usize;
 
-    let radius = 2 as usize;
+    let radius = 1 as usize;
     let move_set = LinkedHashSet::new();
     let move_set = get_critical_moves(move_set, state);
     let move_set = get_radius_moves(move_set, state, radius);
@@ -259,17 +259,37 @@ pub fn get_ai_move(
         };
         let mut iteration_best_move: Option<(usize, usize, i32)> = None;
 
+        let mut first = true;
         for (move_x, move_y, score) in all_moves.iter_mut() {
             let next_state = make_next_state(state, *move_x, *move_y);
-            let (value, d) = alphabeta(&next_state, alpha, beta, !is_max_player, 1, depth);
+
+            let (mut raw_value, mut d);
+            if first {
+                // Full window search on PV move
+                (raw_value, d) = alphabeta(&next_state, alpha, beta, !is_max_player, 1, depth);
+                first = false;
+            } else {
+                // Null window scout search
+                if is_max_player {
+                    (raw_value, d) = alphabeta(&next_state, alpha, alpha + 1, false, 1, depth);
+                    if raw_value > alpha && raw_value < beta {
+                        (raw_value, d) = alphabeta(&next_state, alpha, beta, false, 1, depth);
+                    }
+                } else {
+                    (raw_value, d) = alphabeta(&next_state, beta - 1, beta, true, 1, depth);
+                    if raw_value < beta && raw_value > alpha {
+                        (raw_value, d) = alphabeta(&next_state, alpha, beta, true, 1, depth);
+                    }
+                }
+            }
 
             let d: i32 = d.try_into().unwrap();
-            let value = if value > d {
-                value - d
-            } else if value < -d {
-                value + d
+            let value = if raw_value > d {
+                raw_value - d
+            } else if raw_value < -d {
+                raw_value + d
             } else {
-                value
+                raw_value
             };
 
             *score = Some(value);
@@ -333,20 +353,37 @@ fn alphabeta(
         (MAX_VALUE + 1, max_depth)
     };
 
+    let mut first = true;
     for (move_x, move_y) in get_candidate_moves(state, 3) {
         let next_state = make_next_state(state, move_x, move_y);
 
+        let mut child;
+        if first {
+            // Full window search on PV move
+            child = alphabeta(&next_state, alpha, beta, !is_max_player, depth + 1, max_depth);
+            first = false;
+        } else {
+            // Null window scout search
+            if is_max_player {
+                child = alphabeta(&next_state, alpha, alpha + 1, false, depth + 1, max_depth);
+                if child.0 > alpha && child.0 < beta {
+                    // Re-search with full window
+                    child = alphabeta(&next_state, alpha, beta, false, depth + 1, max_depth);
+                }
+            } else {
+                child = alphabeta(&next_state, beta - 1, beta, true, depth + 1, max_depth);
+                if child.0 < beta && child.0 > alpha {
+                    // Re-search with full window
+                    child = alphabeta(&next_state, alpha, beta, true, depth + 1, max_depth);
+                }
+            }
+        }
+
         if is_max_player {
-            value = max(
-                value,
-                alphabeta(&next_state, alpha, beta, false, depth + 1, max_depth),
-            );
+            value = max(value, child);
             alpha = max(alpha, value.0);
         } else {
-            value = min(
-                value,
-                alphabeta(&next_state, alpha, beta, true, depth + 1, max_depth),
-            );
+            value = min(value, child);
             beta = min(beta, value.0);
         }
 
