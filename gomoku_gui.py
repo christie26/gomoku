@@ -36,18 +36,22 @@ class GomokuGUI:
         self.game = Gomoku(size=self.board_size)
 
         # ===== MAIN LAYOUT =====
-        self.main_frame = tk.Frame(root)
+        self.main_frame = tk.Frame(
+            root,
+            highlightbackground=BORDER_COLOR,
+            highlightthickness=2,
+        )
         self.main_frame.pack()
 
         self.left_frame = tk.Frame(self.main_frame)
         self.left_frame.pack(side="left")
 
-        self.right_frame = tk.Frame(self.main_frame, padx=5, width=250)
+        self.right_frame = tk.Frame(self.main_frame, width=250)
         self.right_frame.pack(side="right", fill="y")
         self.right_frame.config(
             background=LIGHT_BACKGROUND,
             highlightbackground=BORDER_COLOR,
-            highlightthickness=3,
+            highlightthickness=2,
         )
         self.right_frame.pack_propagate(False)
 
@@ -60,7 +64,7 @@ class GomokuGUI:
         )
         self.canvas.config(
             highlightbackground=BORDER_COLOR,
-            highlightthickness=3,
+            highlightthickness=2,
         )
         self.canvas.pack()
 
