@@ -6,6 +6,60 @@ use linked_hash_set::LinkedHashSet;
 use pyo3::prelude::*;
 
 use std::cmp::{max, min};
+use std::time::Instant;
+
+pub struct SearchStats {
+    pub nodes_visited: u64,
+    pub cutoffs: u64,
+    pub total_children: u64,
+    pub children_explored: u64,
+    pub internal_nodes: u64,
+    pub branch_times: Vec<(usize, usize, Option<i32>, f64)>,
+    pub max_depth: usize,
+    /// Per-depth: (depth, elapsed_secs, nodes_visited)
+    pub depth_times: Vec<(usize, f64, u64)>,
+}
+
+impl SearchStats {
+    pub fn new() -> Self {
+        SearchStats {
+            nodes_visited: 0,
+            cutoffs: 0,
+            total_children: 0,
+            children_explored: 0,
+            internal_nodes: 0,
+            branch_times: Vec::new(),
+            max_depth: 0,
+            depth_times: Vec::new(),
+        }
+    }
+
+    pub fn avg_branching_factor(&self) -> f64 {
+        if self.internal_nodes == 0 {
+            return 0.0;
+        }
+        self.total_children as f64 / self.internal_nodes as f64
+    }
+
+    pub fn estimated_full_tree(&self) -> f64 {
+        if self.internal_nodes == 0 {
+            return 1.0;
+        }
+        let b = self.avg_branching_factor();
+        if b <= 1.0 {
+            return (self.max_depth + 1) as f64;
+        }
+        (b.powf(self.max_depth as f64 + 1.0) - 1.0) / (b - 1.0)
+    }
+
+    pub fn pruning_percent(&self) -> f64 {
+        let full = self.estimated_full_tree();
+        if full <= 1.0 {
+            return 0.0;
+        }
+        (1.0 - self.nodes_visited as f64 / full).max(0.0) * 100.0
+    }
+}
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
@@ -237,6 +291,17 @@ pub fn get_ai_move(
     Option<(usize, usize, i32)>,
     Vec<(usize, usize, Option<i32>)>,
 ) {
+    let (best, moves, _) = get_ai_move_with_stats(state);
+    (best, moves)
+}
+
+pub fn get_ai_move_with_stats(
+    state: &Gomoku,
+) -> (
+    Option<(usize, usize, i32)>,
+    Vec<(usize, usize, Option<i32>)>,
+    SearchStats,
+) {
     let is_max_player = state.current_player == Stone::Black;
 
     let mut all_moves: Vec<(usize, usize, Option<i32>)> = get_candidate_moves(state, 3)
@@ -247,9 +312,18 @@ pub fn get_ai_move(
     let max_depth = if state.move_count < 4 { 3 } else { MAX_DEPTH };
 
     let mut best_move: Option<(usize, usize, i32)> = None;
+    let mut final_stats = SearchStats::new();
+    let mut depth_times: Vec<(usize, f64, u64)> = Vec::new();
 
     // Iterative deepening: search at increasing depths
     for depth in 1..=max_depth {
+        let depth_start = Instant::now();
+        let mut stats = SearchStats::new();
+        stats.max_depth = depth;
+        // Count root as an internal node
+        stats.internal_nodes += 1;
+        stats.total_children += all_moves.len() as u64;
+
         let mut alpha = MIN_VALUE;
         let mut beta = MAX_VALUE;
         let mut best_value = if is_max_player {
@@ -258,30 +332,35 @@ pub fn get_ai_move(
             MAX_VALUE + 1
         };
         let mut iteration_best_move: Option<(usize, usize, i32)> = None;
+        let mut branch_times = Vec::new();
 
         let mut first = true;
         for (move_x, move_y, score) in all_moves.iter_mut() {
+            stats.children_explored += 1;
+            let branch_start = Instant::now();
             let next_state = make_next_state(state, *move_x, *move_y);
 
             let (mut raw_value, mut d);
             if first {
                 // Full window search on PV move
-                (raw_value, d) = alphabeta(&next_state, alpha, beta, !is_max_player, 1, depth);
+                (raw_value, d) = alphabeta(&next_state, alpha, beta, !is_max_player, 1, depth, &mut stats);
                 first = false;
             } else {
                 // Null window scout search
                 if is_max_player {
-                    (raw_value, d) = alphabeta(&next_state, alpha, alpha + 1, false, 1, depth);
+                    (raw_value, d) = alphabeta(&next_state, alpha, alpha + 1, false, 1, depth, &mut stats);
                     if raw_value > alpha && raw_value < beta {
-                        (raw_value, d) = alphabeta(&next_state, alpha, beta, false, 1, depth);
+                        (raw_value, d) = alphabeta(&next_state, alpha, beta, false, 1, depth, &mut stats);
                     }
                 } else {
-                    (raw_value, d) = alphabeta(&next_state, beta - 1, beta, true, 1, depth);
+                    (raw_value, d) = alphabeta(&next_state, beta - 1, beta, true, 1, depth, &mut stats);
                     if raw_value < beta && raw_value > alpha {
-                        (raw_value, d) = alphabeta(&next_state, alpha, beta, true, 1, depth);
+                        (raw_value, d) = alphabeta(&next_state, alpha, beta, true, 1, depth, &mut stats);
                     }
                 }
             }
+
+            let branch_elapsed = branch_start.elapsed().as_secs_f64();
 
             let d: i32 = d.try_into().unwrap();
             let value = if raw_value > d {
@@ -293,6 +372,7 @@ pub fn get_ai_move(
             };
 
             *score = Some(value);
+            branch_times.push((*move_x, *move_y, Some(value), branch_elapsed));
 
             if is_max_player && value > best_value {
                 best_value = value;
@@ -305,11 +385,15 @@ pub fn get_ai_move(
             }
 
             if alpha >= beta {
+                stats.cutoffs += 1;
                 break;
             }
         }
 
+        stats.branch_times = branch_times;
+        depth_times.push((depth, depth_start.elapsed().as_secs_f64(), stats.nodes_visited));
         best_move = iteration_best_move;
+        final_stats = stats;
 
         // Reorder moves for next iteration: best-scored moves first
         // This improves pruning at the next deeper search
@@ -328,7 +412,9 @@ pub fn get_ai_move(
         }
     }
 
-    (best_move, all_moves)
+    final_stats.depth_times = depth_times;
+
+    (best_move, all_moves, final_stats)
 }
 
 fn alphabeta(
@@ -338,7 +424,10 @@ fn alphabeta(
     is_max_player: bool,
     depth: usize,
     max_depth: usize,
+    stats: &mut SearchStats,
 ) -> (i32, usize) {
+    stats.nodes_visited += 1;
+
     if is_terminal_state(state) {
         return (state_value(state), depth);
     }
@@ -347,6 +436,10 @@ fn alphabeta(
         return (heuristic_evaluation(state), depth);
     }
 
+    let candidates = get_candidate_moves(state, 3);
+    stats.internal_nodes += 1;
+    stats.total_children += candidates.len() as u64;
+
     let mut value = if is_max_player {
         (MIN_VALUE - 1, max_depth)
     } else {
@@ -354,27 +447,28 @@ fn alphabeta(
     };
 
     let mut first = true;
-    for (move_x, move_y) in get_candidate_moves(state, 3) {
+    for (move_x, move_y) in candidates {
+        stats.children_explored += 1;
         let next_state = make_next_state(state, move_x, move_y);
 
         let mut child;
         if first {
             // Full window search on PV move
-            child = alphabeta(&next_state, alpha, beta, !is_max_player, depth + 1, max_depth);
+            child = alphabeta(&next_state, alpha, beta, !is_max_player, depth + 1, max_depth, stats);
             first = false;
         } else {
             // Null window scout search
             if is_max_player {
-                child = alphabeta(&next_state, alpha, alpha + 1, false, depth + 1, max_depth);
+                child = alphabeta(&next_state, alpha, alpha + 1, false, depth + 1, max_depth, stats);
                 if child.0 > alpha && child.0 < beta {
                     // Re-search with full window
-                    child = alphabeta(&next_state, alpha, beta, false, depth + 1, max_depth);
+                    child = alphabeta(&next_state, alpha, beta, false, depth + 1, max_depth, stats);
                 }
             } else {
-                child = alphabeta(&next_state, beta - 1, beta, true, depth + 1, max_depth);
+                child = alphabeta(&next_state, beta - 1, beta, true, depth + 1, max_depth, stats);
                 if child.0 < beta && child.0 > alpha {
                     // Re-search with full window
-                    child = alphabeta(&next_state, alpha, beta, true, depth + 1, max_depth);
+                    child = alphabeta(&next_state, alpha, beta, true, depth + 1, max_depth, stats);
                 }
             }
         }
@@ -388,6 +482,7 @@ fn alphabeta(
         }
 
         if alpha >= beta {
+            stats.cutoffs += 1;
             break;
         }
     }

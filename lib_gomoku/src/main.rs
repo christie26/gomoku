@@ -1,5 +1,5 @@
 use lib_gomoku::{
-    minimax::{self, BOARD_SIZE},
+    minimax::{self, BOARD_SIZE, SearchStats},
     Gomoku,
 };
 use signal_hook::{
@@ -42,10 +42,11 @@ fn main() {
         let start = Instant::now();
 
         let game_clone = game.clone();
-        let handle = thread::spawn(move || minimax::get_ai_move(&game_clone));
+        let handle = thread::spawn(move || minimax::get_ai_move_with_stats(&game_clone));
 
         let mut res = None;
         let mut moves = vec![];
+        let mut stats = SearchStats::new();
 
         loop {
             if !running.load(Ordering::SeqCst) {
@@ -55,7 +56,7 @@ fn main() {
 
             // Check if task completed
             if handle.is_finished() {
-                (res, moves) = handle.join().unwrap();
+                (res, moves, stats) = handle.join().unwrap();
                 break;
             }
 
@@ -77,6 +78,7 @@ fn main() {
             elapsed,
             moves.len()
         );
+        print_search_stats(&stats);
         durations.push(elapsed);
         game.handle_move(x as i32, y as i32);
         game.print_board(vec![(x, y)]);
@@ -157,5 +159,52 @@ fn plot_bar_chart(values: &[f64]) {
         }
 
         println!("{:3}: {:6.2}s {}", i + 1, value, bar);
+    }
+}
+
+fn print_search_stats(stats: &SearchStats) {
+    // Iterative deepening progression
+    if !stats.depth_times.is_empty() {
+        print!("  ID: ");
+        for (i, &(d, secs, nodes)) in stats.depth_times.iter().enumerate() {
+            if i > 0 {
+                print!(" -> ");
+            }
+            print!("d{}={:.3}s/{}n", d, secs, nodes);
+        }
+        println!();
+    }
+
+    println!(
+        "  Depth {} | Nodes: {} | Cutoffs: {} | Avg branch: {:.1} | Pruned: ~{:.1}%, nodes_visited: {}, estimatedfull: {}",
+        stats.max_depth,
+        stats.nodes_visited,
+        stats.cutoffs,
+        stats.avg_branching_factor(),
+        stats.pruning_percent(),
+        stats.nodes_visited,
+        stats.estimated_full_tree(),
+    );
+
+    if stats.branch_times.is_empty() {
+        return;
+    }
+
+    let max_show = 10;
+    let total = stats.branch_times.len();
+    println!("  Branch timings:");
+
+    for (i, &(x, y, score, secs)) in stats.branch_times.iter().enumerate() {
+        if i >= max_show {
+            let others_count = total - max_show;
+            let others_time: f64 = stats.branch_times[max_show..].iter().map(|b| b.3).sum();
+            println!("    + {} others {:>26.3}s", others_count, others_time);
+            break;
+        }
+        let score_str = match score {
+            Some(s) => format!("{:>7}pts", s),
+            None => "       N/A".to_string(),
+        };
+        println!("    ({:>2},{:>2}) = {} {:>8.3}s", x, y, score_str, secs);
     }
 }
