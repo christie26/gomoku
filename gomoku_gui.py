@@ -11,6 +11,7 @@ BOARD_SIZE = 19
 PADDING = 30
 
 LIGHT_BACKGROUND = "#FAEBD7"
+SELECT_BACKGROUND = "#A68A64"
 BORDER_COLOR = "#6f5c43"
 
 LABEL_FONT = "Phosphate"
@@ -73,14 +74,14 @@ class GomokuGUI:
         # if player1 is None or player2 is None:
         #     self.ask_player_names()
 
-        self.players = {"X": Player(player1, True), "O": Player(player2, False)}
+        self.players = {"X": Player(player1, True), "O": Player(player2, True)}
 
         # ===== PLAYER BOXES =====
         self.player_frames = {}
 
         for p in ["X", "O"]:
             frame = tk.Frame(self.right_frame, padx=10, pady=10)
-            frame.pack(fill="x", pady=5)
+            frame.pack(fill="x")
 
             top_frame = tk.Frame(frame, bg=LIGHT_BACKGROUND)
             top_frame.pack(fill="x")
@@ -111,26 +112,40 @@ class GomokuGUI:
             # time
             time_label = tk.Label(
                 top_frame,
-                text="0ms",
+                text="0 ms",
                 font=(TIMER_FONT, 12),
                 background=LIGHT_BACKGROUND,
             )
             time_label.pack(side="right")
 
             # capture
-            capture_frame = tk.Frame(bottom_frame, bg=LIGHT_BACKGROUND)
-            capture_frame.pack(side="right", padx=10)
+            CAPTURE_SIZE = 20
+            CAPTURE_GAP = 28
+
+            capture_canvas = tk.Canvas(
+                bottom_frame,
+                width=5 * (CAPTURE_SIZE + CAPTURE_GAP),
+                height=CAPTURE_SIZE + 2,
+                bg=LIGHT_BACKGROUND,
+                highlightthickness=0,
+            )
+            capture_canvas.pack(side="left", padx=3, pady=10)
 
             circles = []
+
             for i in range(5):
-                c = tk.Label(
-                    capture_frame,
-                    text="○",
-                    font=("Arial", 12),
-                    bg=LIGHT_BACKGROUND,
+                x = i * (CAPTURE_SIZE + CAPTURE_GAP)
+
+                circle = capture_canvas.create_oval(
+                    x,
+                    0,
+                    x + CAPTURE_SIZE,
+                    CAPTURE_SIZE,
+                    outline="gray40",
+                    width=1,
+                    fill="",
                 )
-                c.pack(side="left", padx=1)
-                circles.append(c)
+                circles.append(circle)
 
             self.player_frames[p] = {
                 "frame": frame,
@@ -138,7 +153,8 @@ class GomokuGUI:
                 "time": time_label,
                 "start_time": None,
                 "captures": 0,
-                "capture_icons": circles,
+                "capture_circles": circles,
+                "capture_canvas": capture_canvas,
             }
             self.player_frames[p]["frame"].config(
                 background=LIGHT_BACKGROUND,
@@ -148,10 +164,14 @@ class GomokuGUI:
 
         # ===== SETTINGS =====
         self.settings_frame = tk.LabelFrame(
-            self.right_frame, text="Settings", padx=10, pady=10
+            self.right_frame,
+            padx=10,
+            pady=10,
+            bg=LIGHT_BACKGROUND,
+            highlightbackground=BORDER_COLOR,
+            highlightthickness=1,
         )
-        # self.settings_frame.pack(fill="x", pady=10)
-        # self.settings_frame.place(x=10, y=150)
+        self.settings_frame.pack(fill="x", pady=10)
 
         tk.Label(self.settings_frame, text="Ruleset").pack(anchor="w")
         self.ruleset_var = tk.StringVar(value="Standard")
@@ -215,16 +235,12 @@ class GomokuGUI:
     def highlight_active_player(self):
         for p in ["X", "O"]:
             if p == self.game.current_player:
-                self.player_frames[p]["frame"].config(
-                    background=LIGHT_BACKGROUND,
-                    highlightbackground=BORDER_COLOR,
-                    highlightthickness=3,
+                self.player_frames[p]["name"].config(
+                    background=SELECT_BACKGROUND,
                 )
             else:
-                self.player_frames[p]["frame"].config(
+                self.player_frames[p]["name"].config(
                     background=LIGHT_BACKGROUND,
-                    highlightbackground=BORDER_COLOR,
-                    highlightthickness=1,
                 )
 
     def draw_grid(self):
@@ -324,6 +340,22 @@ class GomokuGUI:
             tags="last-move",
         )
 
+    def update_captures(self, player, count=1):
+        data = self.player_frames[player]
+        data["captures"] += count
+
+        total = data["captures"]
+        circles = data["capture_circles"]
+        canvas = data["capture_canvas"]
+
+        fill_color = "black" if player == "X" else "white"
+
+        for i, c in enumerate(circles):
+            if i < total:
+                canvas.itemconfig(c, fill=fill_color)
+            else:
+                canvas.itemconfig(c, fill="")
+
     # ===== HANDLE INPUT ====
     def handle_hover(self, event):
         x = round((event.x - PADDING) / CELL_SIZE)
@@ -337,13 +369,15 @@ class GomokuGUI:
         cx = PADDING + x * CELL_SIZE
         cy = PADDING + y * CELL_SIZE
         r = CELL_SIZE // 2 - 2
+        color = "#333333" if self.game.current_player == "X" else "#DDDDDD"
 
         self.canvas.create_oval(
             cx - r,
             cy - r,
             cx + r,
             cy + r,
-            fill="lightgray",
+            fill=color,
+            stipple="gray50",
             width=1,
             tags="hover",
         )
@@ -361,7 +395,9 @@ class GomokuGUI:
         result = self.game.is_valid_move(x, y)
 
         if result == MoveResult.VALID:
-            capture = self.game.handle_move(x, y)
+            _, capture = self.game.handle_move(x, y)
+            if capture:
+                self.update_captures(self.game.current_player)
 
             self.draw_stones(self.game.board)
 
