@@ -34,10 +34,22 @@ class GomokuGUI:
         # Create board and canvas
         self.game = Gomoku(size=self.board_size)
 
+        # Undo/redo state history
+        self.state_history = [self.game.clone_gomoku()]
+        self.history_index = 0
+
         self.canvas = tk.Canvas(
             root, width=self.canvas_size, height=self.canvas_size, bg="burlywood"
         )
         self.canvas.pack(pady=0, padx=0)
+
+        # Undo/Redo buttons
+        btn_frame = tk.Frame(root)
+        btn_frame.pack(pady=5)
+        self.undo_btn = tk.Button(btn_frame, text="Undo", font=("Arial", 14), command=self.undo, state=tk.DISABLED)
+        self.undo_btn.pack(side=tk.LEFT, padx=5)
+        self.redo_btn = tk.Button(btn_frame, text="Redo", font=("Arial", 14), command=self.redo, state=tk.DISABLED)
+        self.redo_btn.pack(side=tk.LEFT, padx=5)
 
         self.info_label = tk.Label(root, text="", font=("Arial", 20))
         self.info_label.pack(pady=5)
@@ -255,11 +267,42 @@ class GomokuGUI:
             else:
                 self.game.switch_player()
                 self.update_turn_label()
+            # Record state for undo/redo
+            self.state_history = self.state_history[:self.history_index + 1]
+            self.state_history.append(self.game.clone_gomoku())
+            self.history_index += 1
+            self.update_undo_redo_buttons()
         else:
             self.update_alert_label(
                 f"Invalid move: {result.name.replace('_', ' ').title()}"
             )
         return result
+
+    def update_undo_redo_buttons(self):
+        self.undo_btn.config(state=tk.NORMAL if self.history_index > 0 else tk.DISABLED)
+        self.redo_btn.config(state=tk.NORMAL if self.history_index < len(self.state_history) - 1 else tk.DISABLED)
+
+    def undo(self):
+        if self.history_index <= 0:
+            return
+        self.history_index -= 1
+        self.game = self.state_history[self.history_index].clone_gomoku()
+        self.draw_board(self.game.board)
+        self.update_info_label()
+        self.update_turn_label()
+        self.update_alert_label("")
+        self.update_undo_redo_buttons()
+
+    def redo(self):
+        if self.history_index >= len(self.state_history) - 1:
+            return
+        self.history_index += 1
+        self.game = self.state_history[self.history_index].clone_gomoku()
+        self.draw_board(self.game.board)
+        self.update_info_label()
+        self.update_turn_label()
+        self.update_alert_label("")
+        self.update_undo_redo_buttons()
 
     def ai_play(self):
         start_time = time.time()
@@ -391,5 +434,9 @@ if __name__ == "__main__":
         # app.game.opponent_player = "O" if current_player == "X" else "X"
         app.draw_board(app.game.board)
         app.update_turn_label()
+        # Reset history to match the loaded board
+        app.state_history = [app.game.clone_gomoku()]
+        app.history_index = 0
+        app.update_undo_redo_buttons()
 
     root.mainloop()
