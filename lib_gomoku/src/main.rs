@@ -109,7 +109,7 @@ fn main() {
         "move history: {}",
         move_history
             .iter()
-            .map(|u| format!("{u:?}"))
+            .map(|u| format!("{}", position_name(&(u.0 as i32, u.1 as i32))))
             .collect::<Vec<String>>()
             .join("->")
     );
@@ -175,14 +175,13 @@ fn print_search_stats(stats: &SearchStats) {
     }
 
     println!(
-        "  Depth {} | Nodes: {} | Cutoffs: {} | Avg branch: {:.1} | Pruned: ~{:.1}%, nodes_visited: {}, estimatedfull: {}",
+        "  Depth {} | Nodes: {} | Cutoffs: {} | TT hits: {} | Avg branch: {:.1} | Pruned: ~{:.1}%",
         stats.max_depth,
         stats.nodes_visited,
         stats.cutoffs,
+        stats.tt_hits,
         stats.avg_branching_factor(),
         stats.pruning_percent(),
-        stats.nodes_visited,
-        stats.estimated_full_tree(),
     );
 
     if stats.branch_times.is_empty() {
@@ -204,6 +203,6 @@ fn print_search_stats(stats: &SearchStats) {
             Some(s) => format!("{:>7}pts", s),
             None => "       N/A".to_string(),
         };
-        println!("    ({:>2},{:>2}) = {} {:>8.3}s", x, y, score_str, secs);
+        println!("    {:>4} = {} {:>8.3}s", position_name(&(x as i32, y as i32)), score_str, secs);
     }
 }

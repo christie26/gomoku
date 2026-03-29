@@ -8,6 +8,49 @@ use pyo3::prelude::*;
 use std::cmp::{max, min};
 use std::time::Instant;
 
+// --- Transposition Table ---
+
+#[derive(Clone, Copy, PartialEq)]
+enum TTFlag {
+    Exact,
+    LowerBound,
+    UpperBound,
+}
+
+#[derive(Clone, Copy)]
+struct TTEntry {
+    hash: u64,
+    depth_remaining: usize,
+    value: i32,
+    flag: TTFlag,
+    best_move: Option<(usize, usize)>,
+}
+
+struct TranspositionTable {
+    entries: Vec<Option<TTEntry>>,
+    mask: usize,
+}
+
+impl TranspositionTable {
+    fn new(size_bits: usize) -> Self {
+        let size = 1 << size_bits;
+        TranspositionTable {
+            entries: vec![None; size],
+            mask: size - 1,
+        }
+    }
+
+    fn lookup(&self, hash: u64) -> Option<&TTEntry> {
+        let idx = hash as usize & self.mask;
+        self.entries[idx].as_ref().filter(|e| e.hash == hash)
+    }
+
+    fn store(&mut self, hash: u64, entry: TTEntry) {
+        let idx = hash as usize & self.mask;
+        self.entries[idx] = Some(entry);
+    }
+}
+
 pub struct SearchStats {
     pub nodes_visited: u64,
     pub cutoffs: u64,
@@ -18,6 +61,7 @@ pub struct SearchStats {
     pub max_depth: usize,
     /// Per-depth: (depth, elapsed_secs, nodes_visited)
     pub depth_times: Vec<(usize, f64, u64)>,
+    pub tt_hits: u64,
 }
 
 impl SearchStats {
@@ -31,6 +75,7 @@ impl SearchStats {
             branch_times: Vec::new(),
             max_depth: 0,
             depth_times: Vec::new(),
+            tt_hits: 0,
         }
     }
 
@@ -291,6 +336,7 @@ pub fn get_ai_move(
     Option<(usize, usize, i32)>,
     Vec<(usize, usize, Option<i32>)>,
 ) {
+    println!("state: {:#?}", state);
     let (best, moves, _) = get_ai_move_with_stats(state);
     (best, moves)
 }
@@ -314,6 +360,7 @@ pub fn get_ai_move_with_stats(
     let mut best_move: Option<(usize, usize, i32)> = None;
     let mut final_stats = SearchStats::new();
     let mut depth_times: Vec<(usize, f64, u64)> = Vec::new();
+    let mut tt = TranspositionTable::new(20); // 1M entries
 
     // Iterative deepening: search at increasing depths
     for depth in 1..=max_depth {
@@ -343,19 +390,19 @@ pub fn get_ai_move_with_stats(
             let (mut raw_value, mut d);
             if first {
                 // Full window search on PV move
-                (raw_value, d) = alphabeta(&next_state, alpha, beta, !is_max_player, 1, depth, &mut stats);
+                (raw_value, d) = alphabeta(&next_state, alpha, beta, !is_max_player, 1, depth, &mut stats, &mut tt);
                 first = false;
             } else {
                 // Null window scout search
                 if is_max_player {
-                    (raw_value, d) = alphabeta(&next_state, alpha, alpha + 1, false, 1, depth, &mut stats);
+                    (raw_value, d) = alphabeta(&next_state, alpha, alpha + 1, false, 1, depth, &mut stats, &mut tt);
                     if raw_value > alpha && raw_value < beta {
-                        (raw_value, d) = alphabeta(&next_state, alpha, beta, false, 1, depth, &mut stats);
+                        (raw_value, d) = alphabeta(&next_state, alpha, beta, false, 1, depth, &mut stats, &mut tt);
                     }
                 } else {
-                    (raw_value, d) = alphabeta(&next_state, beta - 1, beta, true, 1, depth, &mut stats);
+                    (raw_value, d) = alphabeta(&next_state, beta - 1, beta, true, 1, depth, &mut stats, &mut tt);
                     if raw_value < beta && raw_value > alpha {
-                        (raw_value, d) = alphabeta(&next_state, alpha, beta, true, 1, depth, &mut stats);
+                        (raw_value, d) = alphabeta(&next_state, alpha, beta, true, 1, depth, &mut stats, &mut tt);
                     }
                 }
             }
@@ -425,6 +472,7 @@ fn alphabeta(
     depth: usize,
     max_depth: usize,
     stats: &mut SearchStats,
+    tt: &mut TranspositionTable,
 ) -> (i32, usize) {
     stats.nodes_visited += 1;
 
@@ -436,9 +484,36 @@ fn alphabeta(
         return (heuristic_evaluation(state), depth);
     }
 
-    let candidates = get_candidate_moves(state, 3);
+    let depth_remaining = max_depth - depth;
+    let orig_alpha = alpha;
+
+    // TT lookup
+    let mut tt_best_move: Option<(usize, usize)> = None;
+    if let Some(entry) = tt.lookup(state.hash) {
+        tt_best_move = entry.best_move;
+        if entry.depth_remaining >= depth_remaining {
+            stats.tt_hits += 1;
+            match entry.flag {
+                TTFlag::Exact => return (entry.value, depth),
+                TTFlag::LowerBound => alpha = max(alpha, entry.value),
+                TTFlag::UpperBound => beta = min(beta, entry.value),
+            }
+            if alpha >= beta {
+                return (entry.value, depth);
+            }
+        }
+    }
+
+    let mut candidates = get_candidate_moves(state, 3);
     stats.internal_nodes += 1;
     stats.total_children += candidates.len() as u64;
+
+    // Move ordering: put TT best move first
+    if let Some(tt_move) = tt_best_move {
+        if let Some(pos) = candidates.iter().position(|&m| m == tt_move) {
+            candidates.swap(0, pos);
+        }
+    }
 
     let mut value = if is_max_player {
         (MIN_VALUE - 1, max_depth)
@@ -446,38 +521,43 @@ fn alphabeta(
         (MAX_VALUE + 1, max_depth)
     };
 
+    let mut best_move_here: Option<(usize, usize)> = None;
     let mut first = true;
-    for (move_x, move_y) in candidates {
+    for (move_x, move_y) in &candidates {
         stats.children_explored += 1;
-        let next_state = make_next_state(state, move_x, move_y);
+        let next_state = make_next_state(state, *move_x, *move_y);
 
         let mut child;
         if first {
             // Full window search on PV move
-            child = alphabeta(&next_state, alpha, beta, !is_max_player, depth + 1, max_depth, stats);
+            child = alphabeta(&next_state, alpha, beta, !is_max_player, depth + 1, max_depth, stats, tt);
             first = false;
         } else {
             // Null window scout search
             if is_max_player {
-                child = alphabeta(&next_state, alpha, alpha + 1, false, depth + 1, max_depth, stats);
+                child = alphabeta(&next_state, alpha, alpha + 1, false, depth + 1, max_depth, stats, tt);
                 if child.0 > alpha && child.0 < beta {
-                    // Re-search with full window
-                    child = alphabeta(&next_state, alpha, beta, false, depth + 1, max_depth, stats);
+                    child = alphabeta(&next_state, alpha, beta, false, depth + 1, max_depth, stats, tt);
                 }
             } else {
-                child = alphabeta(&next_state, beta - 1, beta, true, depth + 1, max_depth, stats);
+                child = alphabeta(&next_state, beta - 1, beta, true, depth + 1, max_depth, stats, tt);
                 if child.0 < beta && child.0 > alpha {
-                    // Re-search with full window
-                    child = alphabeta(&next_state, alpha, beta, true, depth + 1, max_depth, stats);
+                    child = alphabeta(&next_state, alpha, beta, true, depth + 1, max_depth, stats, tt);
                 }
             }
         }
 
         if is_max_player {
-            value = max(value, child);
+            if child >= value {
+                value = child;
+                best_move_here = Some((*move_x, *move_y));
+            }
             alpha = max(alpha, value.0);
         } else {
-            value = min(value, child);
+            if child <= value {
+                value = child;
+                best_move_here = Some((*move_x, *move_y));
+            }
             beta = min(beta, value.0);
         }
 
@@ -486,6 +566,22 @@ fn alphabeta(
             break;
         }
     }
+
+    // TT store
+    let flag = if value.0 <= orig_alpha {
+        TTFlag::UpperBound
+    } else if value.0 >= beta {
+        TTFlag::LowerBound
+    } else {
+        TTFlag::Exact
+    };
+    tt.store(state.hash, TTEntry {
+        hash: state.hash,
+        depth_remaining,
+        value: value.0,
+        flag,
+        best_move: best_move_here,
+    });
 
     value
 }

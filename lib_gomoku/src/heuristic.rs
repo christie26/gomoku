@@ -39,5 +39,5 @@ pub fn heuristic_evaluation(state: &Gomoku) -> i32 {
     // println!("Current: {:?}, Move: ({}), heuristic: {}\n",state.current_player, state.current_move.map(|x|
     //   format!("{}, {}", x.0, x.1))
     //   .unwrap_or("null".to_string()) ,heuristic);
-    heuristic
+    heuristic / 2
 }
