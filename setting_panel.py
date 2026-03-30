@@ -6,11 +6,12 @@ BORDER_COLOR = "#6f5c43"
 
 
 class SettingsPanel:
-    def __init__(self, right_frame, on_start_game, on_undo, on_redo):
+    def __init__(self, right_frame, on_start_game, on_undo, on_redo, on_debug):
         self.is_playing = False
         self.on_start_game = on_start_game
         self.on_undo = on_undo
         self.on_redo = on_redo
+        self.on_debug = on_debug
 
         self.setting_frame = tk.Frame(right_frame, padx=10, pady=10)
         self.setting_frame.pack(fill="x")
@@ -129,12 +130,13 @@ class SettingsPanel:
         )
         debug_frame.pack(pady=5, anchor="w")
 
-        self.debug_enabled = tk.BooleanVar()
+        self.debug_enabled = tk.BooleanVar(value=True)
 
         self.debug_checkbox = tk.Checkbutton(
             self.setting_frame,
             text="Use Debug Tool",
             variable=self.debug_enabled,
+            command=self._on_debug_changed,
             font=NAME_FONT,
             background=LIGHT_BACKGROUND,
         )
@@ -176,25 +178,10 @@ class SettingsPanel:
         )
         self.redo_button.pack(pady=5, padx=5, anchor="w")
 
-    # -------------------
-    # Game State Control
-    # -------------------
+    def _on_debug_changed(self):
+        value = self.debug_enabled.get()
+        self.on_debug(value)
+
     def start_game(self):
         self.is_playing = True
-        self.update_controls_state()
         self.on_start_game()
-
-    def update_controls_state(self):
-        state = "disabled" if self.is_playing else "normal"
-
-        # Disable play mode + ruleset
-        for widget in self.setting_frame.winfo_children():
-            for child in widget.winfo_children():
-                if isinstance(child, tk.Radiobutton):
-                    child.config(state=state)
-
-        # Debug tool should stay enabled
-        self.debug_checkbox.config(state="normal")
-
-        # Optional: disable start button during game
-        self.start_button.config(state=state)

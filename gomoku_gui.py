@@ -35,6 +35,7 @@ class GomokuGUI:
 
         self.game = Gomoku(size=self.board_size)
         self.is_playing = False
+        self.debug = True
 
         # ===== MAIN LAYOUT =====
         self.main_frame = tk.Frame(
@@ -170,6 +171,7 @@ class GomokuGUI:
             on_start_game=self.start_game,
             on_undo=self.undo,
             on_redo=self.redo,
+            on_debug=self.debug_onoff,
         )
 
         # ===== HISTORY =====
@@ -504,6 +506,11 @@ class GomokuGUI:
             self.draw_last_move(current_move[1], current_move[0])
         self.update_undo_redo_buttons()
 
+    def debug_onoff(self, debug: bool):
+        self.debug = debug
+        if not debug:
+            self.canvas.delete("debug")
+
     def change_turn(self):
         self.end_turn_timer()
 
@@ -523,7 +530,8 @@ class GomokuGUI:
                 for m in moves:
                     x1, y1, score1 = m
                     selected = x == x1 and y == y1
-                    self.draw_possible_stone(y1, x1, "O", score1, selected)
+                    if self.debug:
+                        self.draw_possible_stone(y1, x1, "O", score1, selected)
                 self.root.after(0, lambda: self.play_one_turn(x, y))
 
         threading.Thread(target=run_ai, daemon=True).start()
