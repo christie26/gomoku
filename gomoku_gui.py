@@ -452,6 +452,10 @@ class GomokuGUI:
         self.players = self.create_players(self.setting_panel.play_mode.get())
 
         ruleset = self.setting_panel.ruleset.get()
+
+        for rb in self.setting_panel.setting_ratios:
+            rb.config(state="disabled")
+
         print(f"Game is started with {ruleset} ruleset")
 
         self.highlight_active_player()

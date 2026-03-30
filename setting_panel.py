@@ -14,6 +14,8 @@ class SettingsPanel:
 
         self.setting_frame = tk.Frame(right_frame, padx=10, pady=10)
         self.setting_frame.pack(fill="x")
+        self.setting_ratios = []
+
         self.build_ui()
 
     def get_frame(self):
@@ -44,35 +46,38 @@ class SettingsPanel:
 
         self.play_mode = tk.StringVar(value="pvp")
 
-        tk.Radiobutton(
+        rb1 = tk.Radiobutton(
             self.setting_frame,
             text="Player vs Player",
             variable=self.play_mode,
             value="pvp",
             font=NAME_FONT,
             background=LIGHT_BACKGROUND,
-            tags="setting",
-        ).pack(anchor="w")
+        )
+        rb1.pack(anchor="w")
+        self.setting_ratios.append(rb1)
 
-        tk.Radiobutton(
+        rb2 = tk.Radiobutton(
             self.setting_frame,
             text="Player vs AI",
             variable=self.play_mode,
             value="pvsa",
             font=NAME_FONT,
             background=LIGHT_BACKGROUND,
-            tags="setting",
-        ).pack(anchor="w")
+        )
+        rb2.pack(anchor="w")
+        self.setting_ratios.append(rb2)
 
-        tk.Radiobutton(
+        rb3 = tk.Radiobutton(
             self.setting_frame,
             text="AI vs Player",
             variable=self.play_mode,
             value="avsp",
             font=NAME_FONT,
             background=LIGHT_BACKGROUND,
-            tags="setting",
-        ).pack(anchor="w")
+        )
+        rb3.pack(anchor="w")
+        self.setting_ratios.append(rb3)
 
         # -------------------
         # 2. Ruleset
@@ -89,23 +94,27 @@ class SettingsPanel:
 
         self.ruleset = tk.StringVar(value="1")
 
-        tk.Radiobutton(
+        rb4 = tk.Radiobutton(
             self.setting_frame,
             text="Option 1",
             variable=self.ruleset,
             value="1",
             font=NAME_FONT,
             background=LIGHT_BACKGROUND,
-        ).pack(anchor="w")
+        )
+        rb4.pack(anchor="w")
+        self.setting_ratios.append(rb4)
 
-        tk.Radiobutton(
+        rb5 = tk.Radiobutton(
             self.setting_frame,
             text="Option 2",
             variable=self.ruleset,
             value="2",
             font=NAME_FONT,
             background=LIGHT_BACKGROUND,
-        ).pack(anchor="w")
+        )
+        rb5.pack(anchor="w")
+        self.setting_ratios.append(rb5)
 
         # -------------------
         # 3. Debug Tool
@@ -135,9 +144,13 @@ class SettingsPanel:
         # 4. Start Button
         # -------------------
         self.start_button = tk.Button(
-            self.setting_frame, text="Start Game", command=self.start_game
+            self.setting_frame,
+            text="Start Game",
+            command=self.start_game,
+            font=NAME_FONT,
+            highlightbackground=LIGHT_BACKGROUND,
         )
-        self.start_button.pack(fill="x", pady=5)
+        self.start_button.pack(fill="both", pady=0, padx=20)
 
         # -------------------
         # 5. Undo / Redo
@@ -146,12 +159,22 @@ class SettingsPanel:
         action_frame.pack(fill="x", pady=5)
 
         self.undo_button = tk.Button(
-            action_frame, text="Undo", command=self.on_undo, state=tk.DISABLED
+            action_frame,
+            text="Undo",
+            command=self.on_undo,
+            state=tk.DISABLED,
+            font=NAME_FONT,
+            highlightbackground=LIGHT_BACKGROUND,
         )
-        self.undo_button.pack(fill="x")
+        self.undo_button.pack(fill="x", padx=0, pady=0)
 
         self.redo_button = tk.Button(
-            action_frame, text="Redo", command=self.on_redo, state=tk.DISABLED
+            action_frame,
+            text="Redo",
+            command=self.on_redo,
+            state=tk.DISABLED,
+            font=NAME_FONT,
+            highlightbackground=LIGHT_BACKGROUND,
         )
         self.redo_button.pack(fill="x")
 

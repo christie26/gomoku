@@ -5,9 +5,9 @@ DONE - on the side, show how many 'capture' they made
 
 Setting
 DONE - user can choose ruleset -> will be implemented later
+DONE - disable play_mode, ruleset once game starts
 - can toggle debug print on/off
-- disable play_mode, ruleset once game starts
-- make start, undo, redo button prettier
+DONE - make start, undo, redo button prettier
 
 Game board
 DONE - add hover when player put mouse on the board
