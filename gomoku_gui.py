@@ -458,6 +458,7 @@ class GomokuGUI:
 
         for rb in self.setting_panel.setting_ratios:
             rb.config(state="disabled")
+        self.setting_panel.start_button.config(state="disabled")
 
         print(f"Game is started with {ruleset} ruleset")
 
@@ -484,6 +485,7 @@ class GomokuGUI:
             }
 
     def undo(self, event=None):
+        self.canvas.delete("last-move")
         if self.history_index <= 0:
             return
         self.history_index -= 1
