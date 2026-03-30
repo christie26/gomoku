@@ -102,7 +102,7 @@ class GomokuGUI:
         self.info_label = tk.Label(root, text="", font=("Arial", 20))
         self.info_label.pack(pady=5)
 
-        self.players = {"X": Player(player1, True), "O": Player(player2, False)}
+        self.players = {"X": Player(player1, True), "O": Player(player2, True)}
 
         # ===== PLAYER BOXES =====
         self.player_frames = {}
@@ -511,6 +511,10 @@ class GomokuGUI:
         self.history_index -= 1
         self.game = self.state_history[self.history_index].clone_gomoku()
         self.draw_stones(self.game.board)
+        current_move = self.game.current_move
+        if current_move:
+            self.canvas.delete("last-move")
+            self.draw_last_move(current_move[1], current_move[0])
         self.update_undo_redo_buttons()
 
     def redo(self):
@@ -519,6 +523,10 @@ class GomokuGUI:
         self.history_index += 1
         self.game = self.state_history[self.history_index].clone_gomoku()
         self.draw_stones(self.game.board)
+        current_move = self.game.current_move
+        if current_move:
+            self.canvas.delete("last-move")
+            self.draw_last_move(current_move[1], current_move[0])
         self.update_undo_redo_buttons()
 
     def change_turn(self):
