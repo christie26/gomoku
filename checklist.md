@@ -1,6 +1,6 @@
 User status
 DONE - show player name and if it's AI player or human player
-DONE - when this player is playing, show timer going up in ms and once they played freeze it
+DONE - make timer
 DONE - on the side, show how many 'capture' they made
 
 Setting
@@ -23,3 +23,6 @@ DONE - update red point properly
 
 Player pannel
 - make it seperate file for visibility
+
+FIX 
+- hover is broken

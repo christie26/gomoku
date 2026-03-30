@@ -38,7 +38,7 @@ class SettingsPanel:
             self.setting_frame,
             text="Play Mode",
             padx=5,
-            pady=5,
+            pady=0,
             font=(NAME_FONT, 16),
             background=LIGHT_BACKGROUND,
         )
@@ -86,7 +86,7 @@ class SettingsPanel:
             self.setting_frame,
             text="Ruleset",
             padx=5,
-            pady=5,
+            pady=0,
             font=(NAME_FONT, 16),
             background=LIGHT_BACKGROUND,
         )
@@ -123,7 +123,7 @@ class SettingsPanel:
             self.setting_frame,
             text="Debug Tool",
             padx=5,
-            pady=5,
+            pady=0,
             font=(NAME_FONT, 16),
             background=LIGHT_BACKGROUND,
         )
@@ -140,43 +140,41 @@ class SettingsPanel:
         )
         self.debug_checkbox.pack(anchor="w")
 
-        # -------------------
         # 4. Start Button
-        # -------------------
+        button_frame = tk.Frame(
+            self.setting_frame, pady=20, background=LIGHT_BACKGROUND
+        )
+        button_frame.pack(fill="x")
+
         self.start_button = tk.Button(
-            self.setting_frame,
+            button_frame,
             text="Start Game",
             command=self.start_game,
             font=NAME_FONT,
             highlightbackground=LIGHT_BACKGROUND,
         )
-        self.start_button.pack(fill="both", pady=0, padx=20)
+        self.start_button.pack(pady=5, padx=5, anchor="w")
 
-        # -------------------
         # 5. Undo / Redo
-        # -------------------
-        action_frame = tk.Frame(self.setting_frame)
-        action_frame.pack(fill="x", pady=5)
-
         self.undo_button = tk.Button(
-            action_frame,
+            button_frame,
             text="Undo",
             command=self.on_undo,
             state=tk.DISABLED,
             font=NAME_FONT,
             highlightbackground=LIGHT_BACKGROUND,
         )
-        self.undo_button.pack(fill="x", padx=0, pady=0)
+        self.undo_button.pack(pady=5, padx=5, anchor="w")
 
         self.redo_button = tk.Button(
-            action_frame,
+            button_frame,
             text="Redo",
             command=self.on_redo,
             state=tk.DISABLED,
             font=NAME_FONT,
             highlightbackground=LIGHT_BACKGROUND,
         )
-        self.redo_button.pack(fill="x")
+        self.redo_button.pack(pady=5, padx=5, anchor="w")
 
     # -------------------
     # Game State Control
