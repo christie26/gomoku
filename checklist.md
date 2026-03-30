@@ -9,17 +9,17 @@ DONE - disable play_mode, ruleset once game starts
 DONE - can toggle debug print on/off
 DONE - make start, undo, redo button prettier
 
+redo/undo
+DONE - update red point properly
+DONE - in case of redo, undo don't trigger timer 
+DONE - bind with arrow 
+
 Game board
 DONE - add hover when player put mouse on the board
 DONE - draw small black circle to make grid prettier
 DONE - show position of last move 
 - handle invalid move
 - before start game, make board gray
-
-redo/undo
-DONE - update red point properly
-DONE - in case of redo, undo don't trigger timer 
-DONE - bind with arrow 
 
 Player pannel
 - make it seperate file for visibility
