@@ -6,7 +6,7 @@ DONE - on the side, show how many 'capture' they made
 Setting
 DONE - user can choose ruleset -> will be implemented later
 DONE - disable play_mode, ruleset once game starts
-- can toggle debug print on/off
+DONE - can toggle debug print on/off
 DONE - make start, undo, redo button prettier
 
 Game board
@@ -18,8 +18,8 @@ DONE - show position of last move
 
 redo/undo
 DONE - update red point properly
-- in case of redo, undo don't trigger timer 
-- bind with arrow 
+DONE - in case of redo, undo don't trigger timer 
+DONE - bind with arrow 
 
 Player pannel
 - make it seperate file for visibility

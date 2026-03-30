@@ -181,19 +181,20 @@ class GomokuGUI:
 
         self.canvas.bind("<Button-1>", self.handle_click)
         self.canvas.bind("<Motion>", self.handle_hover)
+        self.root.bind("<Left>", self.undo)
+        self.root.bind("<Right>", self.redo)
 
     # ===== TIMER =====
     def start_turn_timer(self):
         p = self.game.current_player
         self.player_frames[p]["start_time"] = time.time()
 
-    def end_turn_timer(self):
-        p = self.game.current_player
+    def end_turn_timer(self, p):
         start = self.player_frames[p]["start_time"]
-
-        elapsed = (time.time() - start) * 1000
-        self.player_frames[p]["time"].config(text=f"{elapsed:.0f} ms")
-        self.player_frames[p]["start_time"] = time.time()
+        if start:
+            elapsed = (time.time() - start) * 1000
+            self.player_frames[p]["time"].config(text=f"{elapsed:.0f} ms")
+        self.player_frames[p]["start_time"] = None
 
     def update_live_timer(self):
         p = self.game.current_player
@@ -482,7 +483,7 @@ class GomokuGUI:
                 "O": Player(self.player2_name, True),
             }
 
-    def undo(self):
+    def undo(self, event=None):
         if self.history_index <= 0:
             return
         self.history_index -= 1
@@ -493,8 +494,10 @@ class GomokuGUI:
             self.canvas.delete("last-move")
             self.draw_last_move(current_move[1], current_move[0])
         self.update_undo_redo_buttons()
+        self.end_turn_timer("X")
+        self.end_turn_timer("O")
 
-    def redo(self):
+    def redo(self, event=None):
         if self.history_index >= len(self.state_history) - 1:
             return
         self.history_index += 1
@@ -512,7 +515,7 @@ class GomokuGUI:
             self.canvas.delete("debug")
 
     def change_turn(self):
-        self.end_turn_timer()
+        self.end_turn_timer(self.game.current_player)
 
         self.game.switch_player()
 
