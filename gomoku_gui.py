@@ -1,9 +1,9 @@
 import tkinter as tk
-from tkinter import simpledialog
 from lib_gomoku import Gomoku, MoveResult, get_ai_move
 import argparse
 import time
 import threading
+from setting_panel import SettingsPanel
 
 CELL_SIZE = 32
 LABEL_PADDING = 10
@@ -16,7 +16,6 @@ BORDER_COLOR = "#6f5c43"
 
 LABEL_FONT = "Phosphate"
 NAME_FONT = "Rockwell"
-TIMER_FONT = "Skia"
 
 
 class Player:
@@ -35,6 +34,7 @@ class GomokuGUI:
         self.canvas_size = self.cell_size * (self.board_size - 1) + PADDING * 2
 
         self.game = Gomoku(size=self.board_size)
+        self.is_playing = False
 
         # ===== MAIN LAYOUT =====
         self.main_frame = tk.Frame(
@@ -57,7 +57,6 @@ class GomokuGUI:
         self.right_frame.pack_propagate(False)
 
         # ===== CANVAS =====
-
         self.canvas = tk.Canvas(
             self.left_frame,
             width=self.canvas_size,
@@ -71,37 +70,12 @@ class GomokuGUI:
         self.canvas.pack()
         self.draw_grid()
 
-        # ===== PLAYER =====
-        # if player1 is None or player2 is None:
-        #     self.ask_player_names()
-
         # ===== UNDO/REDO =====
         self.state_history = [self.game.clone_gomoku()]
         self.history_index = 0
 
-        # Undo/Redo buttons
-        btn_frame = tk.Frame(root)
-        btn_frame.pack(pady=5)
-        self.undo_btn = tk.Button(
-            btn_frame,
-            text="Undo",
-            font=("Arial", 14),
-            command=self.undo,
-            state=tk.DISABLED,
-        )
-        self.undo_btn.pack(side=tk.LEFT, padx=5)
-        self.redo_btn = tk.Button(
-            btn_frame,
-            text="Redo",
-            font=("Arial", 14),
-            command=self.redo,
-            state=tk.DISABLED,
-        )
-        self.redo_btn.pack(side=tk.LEFT, padx=5)
-
-        self.info_label = tk.Label(root, text="", font=("Arial", 20))
-        self.info_label.pack(pady=5)
-
+        self.player1_name = player1
+        self.player2_name = player2
         self.players = {"X": Player(player1, True), "O": Player(player2, True)}
 
         # ===== PLAYER BOXES =====
@@ -132,7 +106,7 @@ class GomokuGUI:
                     if self.players[p].is_human
                     else "AI"
                 ),
-                font=(NAME_FONT, 12),
+                font=(NAME_FONT, 14),
                 background=LIGHT_BACKGROUND,
             )
             name_label.pack(side="left", padx=5)
@@ -141,7 +115,7 @@ class GomokuGUI:
             time_label = tk.Label(
                 top_frame,
                 text="0 ms",
-                font=(TIMER_FONT, 12),
+                font=(NAME_FONT, 12),
                 background=LIGHT_BACKGROUND,
             )
             time_label.pack(side="right")
@@ -191,34 +165,12 @@ class GomokuGUI:
             )
 
         # ===== SETTINGS =====
-        self.settings_frame = tk.LabelFrame(
+        self.setting_panel = SettingsPanel(
             self.right_frame,
-            padx=10,
-            pady=10,
-            bg=LIGHT_BACKGROUND,
-            highlightbackground=BORDER_COLOR,
-            highlightthickness=1,
+            on_start_game=self.start_game,
+            on_undo=self.undo,
+            on_redo=self.redo,
         )
-        self.settings_frame.pack(fill="x", pady=10)
-
-        tk.Label(self.settings_frame, text="Ruleset").pack(anchor="w")
-        self.ruleset_var = tk.StringVar(value="Standard")
-        tk.OptionMenu(self.settings_frame, self.ruleset_var, "Standard", "Pro").pack(
-            fill="x"
-        )
-
-        self.debug_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(
-            self.settings_frame,
-            text="Debug Mode",
-            variable=self.debug_var,
-            command=self.on_toggle_debug,
-        ).pack(anchor="w")
-
-        # ===== INIT TIMER =====
-        self.highlight_active_player()
-        self.start_turn_timer()
-        self.update_live_timer()
 
         # ===== HISTORY =====
         if history:
@@ -227,15 +179,6 @@ class GomokuGUI:
 
         self.canvas.bind("<Button-1>", self.handle_click)
         self.canvas.bind("<Motion>", self.handle_hover)
-
-    # ===== PLAYER SETUP =====
-    # def ask_player_names(self):
-    #     self.player_names["X"] = (
-    #         simpledialog.askstring("Player X", "Enter name for Player X") or "Player X"
-    #     )
-    #     self.player_names["O"] = (
-    #         simpledialog.askstring("Player O", "Enter name for Player O") or "Player O"
-    #     )
 
     # ===== TIMER =====
     def start_turn_timer(self):
@@ -260,9 +203,6 @@ class GomokuGUI:
             self.player_frames[p]["time"].config(text=f"{elapsed:.0f} ms")
 
         self.root.after(100, self.update_live_timer)
-
-    def on_toggle_debug(self):
-        print("Debug mode:", self.debug_var.get())
 
     # ===== DRAWING =====
     def highlight_active_player(self):
@@ -308,7 +248,7 @@ class GomokuGUI:
                 PADDING - LABEL_PADDING,
                 y,
                 text=str(i + 1),
-                font=(LABEL_FONT, 10),
+                font=(LABEL_FONT, 14),
                 anchor="e",
                 fill=BORDER_COLOR,
                 tags="grid",
@@ -317,7 +257,7 @@ class GomokuGUI:
                 BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
                 y,
                 text=str(i + 1),
-                font=(LABEL_FONT, 10),
+                font=(LABEL_FONT, 14),
                 anchor="w",
                 fill=BORDER_COLOR,
                 tags="grid",
@@ -326,7 +266,7 @@ class GomokuGUI:
                 x,
                 PADDING - LABEL_PADDING,
                 text=chr(ord("A") + i),
-                font=(LABEL_FONT, 10),
+                font=(LABEL_FONT, 14),
                 anchor="s",
                 fill=BORDER_COLOR,
                 tags="grid",
@@ -335,7 +275,7 @@ class GomokuGUI:
                 x,
                 BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
                 text=chr(ord("A") + i),
-                font=(LABEL_FONT, 10),
+                font=(LABEL_FONT, 14),
                 fill=BORDER_COLOR,
                 anchor="n",
                 tags="grid",
@@ -433,32 +373,33 @@ class GomokuGUI:
 
     # ===== HANDLE INPUT ====
     def handle_hover(self, event):
-        x = round((event.x - PADDING) / CELL_SIZE)
-        y = round((event.y - PADDING) / CELL_SIZE)
+        if self.is_playing:
+            x = round((event.x - PADDING) / CELL_SIZE)
+            y = round((event.y - PADDING) / CELL_SIZE)
 
-        self.canvas.delete("hover")
+            self.canvas.delete("hover")
 
-        if not (0 <= x < BOARD_SIZE and 0 <= y < BOARD_SIZE):
-            return
+            if not (0 <= x < BOARD_SIZE and 0 <= y < BOARD_SIZE):
+                return
 
-        cx = PADDING + x * CELL_SIZE
-        cy = PADDING + y * CELL_SIZE
-        r = CELL_SIZE // 2 - 2
-        color = "#333333" if self.game.current_player == "X" else "#DDDDDD"
+            cx = PADDING + x * CELL_SIZE
+            cy = PADDING + y * CELL_SIZE
+            r = CELL_SIZE // 2 - 2
+            color = "#333333" if self.game.current_player == "X" else "#DDDDDD"
 
-        self.canvas.create_oval(
-            cx - r,
-            cy - r,
-            cx + r,
-            cy + r,
-            fill=color,
-            stipple="gray50",
-            width=1,
-            tags="hover",
-        )
+            self.canvas.create_oval(
+                cx - r,
+                cy - r,
+                cx + r,
+                cy + r,
+                fill=color,
+                stipple="gray50",
+                width=1,
+                tags="hover",
+            )
 
     def handle_click(self, event):
-        if self.players[self.game.current_player].is_human:
+        if self.players[self.game.current_player].is_human and self.is_playing:
             x = round((event.x - PADDING) / CELL_SIZE)
             y = round((event.y - PADDING) / CELL_SIZE)
             self.play_one_turn(y, x)
@@ -496,14 +437,44 @@ class GomokuGUI:
         # )
 
     def update_undo_redo_buttons(self):
-        self.undo_btn.config(state=tk.NORMAL if self.history_index > 0 else tk.DISABLED)
-        self.redo_btn.config(
+        self.setting_panel.undo_button.config(
+            state=tk.NORMAL if self.history_index > 0 else tk.DISABLED
+        )
+        self.setting_panel.redo_button.config(
             state=(
                 tk.NORMAL
                 if self.history_index < len(self.state_history) - 1
                 else tk.DISABLED
             )
         )
+
+    def start_game(self):
+        self.players = self.create_players(self.setting_panel.play_mode.get())
+
+        ruleset = self.setting_panel.ruleset.get()
+        print(f"Game is started with {ruleset} ruleset")
+
+        self.highlight_active_player()
+        self.start_turn_timer()
+        self.update_live_timer()
+        self.is_playing = True
+
+    def create_players(self, play_mode):
+        if play_mode == "pvp":
+            return {
+                "X": Player(self.player1_name, True),
+                "O": Player(self.player2_name, True),
+            }
+        elif play_mode == "pvsa":
+            return {
+                "X": Player(self.player1_name, True),
+                "O": Player(self.player2_name, False),
+            }
+        elif play_mode == "avsp":
+            return {
+                "X": Player(self.player1_name, False),
+                "O": Player(self.player2_name, True),
+            }
 
     def undo(self):
         if self.history_index <= 0:

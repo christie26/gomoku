@@ -1,17 +1,25 @@
 User status
 DONE - show player name and if it's AI player or human player
-DONE - when this player is playing, show timer going up in ms and once they played, show how long it took. ( just need to stop the timer )
+DONE - when this player is playing, show timer going up in ms and once they played freeze it
 DONE - on the side, show how many 'capture' they made
 
 Setting
-- user can choose ruleset -> will be implemented later
+DONE - user can choose ruleset -> will be implemented later
 - can toggle debug print on/off
+- disable play_mode, ruleset once game starts
+- make start, undo, redo button prettier
 
 Game board
 DONE - add hover when player put mouse on the board
 DONE - draw small black circle to make grid prettier
 DONE - show position of last move 
 - handle invalid move
+- before start game, make board gray
 
 redo/undo
-- update red point properly
+DONE - update red point properly
+- in case of redo, undo don't trigger timer 
+- bind with arrow 
+
+Player pannel
+- make it seperate file for visibility
