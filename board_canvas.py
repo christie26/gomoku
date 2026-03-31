@@ -240,6 +240,7 @@ class BoardCanvas:
             fill=BORDER_COLOR,
             stipple="gray50",
             outline="",
+            tags="message",
         )
 
         self.canvas.create_text(
@@ -248,8 +249,10 @@ class BoardCanvas:
             text=text,
             fill="white",
             font=(NAME_FONT, 32, "bold"),
+            tags="message",
         )
 
+    # ===== RESET ====
     def reset_board(self, is_playing: bool):
         self.is_playing = is_playing
 
@@ -260,3 +263,6 @@ class BoardCanvas:
             self.canvas.itemconfig(self.overlay, state="hidden")
         else:
             self.canvas.itemconfig(self.overlay, state="normal")
+
+    def set_game(self, game):
+        self.game = game

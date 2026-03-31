@@ -128,6 +128,7 @@ class GomokuGUI:
 
     def start_game(self):
         self.game = Gomoku(size=BOARD_SIZE)
+        self.canvas.set_game(self.game)
 
         ruleset = self.setting_panel.ruleset.get()
         print(f"Game is started with {ruleset} ruleset")
@@ -167,25 +168,7 @@ class GomokuGUI:
 
     def finish_game(self, winner):
         self.end_turn_timer(self.game.current_player)
-        self.bg_rect = self.canvas.create_rectangle(
-            self.sizeeee // 2 - 100,
-            self.sizeeee // 2 - 20,
-            self.sizeeee // 2 + 100,
-            self.sizeeee // 2 + 20,
-            fill=BORDER_COLOR,
-            stipple="gray50",
-            outline="",
-            tags="message",
-        )
-
-        self.text_id = self.canvas.create_text(
-            self.sizeeee // 2,
-            self.sizeeee // 2,
-            text=f"{self.players[winner].name} wins",
-            fill="white",
-            font=(NAME_FONT, 32, "bold"),
-            tags="message",
-        )
+        self.canvas.show_winner(f"{self.players[winner].name} wins")
         self.is_playing = False
         self.setting_panel.reset_panel(False)
 
