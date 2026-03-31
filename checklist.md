@@ -31,5 +31,5 @@ DONE- activate "start game" button when game is done
 - update capture live
 - capture board ui
 - 5 row ui
-- stop timer when game is done
+DONE - stop timer when game is done
 - clean board when new game is started

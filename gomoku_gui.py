@@ -322,12 +322,12 @@ class GomokuGUI:
             self.state_history.append(self.game.clone_gomoku())
             self.history_index += 1
             self.update_undo_redo_buttons()
-        # else:
-        # self.update_alert_label(
-        #     f"Invalid move: {result.name.replace('_', ' ').title()}"
-        # )
 
     def start_game(self):
+        # TODO - need to create new GOMOKU game
+        self.canvas.delete("stone")
+        self.canvas.delete("last-move")
+        self.canvas.delete("message")
         ruleset = self.setting_panel.ruleset.get()
         print(f"Game is started with {ruleset} ruleset")
 
@@ -376,6 +376,7 @@ class GomokuGUI:
         threading.Thread(target=run_ai, daemon=True).start()
 
     def finish_game(self, winner):
+        self.end_turn_timer(self.game.current_player)
         self.bg_rect = self.canvas.create_rectangle(
             self.canvas_size // 2 - 100,
             self.canvas_size // 2 - 20,
@@ -384,6 +385,7 @@ class GomokuGUI:
             fill=BORDER_COLOR,
             stipple="gray50",
             outline="",
+            tags="message",
         )
 
         self.text_id = self.canvas.create_text(
@@ -392,6 +394,7 @@ class GomokuGUI:
             text=f"{self.players[winner].name} wins",
             fill="white",
             font=(NAME_FONT, 32, "bold"),
+            tags="message",
         )
         self.is_playing = False
         self.control_button(False)
