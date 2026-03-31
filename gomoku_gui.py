@@ -4,6 +4,8 @@ import argparse
 import time
 import threading
 from setting_panel import SettingsPanel
+from player_panel import Player, PlayerPanel
+
 
 CELL_SIZE = 32
 LABEL_PADDING = 10
@@ -16,12 +18,6 @@ BORDER_COLOR = "#6f5c43"
 
 LABEL_FONT = "Phosphate"
 NAME_FONT = "Rockwell"
-
-
-class Player:
-    def __init__(self, name: str, is_human: bool):
-        self.name = name
-        self.is_human = is_human
 
 
 class GomokuGUI:
@@ -77,93 +73,16 @@ class GomokuGUI:
 
         self.player1_name = player1
         self.player2_name = player2
-        self.players = {"X": Player(player1, True), "O": Player(player2, True)}
+        self.players = {
+            "X": Player(True, player1, True),
+            "O": Player(False, player2, True),
+        }
 
         # ===== PLAYER BOXES =====
-        self.player_frames = {}
-
-        for p in ["X", "O"]:
-            frame = tk.Frame(self.right_frame, padx=10, pady=10)
-            frame.pack(fill="x")
-
-            top_frame = tk.Frame(frame, bg=LIGHT_BACKGROUND)
-            top_frame.pack(fill="x")
-
-            bottom_frame = tk.Frame(frame, bg=LIGHT_BACKGROUND)
-            bottom_frame.pack(fill="x", pady=(5, 0))
-
-            # ⚫ / ⚪
-            stone = "⚫" if p == "X" else "⚪"
-            icon_label = tk.Label(
-                top_frame, text=stone, font=("Arial", 16), background=LIGHT_BACKGROUND
-            )
-            icon_label.pack(side="left")
-
-            # name
-            name_label = tk.Label(
-                top_frame,
-                text=(
-                    f"Player {self.players[p].name}"
-                    if self.players[p].is_human
-                    else "AI"
-                ),
-                font=(NAME_FONT, 14),
-                background=LIGHT_BACKGROUND,
-            )
-            name_label.pack(side="left", padx=5)
-
-            # time
-            time_label = tk.Label(
-                top_frame,
-                text="0 ms",
-                font=(NAME_FONT, 12),
-                background=LIGHT_BACKGROUND,
-            )
-            time_label.pack(side="right")
-
-            # capture
-            CAPTURE_SIZE = 20
-            CAPTURE_GAP = 28
-
-            capture_canvas = tk.Canvas(
-                bottom_frame,
-                width=5 * (CAPTURE_SIZE + CAPTURE_GAP),
-                height=CAPTURE_SIZE + 2,
-                bg=LIGHT_BACKGROUND,
-                highlightthickness=0,
-            )
-            capture_canvas.pack(side="left", padx=3, pady=10)
-
-            circles = []
-
-            for i in range(5):
-                x = i * (CAPTURE_SIZE + CAPTURE_GAP)
-
-                circle = capture_canvas.create_oval(
-                    x,
-                    0,
-                    x + CAPTURE_SIZE,
-                    CAPTURE_SIZE,
-                    outline="gray40",
-                    width=1,
-                    fill="",
-                )
-                circles.append(circle)
-
-            self.player_frames[p] = {
-                "frame": frame,
-                "name": name_label,
-                "time": time_label,
-                "start_time": None,
-                "captures": 0,
-                "capture_circles": circles,
-                "capture_canvas": capture_canvas,
-            }
-            self.player_frames[p]["frame"].config(
-                background=LIGHT_BACKGROUND,
-                highlightbackground=BORDER_COLOR,
-                highlightthickness=1,
-            )
+        self.player_frames = {
+            "X": PlayerPanel(self.root, self.right_frame, self.players["X"]),
+            "O": PlayerPanel(self.root, self.right_frame, self.players["O"]),
+        }
 
         # ===== SETTINGS =====
         self.setting_panel = SettingsPanel(
@@ -185,39 +104,19 @@ class GomokuGUI:
         self.root.bind("<Right>", self.redo)
 
     # ===== TIMER =====
-    def start_turn_timer(self):
-        p = self.game.current_player
-        self.player_frames[p]["start_time"] = time.time()
+    def start_turn_timer(self, p: Player):
+        self.player_frames[p].start_timer()
 
-    def end_turn_timer(self, p):
-        start = self.player_frames[p]["start_time"]
-        if start:
-            elapsed = (time.time() - start) * 1000
-            self.player_frames[p]["time"].config(text=f"{elapsed:.0f} ms")
-        self.player_frames[p]["start_time"] = None
-
-    def update_live_timer(self):
-        p = self.game.current_player
-        start = self.player_frames[p]["start_time"]
-
-        if start:
-            elapsed = (time.time() - start) * 1000
-
-            self.player_frames[p]["time"].config(text=f"{elapsed:.0f} ms")
-
-        self.root.after(100, self.update_live_timer)
+    def end_turn_timer(self, p: Player):
+        self.player_frames[p].stop_timer()
 
     # ===== DRAWING =====
     def highlight_active_player(self):
         for p in ["X", "O"]:
             if p == self.game.current_player:
-                self.player_frames[p]["name"].config(
-                    background=SELECT_BACKGROUND,
-                )
+                self.player_frames[p].hightlight_player()
             else:
-                self.player_frames[p]["name"].config(
-                    background=LIGHT_BACKGROUND,
-                )
+                self.player_frames[p].unhightlight_player()
 
     def draw_grid(self):
         DOT_RADIUS = 4
@@ -461,27 +360,27 @@ class GomokuGUI:
         self.setting_panel.start_button.config(state="disabled")
 
         print(f"Game is started with {ruleset} ruleset")
+        p = self.game.current_player
 
         self.highlight_active_player()
-        self.start_turn_timer()
-        self.update_live_timer()
+        self.start_turn_timer(p)
         self.is_playing = True
 
     def create_players(self, play_mode):
         if play_mode == "pvp":
             return {
-                "X": Player(self.player1_name, True),
-                "O": Player(self.player2_name, True),
+                "X": Player(True, self.player1_name, True),
+                "O": Player(False, self.player2_name, True),
             }
         elif play_mode == "pvsa":
             return {
-                "X": Player(self.player1_name, True),
-                "O": Player(self.player2_name, False),
+                "X": Player(True, self.player1_name, True),
+                "O": Player(False, self.player2_name, False),
             }
         elif play_mode == "avsp":
             return {
-                "X": Player(self.player1_name, False),
-                "O": Player(self.player2_name, True),
+                "X": Player(True, self.player1_name, False),
+                "O": Player(False, self.player2_name, True),
             }
 
     def undo(self, event=None):
@@ -520,10 +419,10 @@ class GomokuGUI:
         self.end_turn_timer(self.game.current_player)
 
         self.game.switch_player()
+        p = self.game.current_player
 
         self.highlight_active_player()
-        self.start_turn_timer()
-        self.update_live_timer()
+        self.start_turn_timer(p)
 
     def ai_play(self):
         def run_ai():
