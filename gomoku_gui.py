@@ -361,20 +361,7 @@ class GomokuGUI:
 
     # ===== PLAYER PANEL =====
     def update_captures(self, player, count=1):
-        data = self.player_frames[player]
-        data["captures"] += count
-
-        total = data["captures"]
-        circles = data["capture_circles"]
-        canvas = data["capture_canvas"]
-
-        fill_color = "black" if player == "X" else "white"
-
-        for i, c in enumerate(circles):
-            if i < total:
-                canvas.itemconfig(c, fill=fill_color)
-            else:
-                canvas.itemconfig(c, fill="")
+        self.player_frames[player].add_capture()
 
     def highlight_active_player(self):
         for p in ["X", "O"]:
@@ -382,6 +369,12 @@ class GomokuGUI:
                 self.player_frames[p].hightlight_player()
             else:
                 self.player_frames[p].unhightlight_player()
+
+    def start_turn_timer(self, p: Player):
+        self.player_frames[p].start_timer()
+
+    def end_turn_timer(self, p: Player):
+        self.player_frames[p].stop_timer()
 
     # ===== UNDO/REDO =====
     def undo(self, event=None):
@@ -439,13 +432,6 @@ class GomokuGUI:
         elif play_mode == "avsp":
             self.player_frames["X"].update_player_type(False)
             self.player_frames["O"].update_player_type(True)
-
-    # ===== TIMER =====
-    def start_turn_timer(self, p: Player):
-        self.player_frames[p].start_timer()
-
-    def end_turn_timer(self, p: Player):
-        self.player_frames[p].stop_timer()
 
 
 def load_board_str(filepath):

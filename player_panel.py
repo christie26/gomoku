@@ -89,9 +89,7 @@ class PlayerPanel:
             )
             self.capture_circles.append(circle)
 
-    # -------------------------
-    # Timer
-    # -------------------------
+    # timer
     def start_timer(self):
         self.start_time = time.time()
         self.update_live_timer()
@@ -108,18 +106,14 @@ class PlayerPanel:
             self.time_label.config(text=f"{elapsed:.0f} ms")
             self.root.after(100, self.update_live_timer)
 
-    # -------------------------
-    # Hightlight
-    # -------------------------
+    # highlight
     def hightlight_player(self):
         self.name_label.config(background=SELECT_BACKGROUND)
 
     def unhightlight_player(self):
         self.name_label.config(background=LIGHT_BACKGROUND)
 
-    # -------------------------
-    # Capture
-    # -------------------------
+    # capture
     def add_capture(self):
         if self.captures >= 5:
             return
@@ -128,6 +122,7 @@ class PlayerPanel:
         self.capture_canvas.itemconfig(circle, fill="black")
         self.captures += 1
 
+    # update name
     def update_player_type(self, is_human: bool):
         self.player.is_human = is_human
         self.name_label.config(
