@@ -25,11 +25,8 @@ class GomokuGUI:
         self.root = root
         self.root.title("Gomoku")
 
-        self.cell_size = CELL_SIZE
-        self.board_size = BOARD_SIZE
-        self.canvas_size = self.cell_size * (self.board_size - 1) + PADDING * 2
-
-        self.game = Gomoku(size=self.board_size)
+        self.canvas_size = CELL_SIZE * (BOARD_SIZE - 1) + PADDING * 2
+        self.game = Gomoku(size=BOARD_SIZE)
         self.is_playing = False
         self.debug = True
 
@@ -64,7 +61,19 @@ class GomokuGUI:
             bg="burlywood",
         )
         self.canvas.pack()
+        self.overlay = self.canvas.create_rectangle(
+            0,
+            0,
+            self.canvas_size + 5,
+            self.canvas_size + 5,
+            fill="gray",
+            stipple="gray50",
+            outline="",
+            tags="overlay",
+        )
+
         self.draw_grid()
+        self.hover_point = None
 
         # ===== UNDO/REDO =====
         self.state_history = [self.game.clone_gomoku()]
@@ -249,6 +258,10 @@ class GomokuGUI:
             x = round((event.x - PADDING) / CELL_SIZE)
             y = round((event.y - PADDING) / CELL_SIZE)
 
+            if (x, y) == self.hover_point:
+                return
+
+            self.hover_point = (x, y)
             self.canvas.delete("hover")
 
             if (
@@ -260,7 +273,10 @@ class GomokuGUI:
             cx = PADDING + x * CELL_SIZE
             cy = PADDING + y * CELL_SIZE
             r = CELL_SIZE // 2 - 2
-            color = "#333333" if self.game.current_player == "X" else "#DDDDDD"
+            if self.game.is_valid_move(y, x) == MoveResult.DOUBLE_THREE:
+                color = "#FF4D4D"
+            else:
+                color = "#333333" if self.game.current_player == "X" else "#DDDDDD"
 
             self.canvas.create_oval(
                 cx - r,
@@ -324,6 +340,7 @@ class GomokuGUI:
         self.highlight_active_player()
         self.start_turn_timer(p)
         self.is_playing = True
+        self.canvas.itemconfig(self.overlay, state="hidden")
 
     def change_turn(self):
         self.end_turn_timer(self.game.current_player)
