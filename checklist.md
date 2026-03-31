@@ -22,7 +22,8 @@ DONE - show position of last move
 - before start game, make board gray
 
 Player pannel
-- make it seperate file for visibility
+DONE - make it seperate file for visibility
+DONE - move create_player on click
 
 FIX 
 - hover is broken

@@ -6,12 +6,15 @@ BORDER_COLOR = "#6f5c43"
 
 
 class SettingsPanel:
-    def __init__(self, right_frame, on_start_game, on_undo, on_redo, on_debug):
+    def __init__(
+        self, right_frame, on_start_game, on_undo, on_redo, on_debug, on_play_mode
+    ):
         self.is_playing = False
         self.on_start_game = on_start_game
         self.on_undo = on_undo
         self.on_redo = on_redo
         self.on_debug = on_debug
+        self.switch_play_mode = on_play_mode
 
         self.setting_frame = tk.Frame(right_frame, padx=10, pady=10)
         self.setting_frame.pack(fill="x")
@@ -43,7 +46,7 @@ class SettingsPanel:
             font=(NAME_FONT, 16),
             background=LIGHT_BACKGROUND,
         )
-        play_frame.pack(pady=5, anchor="w")
+        play_frame.pack(pady=(5, 0), anchor="w")
 
         self.play_mode = tk.StringVar(value="pvp")
 
@@ -51,6 +54,7 @@ class SettingsPanel:
             self.setting_frame,
             text="Player vs Player",
             variable=self.play_mode,
+            command=self._on_play_mode_change,
             value="pvp",
             font=NAME_FONT,
             background=LIGHT_BACKGROUND,
@@ -62,6 +66,7 @@ class SettingsPanel:
             self.setting_frame,
             text="Player vs AI",
             variable=self.play_mode,
+            command=self._on_play_mode_change,
             value="pvsa",
             font=NAME_FONT,
             background=LIGHT_BACKGROUND,
@@ -73,6 +78,7 @@ class SettingsPanel:
             self.setting_frame,
             text="AI vs Player",
             variable=self.play_mode,
+            command=self._on_play_mode_change,
             value="avsp",
             font=NAME_FONT,
             background=LIGHT_BACKGROUND,
@@ -91,7 +97,7 @@ class SettingsPanel:
             font=(NAME_FONT, 16),
             background=LIGHT_BACKGROUND,
         )
-        rules_frame.pack(pady=5, anchor="w")
+        rules_frame.pack(pady=(15, 0), anchor="w")
 
         self.ruleset = tk.StringVar(value="1")
 
@@ -128,7 +134,7 @@ class SettingsPanel:
             font=(NAME_FONT, 16),
             background=LIGHT_BACKGROUND,
         )
-        debug_frame.pack(pady=5, anchor="w")
+        debug_frame.pack(pady=(15, 0), anchor="w")
 
         self.debug_enabled = tk.BooleanVar(value=True)
 
@@ -181,6 +187,10 @@ class SettingsPanel:
     def _on_debug_changed(self):
         value = self.debug_enabled.get()
         self.on_debug(value)
+
+    def _on_play_mode_change(self):
+        value = self.play_mode.get()
+        self.switch_play_mode(value)
 
     def start_game(self):
         self.is_playing = True

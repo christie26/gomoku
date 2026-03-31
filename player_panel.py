@@ -127,3 +127,9 @@ class PlayerPanel:
         circle = self.capture_circles[self.captures]
         self.capture_canvas.itemconfig(circle, fill="black")
         self.captures += 1
+
+    def update_player_type(self, is_human: bool):
+        self.player.is_human = is_human
+        self.name_label.config(
+            text=("AI" if not is_human else f"Player {self.player.name}")
+        )

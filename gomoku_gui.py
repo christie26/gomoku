@@ -91,6 +91,7 @@ class GomokuGUI:
             on_undo=self.undo,
             on_redo=self.redo,
             on_debug=self.debug_onoff,
+            on_play_mode=self.switch_play_mode,
         )
 
         # ===== HISTORY =====
@@ -351,8 +352,6 @@ class GomokuGUI:
         )
 
     def start_game(self):
-        self.players = self.create_players(self.setting_panel.play_mode.get())
-
         ruleset = self.setting_panel.ruleset.get()
 
         for rb in self.setting_panel.setting_ratios:
@@ -366,22 +365,16 @@ class GomokuGUI:
         self.start_turn_timer(p)
         self.is_playing = True
 
-    def create_players(self, play_mode):
+    def switch_play_mode(self, play_mode):
         if play_mode == "pvp":
-            return {
-                "X": Player(True, self.player1_name, True),
-                "O": Player(False, self.player2_name, True),
-            }
+            self.player_frames["X"].update_player_type(True)
+            self.player_frames["O"].update_player_type(True)
         elif play_mode == "pvsa":
-            return {
-                "X": Player(True, self.player1_name, True),
-                "O": Player(False, self.player2_name, False),
-            }
+            self.player_frames["X"].update_player_type(True)
+            self.player_frames["O"].update_player_type(False)
         elif play_mode == "avsp":
-            return {
-                "X": Player(True, self.player1_name, False),
-                "O": Player(False, self.player2_name, True),
-            }
+            self.player_frames["X"].update_player_type(False)
+            self.player_frames["O"].update_player_type(True)
 
     def undo(self, event=None):
         self.canvas.delete("last-move")
