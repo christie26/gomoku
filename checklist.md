@@ -18,8 +18,8 @@ Game board
 DONE - add hover when player put mouse on the board
 DONE - draw small black circle to make grid prettier
 DONE - show position of last move 
-- handle invalid move
-- before start game, make board gray
+DONE - handle invalid move
+DONE - before start game, make board gray
 
 Player pannel
 DONE - make it seperate file for visibility
@@ -27,3 +27,9 @@ DONE - move create_player on click
 
 FIX 
 DONE - hover is broken
+DONE- activate "start game" button when game is done
+- update capture live
+- capture board ui
+- 5 row ui
+- stop timer when game is done
+- clean board when new game is started

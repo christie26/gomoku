@@ -329,18 +329,26 @@ class GomokuGUI:
 
     def start_game(self):
         ruleset = self.setting_panel.ruleset.get()
-
-        for rb in self.setting_panel.setting_ratios:
-            rb.config(state="disabled")
-        self.setting_panel.start_button.config(state="disabled")
-
         print(f"Game is started with {ruleset} ruleset")
-        p = self.game.current_player
 
+        p = self.game.current_player
         self.highlight_active_player()
         self.start_turn_timer(p)
+
         self.is_playing = True
-        self.canvas.itemconfig(self.overlay, state="hidden")
+        self.control_button(True)
+
+    def control_button(self, is_playing: bool):
+        if is_playing:
+            for rb in self.setting_panel.setting_ratios:
+                rb.config(state="disabled")
+            self.setting_panel.start_button.config(state="disabled")
+            self.canvas.itemconfig(self.overlay, state="hidden")
+        else:
+            for rb in self.setting_panel.setting_ratios:
+                rb.config(state="normal")
+            self.setting_panel.start_button.config(state="normal")
+            self.canvas.itemconfig(self.overlay, state="normal")
 
     def change_turn(self):
         self.end_turn_timer(self.game.current_player)
@@ -368,13 +376,25 @@ class GomokuGUI:
         threading.Thread(target=run_ai, daemon=True).start()
 
     def finish_game(self, winner):
-        self.canvas.create_text(
+        self.bg_rect = self.canvas.create_rectangle(
+            self.canvas_size // 2 - 100,
+            self.canvas_size // 2 - 20,
+            self.canvas_size // 2 + 100,
+            self.canvas_size // 2 + 20,
+            fill=BORDER_COLOR,
+            stipple="gray50",
+            outline="",
+        )
+
+        self.text_id = self.canvas.create_text(
             self.canvas_size // 2,
             self.canvas_size // 2,
             text=f"{self.players[winner].name} wins",
             fill="white",
-            font=("Helvetica", 32, "bold"),
+            font=(NAME_FONT, 32, "bold"),
         )
+        self.is_playing = False
+        self.control_button(False)
 
     # ===== PLAYER PANEL =====
     def update_captures(self, player, count=1):
