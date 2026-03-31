@@ -26,7 +26,6 @@ class SettingsPanel:
         return self.setting_frame
 
     def build_ui(self):
-
         self.setting_frame.config(
             background=LIGHT_BACKGROUND,
             highlightbackground=BORDER_COLOR,
@@ -195,3 +194,13 @@ class SettingsPanel:
     def start_game(self):
         self.is_playing = True
         self.on_start_game()
+
+    def reset_panel(self, is_playing: bool):
+        if is_playing:
+            for rb in self.setting_ratios:
+                rb.config(state="disabled")
+            self.start_button.config(state="disabled")
+        else:
+            for rb in self.setting_ratios:
+                rb.config(state="normal")
+            self.start_button.config(state="normal")
