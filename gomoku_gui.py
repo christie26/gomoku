@@ -282,7 +282,10 @@ class GomokuGUI:
 
             self.canvas.delete("hover")
 
-            if not (0 <= x < BOARD_SIZE and 0 <= y < BOARD_SIZE):
+            if (
+                not (0 <= x < BOARD_SIZE and 0 <= y < BOARD_SIZE)
+                or self.game.board[y][x] != "."
+            ):
                 return
 
             cx = PADDING + x * CELL_SIZE
