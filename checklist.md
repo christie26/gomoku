@@ -26,4 +26,4 @@ DONE - make it seperate file for visibility
 DONE - move create_player on click
 
 FIX 
-- hover is broken
+DONE - hover is broken

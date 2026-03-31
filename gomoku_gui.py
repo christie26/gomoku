@@ -44,13 +44,14 @@ class GomokuGUI:
         self.left_frame = tk.Frame(self.main_frame)
         self.left_frame.pack(side="left")
 
-        self.right_frame = tk.Frame(self.main_frame, width=250)
-        self.right_frame.pack(side="right", fill="y")
-        self.right_frame.config(
+        self.right_frame = tk.Frame(
+            self.main_frame,
+            width=250,
             background=LIGHT_BACKGROUND,
             highlightbackground=BORDER_COLOR,
             highlightthickness=2,
         )
+        self.right_frame.pack(side="right", fill="y")
         self.right_frame.pack_propagate(False)
 
         # ===== CANVAS =====
@@ -58,11 +59,9 @@ class GomokuGUI:
             self.left_frame,
             width=self.canvas_size,
             height=self.canvas_size,
-            bg="burlywood",
-        )
-        self.canvas.config(
             highlightbackground=BORDER_COLOR,
             highlightthickness=2,
+            bg="burlywood",
         )
         self.canvas.pack()
         self.draw_grid()
@@ -104,21 +103,7 @@ class GomokuGUI:
         self.root.bind("<Left>", self.undo)
         self.root.bind("<Right>", self.redo)
 
-    # ===== TIMER =====
-    def start_turn_timer(self, p: Player):
-        self.player_frames[p].start_timer()
-
-    def end_turn_timer(self, p: Player):
-        self.player_frames[p].stop_timer()
-
-    # ===== DRAWING =====
-    def highlight_active_player(self):
-        for p in ["X", "O"]:
-            if p == self.game.current_player:
-                self.player_frames[p].hightlight_player()
-            else:
-                self.player_frames[p].unhightlight_player()
-
+    # ===== DRAWING BOARD =====
     def draw_grid(self):
         DOT_RADIUS = 4
         points = [3, 9, 15]
@@ -215,22 +200,6 @@ class GomokuGUI:
             outline="red",
             tags="last-move",
         )
-
-    def update_captures(self, player, count=1):
-        data = self.player_frames[player]
-        data["captures"] += count
-
-        total = data["captures"]
-        circles = data["capture_circles"]
-        canvas = data["capture_canvas"]
-
-        fill_color = "black" if player == "X" else "white"
-
-        for i, c in enumerate(circles):
-            if i < total:
-                canvas.itemconfig(c, fill=fill_color)
-            else:
-                canvas.itemconfig(c, fill="")
 
     def draw_possible_stone(self, x, y, player, number, selected):
         color = "black" if player == "X" else "white"
@@ -342,18 +311,6 @@ class GomokuGUI:
         #     f"Invalid move: {result.name.replace('_', ' ').title()}"
         # )
 
-    def update_undo_redo_buttons(self):
-        self.setting_panel.undo_button.config(
-            state=tk.NORMAL if self.history_index > 0 else tk.DISABLED
-        )
-        self.setting_panel.redo_button.config(
-            state=(
-                tk.NORMAL
-                if self.history_index < len(self.state_history) - 1
-                else tk.DISABLED
-            )
-        )
-
     def start_game(self):
         ruleset = self.setting_panel.ruleset.get()
 
@@ -367,49 +324,6 @@ class GomokuGUI:
         self.highlight_active_player()
         self.start_turn_timer(p)
         self.is_playing = True
-
-    def switch_play_mode(self, play_mode):
-        if play_mode == "pvp":
-            self.player_frames["X"].update_player_type(True)
-            self.player_frames["O"].update_player_type(True)
-        elif play_mode == "pvsa":
-            self.player_frames["X"].update_player_type(True)
-            self.player_frames["O"].update_player_type(False)
-        elif play_mode == "avsp":
-            self.player_frames["X"].update_player_type(False)
-            self.player_frames["O"].update_player_type(True)
-
-    def undo(self, event=None):
-        self.canvas.delete("last-move")
-        if self.history_index <= 0:
-            return
-        self.history_index -= 1
-        self.game = self.state_history[self.history_index].clone_gomoku()
-        self.draw_stones(self.game.board)
-        current_move = self.game.current_move
-        if current_move:
-            self.canvas.delete("last-move")
-            self.draw_last_move(current_move[1], current_move[0])
-        self.update_undo_redo_buttons()
-        self.end_turn_timer("X")
-        self.end_turn_timer("O")
-
-    def redo(self, event=None):
-        if self.history_index >= len(self.state_history) - 1:
-            return
-        self.history_index += 1
-        self.game = self.state_history[self.history_index].clone_gomoku()
-        self.draw_stones(self.game.board)
-        current_move = self.game.current_move
-        if current_move:
-            self.canvas.delete("last-move")
-            self.draw_last_move(current_move[1], current_move[0])
-        self.update_undo_redo_buttons()
-
-    def debug_onoff(self, debug: bool):
-        self.debug = debug
-        if not debug:
-            self.canvas.delete("debug")
 
     def change_turn(self):
         self.end_turn_timer(self.game.current_player)
@@ -444,6 +358,94 @@ class GomokuGUI:
             fill="white",
             font=("Helvetica", 32, "bold"),
         )
+
+    # ===== PLAYER PANEL =====
+    def update_captures(self, player, count=1):
+        data = self.player_frames[player]
+        data["captures"] += count
+
+        total = data["captures"]
+        circles = data["capture_circles"]
+        canvas = data["capture_canvas"]
+
+        fill_color = "black" if player == "X" else "white"
+
+        for i, c in enumerate(circles):
+            if i < total:
+                canvas.itemconfig(c, fill=fill_color)
+            else:
+                canvas.itemconfig(c, fill="")
+
+    def highlight_active_player(self):
+        for p in ["X", "O"]:
+            if p == self.game.current_player:
+                self.player_frames[p].hightlight_player()
+            else:
+                self.player_frames[p].unhightlight_player()
+
+    # ===== UNDO/REDO =====
+    def undo(self, event=None):
+        self.canvas.delete("last-move")
+        if self.history_index <= 0:
+            return
+        self.history_index -= 1
+        self.game = self.state_history[self.history_index].clone_gomoku()
+        self.draw_stones(self.game.board)
+        current_move = self.game.current_move
+        if current_move:
+            self.canvas.delete("last-move")
+            self.draw_last_move(current_move[1], current_move[0])
+        self.update_undo_redo_buttons()
+        self.end_turn_timer("X")
+        self.end_turn_timer("O")
+
+    def redo(self, event=None):
+        if self.history_index >= len(self.state_history) - 1:
+            return
+        self.history_index += 1
+        self.game = self.state_history[self.history_index].clone_gomoku()
+        self.draw_stones(self.game.board)
+        current_move = self.game.current_move
+        if current_move:
+            self.canvas.delete("last-move")
+            self.draw_last_move(current_move[1], current_move[0])
+        self.update_undo_redo_buttons()
+
+    def update_undo_redo_buttons(self):
+        self.setting_panel.undo_button.config(
+            state=tk.NORMAL if self.history_index > 0 else tk.DISABLED
+        )
+        self.setting_panel.redo_button.config(
+            state=(
+                tk.NORMAL
+                if self.history_index < len(self.state_history) - 1
+                else tk.DISABLED
+            )
+        )
+
+    # ===== SETTING =====
+    def debug_onoff(self, debug: bool):
+        self.debug = debug
+        if not debug:
+            self.canvas.delete("debug")
+
+    def switch_play_mode(self, play_mode):
+        if play_mode == "pvp":
+            self.player_frames["X"].update_player_type(True)
+            self.player_frames["O"].update_player_type(True)
+        elif play_mode == "pvsa":
+            self.player_frames["X"].update_player_type(True)
+            self.player_frames["O"].update_player_type(False)
+        elif play_mode == "avsp":
+            self.player_frames["X"].update_player_type(False)
+            self.player_frames["O"].update_player_type(True)
+
+    # ===== TIMER =====
+    def start_turn_timer(self, p: Player):
+        self.player_frames[p].start_timer()
+
+    def end_turn_timer(self, p: Player):
+        self.player_frames[p].stop_timer()
 
 
 def load_board_str(filepath):
