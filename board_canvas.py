@@ -10,7 +10,6 @@ LIGHT_BACKGROUND = "#FAEBD7"
 SELECT_BACKGROUND = "#A68A64"
 BORDER_COLOR = "#6f5c43"
 
-LABEL_FONT = "Phosphate"
 NAME_FONT = "Rockwell"
 
 
@@ -76,42 +75,43 @@ class BoardCanvas:
             self.canvas.create_line(
                 x, PADDING, x, PADDING + (BOARD_SIZE - 1) * CELL_SIZE, tags="grid"
             )
-        self.canvas.create_text(
-            PADDING - LABEL_PADDING,
-            y,
-            text=str(i + 1),
-            font=(LABEL_FONT, 14),
-            anchor="e",
-            fill=BORDER_COLOR,
-            tags="grid",
-        )
-        self.canvas.create_text(
-            BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
-            y,
-            text=str(i + 1),
-            font=(LABEL_FONT, 14),
-            anchor="w",
-            fill=BORDER_COLOR,
-            tags="grid",
-        )
-        self.canvas.create_text(
-            x,
-            PADDING - LABEL_PADDING,
-            text=chr(ord("A") + i),
-            font=(LABEL_FONT, 14),
-            anchor="s",
-            fill=BORDER_COLOR,
-            tags="grid",
-        )
-        self.canvas.create_text(
-            x,
-            BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
-            text=chr(ord("A") + i),
-            font=(LABEL_FONT, 14),
-            fill=BORDER_COLOR,
-            anchor="n",
-            tags="grid",
-        )
+
+            self.canvas.create_text(
+                PADDING - LABEL_PADDING,
+                y,
+                text=str(i + 1),
+                font=(NAME_FONT, 14),
+                anchor="e",
+                fill=BORDER_COLOR,
+                tags="grid",
+            )
+            self.canvas.create_text(
+                BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
+                y,
+                text=str(i + 1),
+                font=(NAME_FONT, 14),
+                anchor="w",
+                fill=BORDER_COLOR,
+                tags="grid",
+            )
+            self.canvas.create_text(
+                x,
+                PADDING - LABEL_PADDING,
+                text=chr(ord("A") + i),
+                font=(NAME_FONT, 14),
+                anchor="s",
+                fill=BORDER_COLOR,
+                tags="grid",
+            )
+            self.canvas.create_text(
+                x,
+                BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
+                text=chr(ord("A") + i),
+                font=(NAME_FONT, 14),
+                fill=BORDER_COLOR,
+                anchor="n",
+                tags="grid",
+            )
 
     def draw_stones(self, board):
         self.canvas.delete("stone")
