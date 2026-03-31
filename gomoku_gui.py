@@ -140,6 +140,8 @@ class GomokuGUI:
         self.is_playing = True
         self.canvas.reset_board(self.is_playing)
         self.setting_panel.reset_panel(self.is_playing)
+        self.player_frames["X"].reset_panel()
+        self.player_frames["O"].reset_panel()
 
     def change_turn(self):
         self.end_turn_timer(self.game.current_player)

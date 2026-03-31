@@ -128,3 +128,6 @@ class PlayerPanel:
         self.name_label.config(
             text=("AI" if not is_human else f"Player {self.player.name}")
         )
+
+    def reset_panel(self):
+        self.time_label.config(text="0 ms")

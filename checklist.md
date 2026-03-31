@@ -27,9 +27,10 @@ DONE - move create_player on click
 
 FIX 
 DONE - hover is broken
-DONE- activate "start game" button when game is done
+DONE - activate "start game" button when game is done
+DONE - stop timer when game is done
+DONE - clean board when new game is started
+DONE - reset timer in new game
 - update capture live
 - capture board ui
 - 5 row ui
-DONE - stop timer when game is done
-- clean board when new game is started
