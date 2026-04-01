@@ -20,7 +20,7 @@ class PlayerPanel:
         self.root = root
         self.player = player
         self.start_time = None
-        self.captures = 0
+        self.capture_count = 0
 
         self.frame = tk.Frame(
             parent,
@@ -114,13 +114,15 @@ class PlayerPanel:
         self.name_label.config(background=LIGHT_BACKGROUND)
 
     # capture
-    def add_capture(self):
-        if self.captures >= 5:
-            return
-
-        circle = self.capture_circles[self.captures]
-        self.capture_canvas.itemconfig(circle, fill="black")
-        self.captures += 1
+    def update_capture(self, count):
+        if self.capture_count != count:
+            self.capture_count = count
+            for i in range(5):
+                circle = self.capture_circles[i]
+                if i < self.capture_count:
+                    self.capture_canvas.itemconfig(circle, fill="black")
+                else:
+                    self.capture_canvas.itemconfig(circle, fill="")
 
     # update name
     def update_player_type(self, is_human: bool):

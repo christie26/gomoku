@@ -31,6 +31,7 @@ DONE - activate "start game" button when game is done
 DONE - stop timer when game is done
 DONE - clean board when new game is started
 DONE - reset timer in new game
-- update capture live
-- capture board ui
+DONE - update capture live
+DONE - capture board ui
 - 5 row ui
+- hover is broken

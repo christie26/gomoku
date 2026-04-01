@@ -266,3 +266,24 @@ class BoardCanvas:
 
     def set_game(self, game):
         self.game = game
+
+    def show_capture(self, positions):
+        """
+        positions: [(x, y), ...]
+        """
+        for y, x in positions:
+            cx = PADDING + x * CELL_SIZE
+            cy = PADDING + y * CELL_SIZE
+            r = CELL_SIZE // 2
+
+            self.canvas.create_oval(
+                cx - r,
+                cy - r,
+                cx + r,
+                cy + r,
+                outline="red",
+                width=3,
+                tags="capture",
+            )
+
+        self.canvas.after(700, lambda: self.canvas.delete("capture"))

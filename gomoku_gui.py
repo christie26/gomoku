@@ -105,9 +105,12 @@ class GomokuGUI:
         result = self.game.is_valid_move(x, y)
 
         if result == MoveResult.VALID:
-            _, capture = self.game.handle_move(x, y)
-            if capture:
-                self.update_captures(self.game.current_player)
+            result, capture_count, captured = self.game.handle_move(x, y)
+            if captured:
+                self.canvas.show_capture(captured)
+            self.player_frames[self.game.current_player].update_capture(
+                self.game.capture_count[self.game.current_player]
+            )
 
             self.canvas.draw_stones(self.game.board)
 
@@ -175,9 +178,6 @@ class GomokuGUI:
         self.setting_panel.reset_panel(False)
 
     # ===== PLAYER PANEL =====
-    def update_captures(self, player, count=1):
-        self.player_frames[player].add_capture()
-
     def highlight_active_player(self):
         for p in ["X", "O"]:
             if p == self.game.current_player:
@@ -202,6 +202,10 @@ class GomokuGUI:
         current_move = self.game.current_move
         if current_move:
             self.canvas.draw_last_move(current_move[1], current_move[0])
+
+        for p in ["X", "O"]:
+            self.player_frames[p].update_capture(self.game.capture_count[p])
+
         self.update_undo_redo_buttons()
         self.end_turn_timer("X")
         self.end_turn_timer("O")
@@ -216,6 +220,9 @@ class GomokuGUI:
         if current_move:
             self.canvas.remove_last_move()
             self.canvas.draw_last_move(current_move[1], current_move[0])
+        for p in ["X", "O"]:
+            self.player_frames[p].update_capture(self.game.capture_count[p])
+
         self.update_undo_redo_buttons()
 
     def update_undo_redo_buttons(self):
