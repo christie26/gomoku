@@ -107,9 +107,6 @@ class GomokuGUI:
                 print(f"  Depth: {len(pv)} moves")
             return
         self.play_one_turn(y, x)  # note: board is row (y), col (x)
-        self.root.update_idletasks()
-        self.ai_play()
-        self.root.update_idletasks()
 
     # ===== GAME FLOW =====
     def play_one_turn(self, x, y):
