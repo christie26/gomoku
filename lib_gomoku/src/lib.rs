@@ -345,22 +345,20 @@ impl Gomoku {
         new_free_threes
     }
 
-    fn capture_center(&mut self, x0: i32, y0: i32) -> i32 {
+    fn capture_center(&mut self, x0: i32, y0: i32) -> (i32, Vec<(i32, i32)>) {
         let directions = [
-            (1, -1),
-            (1, 0),
-            (1, 1),
-            (0, -1),
-            (0, 1),
-            (-1, -1),
-            (-1, 0),
-            (-1, 1),
+            (1, -1), (1, 0), (1, 1),
+            (0, -1), (0, 1),
+            (-1, -1), (-1, 0), (-1, 1),
         ];
+
         let mut capture_count = 0;
+        let mut captured_positions = Vec::new();
 
         for (dx, dy) in directions {
             if self.is_capture(x0, y0, dx, dy) {
-                self.apply_capture(x0, y0, dx, dy);
+                let removed = self.apply_capture(x0, y0, dx, dy);
+                captured_positions.extend(removed); // 👈 핵심
                 capture_count += 1;
             }
         }
@@ -369,7 +367,8 @@ impl Gomoku {
             let current = self.current_player.clone();
             *self.capture_count.get_mut(&current).unwrap() += capture_count;
         }
-        capture_count
+
+        (capture_count, captured_positions)
     }
 
     fn is_capture(&self, x0: i32, y0: i32, dx: i32, dy: i32) -> bool {
@@ -386,11 +385,16 @@ impl Gomoku {
         self.is_on_board(x, y) && self.board[x as usize][y as usize] == self.current_player
     }
 
-    fn apply_capture(&mut self, x0: i32, y0: i32, dx: i32, dy: i32) {
+    fn apply_capture(&mut self, x0: i32, y0: i32, dx: i32, dy: i32) -> Vec<(i32, i32)> {
+        let mut removed = Vec::new();
+
         for i in 1..3 {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
+
+            removed.push((x, y));
             self.board[x as usize][y as usize] = Stone::Empty;
+
             self.remove_free_three(x, y, &self.opponent_player.clone());
             self.remove_opens(x, y);
         }
@@ -398,12 +402,15 @@ impl Gomoku {
         for i in 1..3 {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
+
             self.add_free_threes(
                 self.get_free_threes_from_capture(x, y),
                 &self.current_player.clone(),
             );
             self.add_opens_from_capture(x, y);
         }
+
+        removed
     }
 
     fn add_opens_from_move(&mut self, x0: i32, y0: i32) {
@@ -663,10 +670,12 @@ impl Gomoku {
         (result, capture_count)
     }
 
-    pub fn handle_move(&mut self, x: i32, y: i32) -> (MoveResult, i32) {
-        // return self.handle_move_simple_ruleset(x, y);
+    pub fn handle_move(&mut self, x: i32, y: i32)
+        -> (MoveResult, i32, Vec<(i32, i32)>)
+    {
         let result = self.is_valid_move(x, y);
         let mut capture_count = 0;
+        let mut captured_positions = Vec::new();
 
         if result == MoveResult::Valid {
             self.current_move = Some((x, y));
@@ -682,10 +691,12 @@ impl Gomoku {
             );
             self.add_opens_from_move(x, y);
 
-            capture_count = self.capture_center(x, y);
+            let (count, positions) = self.capture_center(x, y);
+            capture_count = count;
+            captured_positions = positions;
         }
 
-        (result, capture_count)
+        (result, capture_count, captured_positions)
     }
 
     fn count_empty_spots(&self) -> i32 {

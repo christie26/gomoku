@@ -1,361 +1,258 @@
 import tkinter as tk
-from tkinter import simpledialog
 from lib_gomoku import Gomoku, MoveResult, get_ai_move
 import argparse
 import time
+import threading
+from setting_panel import SettingsPanel
+from player_panel import Player, PlayerPanel
+from board_canvas import BoardCanvas
 
-CELL_SIZE = 35
+CELL_SIZE = 32
+LABEL_PADDING = 10
 BOARD_SIZE = 19
 PADDING = 30
-LABEL_PADDING = 17
+
+LIGHT_BACKGROUND = "#FAEBD7"
+SELECT_BACKGROUND = "#A68A64"
+BORDER_COLOR = "#6f5c43"
+
+LABEL_FONT = "Phosphate"
+NAME_FONT = "Rockwell"
 
 
 class GomokuGUI:
-    """
-    A GUI class for playing Gomoku using Tkinter. Supports human and AI players,
-    handles user interaction, board drawing, turn management, and displaying results.
-    """
-
     def __init__(self, root, player1, player2, history=None):
-        """
-        Initialize the GUI, canvas, labels, and player info.
-
-        Args:
-            root: The Tkinter root window.
-            player1 (str or None): Name of player X, or None to ask.
-            player2 (str or None): Name of player O, or None to ask.
-        """
         self.root = root
         self.root.title("Gomoku")
-        self.cell_size = CELL_SIZE
-        self.board_size = BOARD_SIZE
-        self.canvas_size = self.cell_size * (self.board_size - 1) + PADDING * 2
 
-        # Create board and canvas
-        self.game = Gomoku(size=self.board_size)
+        self.sizeeee = CELL_SIZE * (BOARD_SIZE - 1) + PADDING * 2
+        self.game = Gomoku(size=BOARD_SIZE)
+        self.is_playing = False
+        self.debug = True
 
-        # Undo/redo state history
+        # ===== MAIN LAYOUT =====
+        self.main_frame = tk.Frame(
+            root,
+            highlightbackground=BORDER_COLOR,
+            highlightthickness=2,
+        )
+        self.main_frame.pack()
+
+        self.left_frame = tk.Frame(self.main_frame)
+        self.left_frame.pack(side="left")
+
+        self.right_frame = tk.Frame(
+            self.main_frame,
+            width=250,
+            background=LIGHT_BACKGROUND,
+            highlightbackground=BORDER_COLOR,
+            highlightthickness=2,
+        )
+        self.right_frame.pack(side="right", fill="y")
+        self.right_frame.pack_propagate(False)
+
+        # ===== CANVAS =====
+        self.canvas = BoardCanvas(
+            self.left_frame, self.sizeeee, self.game, self.handle_click
+        )
+
+        # ===== UNDO/REDO =====
         self.state_history = [self.game.clone_gomoku()]
         self.history_index = 0
 
-        self.canvas = tk.Canvas(
-            root, width=self.canvas_size, height=self.canvas_size, bg="burlywood"
+        self.player1_name = player1
+        self.player2_name = player2
+        self.players = {
+            "X": Player(True, player1, True),
+            "O": Player(False, player2, True),
+        }
+
+        # ===== PLAYER BOXES =====
+        self.player_frames = {
+            "X": PlayerPanel(self.root, self.right_frame, self.players["X"]),
+            "O": PlayerPanel(self.root, self.right_frame, self.players["O"]),
+        }
+
+        # ===== SETTINGS =====
+        self.setting_panel = SettingsPanel(
+            self.right_frame,
+            on_start_game=self.start_game,
+            on_undo=self.undo,
+            on_redo=self.redo,
+            on_debug=self.debug_onoff,
+            on_play_mode=self.switch_play_mode,
         )
-        self.canvas.pack(pady=0, padx=0)
 
-        # Undo/Redo buttons
-        btn_frame = tk.Frame(root)
-        btn_frame.pack(pady=5)
-        self.undo_btn = tk.Button(btn_frame, text="Undo", font=("Arial", 14), command=self.undo, state=tk.DISABLED)
-        self.undo_btn.pack(side=tk.LEFT, padx=5)
-        self.redo_btn = tk.Button(btn_frame, text="Redo", font=("Arial", 14), command=self.redo, state=tk.DISABLED)
-        self.redo_btn.pack(side=tk.LEFT, padx=5)
-
-        self.info_label = tk.Label(root, text="", font=("Arial", 20))
-        self.info_label.pack(pady=5)
-
-        self.turn_label = tk.Label(root, text="", font=("Arial", 20))
-        self.turn_label.pack(pady=5)
-
-        self.alert_label = tk.Label(root, text="", font=("Arial", 20))
-        self.alert_label.pack(pady=5)
-
-        self.ai_label = tk.Label(root, text="", font=("Arial", 20))
-        self.ai_label.pack(pady=5)
-
-        # Player names
-        self.player_names = {"X": player1, "O": player2}
-
-        if player1 == None or player2 == None:
-            self.ask_player_names()
-
-        # if user import history file, play those move first
+        # ===== HISTORY =====
         if history:
             for x, y in history:
                 self.play_one_turn(x, y)
 
-        self.draw_board(self.game.board)
-        self.update_info_label()
-        self.update_turn_label()
+        self.root.bind("<Left>", self.undo)
+        self.root.bind("<Right>", self.redo)
 
-        self.root.update_idletasks()
-        self.ai_play()
-        self.root.update_idletasks()
-
-        self.canvas.bind("<Button-1>", self.handle_click)
-
-    def ask_player_names(self):
-        self.player_names["X"] = (
-            simpledialog.askstring("Player X", "Enter name for Player X (black):")
-            or "Player X"
-        )
-        self.player_names["O"] = (
-            simpledialog.askstring("Player O", "Enter name for Player O (white):")
-            or "Player O"
-        )
-
-    def update_info_label(self):
-        self.info_label.config(
-            text=(
-                f"⚫ {self.player_names['X']} (captures: {self.game.capture_count['X']}) "
-                f"vs {self.player_names['O']} (captures: {self.game.capture_count['O']}) ⚪"
-            )
-        )
-
-    def update_turn_label(self):
-        turn_name = self.player_names[self.game.current_player]
-        turn_color = "⚫" if self.game.current_player == "X" else "⚪"
-        self.turn_label.config(text=f"{turn_name}'s Turn {turn_color}")
-
-    def update_alert_label(self, message):
-        self.alert_label.config(text=message)
-
-    def update_ai_label(self, message):
-        self.ai_label.config(text=message)
-
-    def draw_grid(self):
-        for i in range(BOARD_SIZE):
-            x = PADDING + i * CELL_SIZE
-            y = PADDING + i * CELL_SIZE
-
-            # Grid lines
-            self.canvas.create_line(
-                PADDING, y, PADDING + (BOARD_SIZE - 1) * CELL_SIZE, y
-            )
-            self.canvas.create_line(
-                x, PADDING, x, PADDING + (BOARD_SIZE - 1) * CELL_SIZE
-            )
-
-            # Row labels (1–19)
-            self.canvas.create_text(
-                PADDING - LABEL_PADDING,
-                y,
-                text=str(i + 1),
-                font=("Arial", 10),
-                anchor="e",
-            )
-            self.canvas.create_text(
-                BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
-                y,
-                text=str(i + 1),
-                font=("Arial", 10),
-                anchor="w",
-            )
-
-            # Column labels (A–S)
-            self.canvas.create_text(
-                x,
-                PADDING - LABEL_PADDING,
-                text=chr(ord("A") + i),
-                font=("Arial", 10),
-                anchor="s",
-            )
-            self.canvas.create_text(
-                x,
-                BOARD_SIZE * CELL_SIZE + LABEL_PADDING,
-                text=chr(ord("A") + i),
-                font=("Arial", 10),
-                anchor="n",
-            )
-
-    def draw_stone(self, x, y, player):
-        color = "black" if player == "X" else "white"
-        cx = PADDING + x * CELL_SIZE
-        cy = PADDING + y * CELL_SIZE
-        r = CELL_SIZE // 2 - 2
-        self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=color)
-
-    def draw_possible_stone(self, x, y, player, number, selected):
-        color = "black" if player == "X" else "white"
-        cx = PADDING + x * CELL_SIZE
-        cy = PADDING + y * CELL_SIZE
-        r = CELL_SIZE // 2 - 2
-
-        # Create stone with 50% opacity
-        outline_color = "red" if selected else ""
-        self.canvas.create_oval(
-            cx - r,
-            cy - r,
-            cx + r,
-            cy + r,
-            fill=color,
-            stipple="gray50",
-            outline=outline_color,
-        )
-        # Calculate appropriate font size based on stone size and number length
-        number_str = str(number)
-        # Base font size proportional to stone radius
-        base_font_size = max(6, r // 2)
-
-        # Reduce font size for longer numbers
-        if len(number_str) == 1:
-            font_size = base_font_size
-        elif len(number_str) == 2:
-            font_size = max(6, int(base_font_size))
-        else:  # 3+ digits
-            font_size = max(6, int(base_font_size))
-
-        # Add numeric text in the center
-        text_color = "white" if player == "X" else "black"
-        self.canvas.create_text(
-            cx, cy, text=number_str, fill=text_color, font=("Arial", font_size, "bold")
-        )
-
-    def finish_game(self, winner):
-        # # Create a toplevel window to act as overlay
-        # overlay = tk.Toplevel(root)
-        #
-        # overlay.geometry(
-        #     f"{self.canvas_size}x{self.canvas_size}+{root.winfo_rootx() + self.canvas.winfo_x()}+{root.winfo_rooty() + self.canvas.winfo_y()}"
-        # )
-        # overlay.overrideredirect(True)
-        # overlay.attributes("-topmost", True)
-        # overlay.attributes("-alpha", 0.3)  # 30% opaque (i.e. 70% transparent)
-        # overlay.configure(bg="black")
-        #
-        # def update_overlay_position():
-        #     overlay.geometry(
-        #         f"{self.canvas_size}x{self.canvas_size}+{root.winfo_rootx() + self.canvas.winfo_x()}+{root.winfo_rooty() + self.canvas.winfo_y()}"
-        #     )
-        #     root.after(50, update_overlay_position)
-        #
-        # update_overlay_position()
-
-        # Display the result text in the center
-        self.result_text = self.canvas.create_text(
-            self.canvas_size // 2,
-            self.canvas_size // 2,
-            text=f"{self.player_names[winner]} wins",
-            fill="white",
-            font=("Helvetica", 32, "bold"),
-        )
-
-    def draw_board(self, board):
-        self.canvas.delete("all")
-        self.draw_grid()
-        for y, row in enumerate(board):
-            for x, cell in enumerate(row):
-                if cell != ".":
-                    self.draw_stone(x, y, cell)
-
+    # ===== HANDLE INPUT ====
     def handle_click(self, event):
-        x = round((event.x - PADDING) / CELL_SIZE)
-        y = round((event.y - PADDING) / CELL_SIZE)
-        self.play_one_turn(y, x)  # note: board is row (y), col (x)
-        self.root.update_idletasks()
-        self.ai_play()
-        self.root.update_idletasks()
+        if self.players[self.game.current_player].is_human and self.is_playing:
+            x = round((event.x - PADDING) / CELL_SIZE)
+            y = round((event.y - PADDING) / CELL_SIZE)
+            self.play_one_turn(y, x)
+        else:
+            return
 
-    def play_one_turn(self, x, y) -> int:
+    # ===== GAME FLOW =====
+    def play_one_turn(self, x, y):
         result = self.game.is_valid_move(x, y)
-        self.update_alert_label("")
-        if result == MoveResult.VALID:
-            print(
-                f"{self.player_names[self.game.current_player]} played {chr(ord('A') + y)}{x + 1}"
-            )
-            capture = self.game.handle_move(x, y)
-            if capture:
-                self.update_info_label()
 
-                self.update_alert_label(
-                    f"{self.player_names[self.game.current_player]} captures {self.player_names[self.game.opponent_player]}"
-                )
-            self.draw_board(self.game.board)
+        if result == MoveResult.VALID:
+            result, capture_count, captured = self.game.handle_move(x, y)
+            if captured:
+                self.canvas.show_capture(captured)
+            self.player_frames[self.game.current_player].update_capture(
+                self.game.capture_count[self.game.current_player]
+            )
+
+            self.canvas.draw_stones(self.game.board)
+
             winner = self.game.get_winner()
-            if winner != None:
+            self.canvas.draw_last_move(y, x)
+            if winner:
                 self.finish_game(winner)
             else:
-                self.game.switch_player()
-                self.update_turn_label()
+                self.change_turn()
+                if not self.players[self.game.current_player].is_human:
+                    self.ai_play()
+
             # Record state for undo/redo
-            self.state_history = self.state_history[:self.history_index + 1]
+            self.state_history = self.state_history[: self.history_index + 1]
             self.state_history.append(self.game.clone_gomoku())
             self.history_index += 1
             self.update_undo_redo_buttons()
-        else:
-            self.update_alert_label(
-                f"Invalid move: {result.name.replace('_', ' ').title()}"
-            )
-        return result
 
-    def update_undo_redo_buttons(self):
-        self.undo_btn.config(state=tk.NORMAL if self.history_index > 0 else tk.DISABLED)
-        self.redo_btn.config(state=tk.NORMAL if self.history_index < len(self.state_history) - 1 else tk.DISABLED)
+    def start_game(self):
+        self.game = Gomoku(size=BOARD_SIZE)
+        self.canvas.set_game(self.game)
 
-    def undo(self):
+        ruleset = self.setting_panel.ruleset.get()
+        print(f"Game is started with {ruleset} ruleset")
+
+        p = self.game.current_player
+        self.highlight_active_player()
+        self.start_turn_timer(p)
+
+        self.is_playing = True
+        self.canvas.reset_board(self.is_playing)
+        self.setting_panel.reset_panel(self.is_playing)
+        self.player_frames["X"].reset_panel()
+        self.player_frames["O"].reset_panel()
+
+    def change_turn(self):
+        self.end_turn_timer(self.game.current_player)
+
+        self.game.switch_player()
+        p = self.game.current_player
+
+        self.highlight_active_player()
+        self.start_turn_timer(p)
+
+    def ai_play(self):
+        def run_ai():
+            mv, moves = get_ai_move(self.game)
+
+            if mv:
+                self.canvas.delete("debug")
+                x, y, _ = mv
+                for m in moves:
+                    x1, y1, score1 = m
+                    selected = x == x1 and y == y1
+                    if self.debug:
+                        self.draw_possible_stone(y1, x1, "O", score1, selected)
+                self.root.after(0, lambda: self.play_one_turn(x, y))
+
+        threading.Thread(target=run_ai, daemon=True).start()
+
+    def finish_game(self, winner):
+        self.end_turn_timer(self.game.current_player)
+        self.canvas.show_winner(f"{self.players[winner].name} wins")
+        self.is_playing = False
+        self.setting_panel.reset_panel(False)
+
+    # ===== PLAYER PANEL =====
+    def highlight_active_player(self):
+        for p in ["X", "O"]:
+            if p == self.game.current_player:
+                self.player_frames[p].hightlight_player()
+            else:
+                self.player_frames[p].unhightlight_player()
+
+    def start_turn_timer(self, p: Player):
+        self.player_frames[p].start_timer()
+
+    def end_turn_timer(self, p: Player):
+        self.player_frames[p].stop_timer()
+
+    # ===== UNDO/REDO =====
+    def undo(self, event=None):
+        self.canvas.remove_last_move()
         if self.history_index <= 0:
             return
         self.history_index -= 1
         self.game = self.state_history[self.history_index].clone_gomoku()
-        self.draw_board(self.game.board)
-        self.update_info_label()
-        self.update_turn_label()
-        self.update_alert_label("")
-        self.update_undo_redo_buttons()
+        self.canvas.draw_stones(self.game.board)
+        current_move = self.game.current_move
+        if current_move:
+            self.canvas.draw_last_move(current_move[1], current_move[0])
 
-    def redo(self):
+        for p in ["X", "O"]:
+            self.player_frames[p].update_capture(self.game.capture_count[p])
+
+        self.update_undo_redo_buttons()
+        self.end_turn_timer("X")
+        self.end_turn_timer("O")
+
+    def redo(self, event=None):
         if self.history_index >= len(self.state_history) - 1:
             return
         self.history_index += 1
         self.game = self.state_history[self.history_index].clone_gomoku()
-        self.draw_board(self.game.board)
-        self.update_info_label()
-        self.update_turn_label()
-        self.update_alert_label("")
+        self.canvas.draw_stones(self.game.board)
+        current_move = self.game.current_move
+        if current_move:
+            self.canvas.remove_last_move()
+            self.canvas.draw_last_move(current_move[1], current_move[0])
+        for p in ["X", "O"]:
+            self.player_frames[p].update_capture(self.game.capture_count[p])
+
         self.update_undo_redo_buttons()
 
-    def ai_play(self):
-        start_time = time.time()
+    def update_undo_redo_buttons(self):
+        self.setting_panel.undo_button.config(
+            state=tk.NORMAL if self.history_index > 0 else tk.DISABLED
+        )
+        self.setting_panel.redo_button.config(
+            state=(
+                tk.NORMAL
+                if self.history_index < len(self.state_history) - 1
+                else tk.DISABLED
+            )
+        )
 
-        self.update_ai_label("AI is thinking")
-        # print("AI is thinking")
+    # ===== SETTING =====
+    def debug_onoff(self, debug: bool):
+        self.debug = debug
+        if not debug:
+            self.canvas.delete("debug")
 
-        mv, moves = get_ai_move(self.game)
-        # print(f"mv: {mv}")
-        # print(f"moves: {moves}")
-
-        if mv is None:
-            print(f"Found no valid moves: {mv} - {moves}")
-
-        x, y, score = mv
-
-        ai_time = time.time() - start_time
-        self.update_ai_label(f"AI played in {ai_time:.4f}s")
-        # print(
-        #     f"AI chose to play {mv} in {ai_time:.4f}s out of {len(moves)} moves-------------------------"
-        # )
-        # print(self.game.print_state())
-
-        for m in moves:
-            x1, y1, score1 = m
-            selected = x == x1 and y == y1
-            self.draw_possible_stone(y1, x1, "O", score1, selected)
-
-        # self.play_one_turn(x, y)
-
-
-def load_and_validate_board(filepath):
-    with open(filepath, "r") as f:
-        lines = [line.strip() for line in f if line.strip()]
-
-    if len(lines) != 19 or any(len(row) != 19 for row in lines):
-        raise ValueError("Board must be 19x19")
-
-    valid_symbols = {".", "X", "O"}
-    board = []
-    count = {"X": 0, "O": 0}
-
-    for row in lines:
-        if any(c not in valid_symbols for c in row):
-            raise ValueError("Board can only contain '.', 'X', or 'O'")
-        for c in row:
-            if c in count:
-                count[c] += 1
-        board.append(list(row))
-
-    current_player = "X"
-
-    return board, current_player
+    def switch_play_mode(self, play_mode):
+        if play_mode == "pvp":
+            self.player_frames["X"].update_player_type(True)
+            self.player_frames["O"].update_player_type(True)
+        elif play_mode == "pvsa":
+            self.player_frames["X"].update_player_type(True)
+            self.player_frames["O"].update_player_type(False)
+        elif play_mode == "avsp":
+            self.player_frames["X"].update_player_type(False)
+            self.player_frames["O"].update_player_type(True)
 
 
 def load_board_str(filepath):
@@ -377,16 +274,12 @@ def load_history(filepath):
         return history_tuples
 
 
+# ===== MAIN =====
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Simple Gomoku Game")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--black", type=str, default=None)
+    parser.add_argument("--white", type=str, default=None)
 
-    parser.add_argument("--size", type=int, default=19, help="Board size (default: 19)")
-    parser.add_argument(
-        "--black", type=str, default=None, help="Name of black stone player (X)"
-    )
-    parser.add_argument(
-        "--white", type=str, default=None, help="Name of white stone player (O)"
-    )
     parser.add_argument("--board", type=str, help="Path to board file")
 
     parser.add_argument("--history", type=str, help="Path to move history file")
@@ -396,7 +289,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-
     board = None
     current_player = "X"  # default
 
@@ -422,7 +314,6 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Failed to load history: {e}")
             exit(1)
-
     root = tk.Tk()
     app = GomokuGUI(root, args.black, args.white, history)
 
@@ -433,7 +324,6 @@ if __name__ == "__main__":
         # app.game.current_player = current_player
         # app.game.opponent_player = "O" if current_player == "X" else "X"
         app.draw_board(app.game.board)
-        app.update_turn_label()
         # Reset history to match the loaded board
         app.state_history = [app.game.clone_gomoku()]
         app.history_index = 0
