@@ -184,6 +184,17 @@ fn print_search_stats(stats: &SearchStats) {
         stats.pruning_percent(),
     );
 
+    if !stats.pv.is_empty() {
+        println!(
+            "  PV: {}",
+            stats.pv
+                .iter()
+                .map(|&(x, y)| position_name(&(x as i32, y as i32)))
+                .collect::<Vec<_>>()
+                .join(" -> ")
+        );
+    }
+
     if stats.branch_times.is_empty() {
         return;
     }

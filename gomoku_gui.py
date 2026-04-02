@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import simpledialog
-from lib_gomoku import Gomoku, MoveResult, get_ai_move
+from lib_gomoku import Gomoku, MoveResult, get_ai_move, get_move_pv
 import argparse
 import time
 
@@ -242,6 +242,17 @@ class GomokuGUI:
     def handle_click(self, event):
         x = round((event.x - PADDING) / CELL_SIZE)
         y = round((event.y - PADDING) / CELL_SIZE)
+        # Ctrl+click: print the PV for this position instead of playing
+        if event.state & 0x4:  # Ctrl key modifier
+            row, col = y, x  # board coords: row=y, col=x
+            if 0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE:
+                print(f"\n--- PV analysis for {chr(ord('A') + col)}{row + 1} ---")
+                pv, score = get_move_pv(self.game, row, col)
+                pv_str = " -> ".join(f"{chr(ord('A') + c)}{r + 1}" for r, c in pv)
+                print(f"  Score: {score}")
+                print(f"  PV: {pv_str}")
+                print(f"  Depth: {len(pv)} moves")
+            return
         self.play_one_turn(y, x)  # note: board is row (y), col (x)
         self.root.update_idletasks()
         self.ai_play()

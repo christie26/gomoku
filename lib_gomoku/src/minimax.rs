@@ -62,6 +62,7 @@ pub struct SearchStats {
     /// Per-depth: (depth, elapsed_secs, nodes_visited)
     pub depth_times: Vec<(usize, f64, u64)>,
     pub tt_hits: u64,
+    pub pv: Vec<(usize, usize)>,
 }
 
 impl SearchStats {
@@ -76,6 +77,7 @@ impl SearchStats {
             max_depth: 0,
             depth_times: Vec::new(),
             tt_hits: 0,
+            pv: Vec::new(),
         }
     }
 
@@ -341,6 +343,45 @@ pub fn get_ai_move(
     (best, moves)
 }
 
+/// Given a game state and a move (x, y), return the principal variation
+/// (sequence of moves from that point to the leaf) and the evaluated score.
+#[pyfunction]
+pub fn get_move_pv(state: &Gomoku, x: usize, y: usize) -> (Vec<(usize, usize)>, i32) {
+    let is_max_player = state.current_player == Stone::Black;
+    let max_depth = if state.move_count < 4 { 3 } else { MAX_DEPTH };
+
+    let next_state = make_next_state(state, x, y);
+    let mut stats = SearchStats::new();
+    stats.max_depth = max_depth;
+    let mut tt = TranspositionTable::new(20);
+
+    // Run iterative deepening to populate TT, return final PV
+    let mut final_pv = vec![];
+    let mut final_value = 0i32;
+    for depth in 1..=max_depth {
+        stats = SearchStats::new();
+        stats.max_depth = depth;
+        let (raw_value, d, child_pv) = alphabeta(
+            &next_state, MIN_VALUE, MAX_VALUE, !is_max_player,
+            1, depth, &mut stats, &mut tt,
+        );
+        let d_i32: i32 = d.try_into().unwrap();
+        final_value = if raw_value > d_i32 {
+            raw_value - d_i32
+        } else if raw_value < -d_i32 {
+            raw_value + d_i32
+        } else {
+            raw_value
+        };
+        final_pv = child_pv;
+    }
+
+    // Prepend the clicked move itself
+    let mut pv = vec![(x, y)];
+    pv.extend(final_pv);
+    (pv, final_value)
+}
+
 pub fn get_ai_move_with_stats(
     state: &Gomoku,
 ) -> (
@@ -379,6 +420,7 @@ pub fn get_ai_move_with_stats(
             MAX_VALUE + 1
         };
         let mut iteration_best_move: Option<(usize, usize, i32)> = None;
+        let mut iteration_pv: Vec<(usize, usize)> = Vec::new();
         let mut branch_times = Vec::new();
 
         let mut first = true;
@@ -387,22 +429,22 @@ pub fn get_ai_move_with_stats(
             let branch_start = Instant::now();
             let next_state = make_next_state(state, *move_x, *move_y);
 
-            let (mut raw_value, mut d);
+            let (mut raw_value, mut d, mut child_pv);
             if first {
                 // Full window search on PV move
-                (raw_value, d) = alphabeta(&next_state, alpha, beta, !is_max_player, 1, depth, &mut stats, &mut tt);
+                (raw_value, d, child_pv) = alphabeta(&next_state, alpha, beta, !is_max_player, 1, depth, &mut stats, &mut tt);
                 first = false;
             } else {
                 // Null window scout search
                 if is_max_player {
-                    (raw_value, d) = alphabeta(&next_state, alpha, alpha + 1, false, 1, depth, &mut stats, &mut tt);
+                    (raw_value, d, child_pv) = alphabeta(&next_state, alpha, alpha + 1, false, 1, depth, &mut stats, &mut tt);
                     if raw_value > alpha && raw_value < beta {
-                        (raw_value, d) = alphabeta(&next_state, alpha, beta, false, 1, depth, &mut stats, &mut tt);
+                        (raw_value, d, child_pv) = alphabeta(&next_state, alpha, beta, false, 1, depth, &mut stats, &mut tt);
                     }
                 } else {
-                    (raw_value, d) = alphabeta(&next_state, beta - 1, beta, true, 1, depth, &mut stats, &mut tt);
+                    (raw_value, d, child_pv) = alphabeta(&next_state, beta - 1, beta, true, 1, depth, &mut stats, &mut tt);
                     if raw_value < beta && raw_value > alpha {
-                        (raw_value, d) = alphabeta(&next_state, alpha, beta, true, 1, depth, &mut stats, &mut tt);
+                        (raw_value, d, child_pv) = alphabeta(&next_state, alpha, beta, true, 1, depth, &mut stats, &mut tt);
                     }
                 }
             }
@@ -425,10 +467,16 @@ pub fn get_ai_move_with_stats(
                 best_value = value;
                 alpha = max(alpha, best_value);
                 iteration_best_move = Some((*move_x, *move_y, value));
+                iteration_pv = std::iter::once((*move_x, *move_y))
+                    .chain(child_pv.into_iter())
+                    .collect();
             } else if !is_max_player && value < best_value {
                 best_value = value;
                 beta = min(beta, best_value);
                 iteration_best_move = Some((*move_x, *move_y, value));
+                iteration_pv = std::iter::once((*move_x, *move_y))
+                    .chain(child_pv.into_iter())
+                    .collect();
             }
 
             if alpha >= beta {
@@ -438,6 +486,7 @@ pub fn get_ai_move_with_stats(
         }
 
         stats.branch_times = branch_times;
+        stats.pv = iteration_pv;
         depth_times.push((depth, depth_start.elapsed().as_secs_f64(), stats.nodes_visited));
         best_move = iteration_best_move;
         final_stats = stats;
@@ -473,15 +522,15 @@ fn alphabeta(
     max_depth: usize,
     stats: &mut SearchStats,
     tt: &mut TranspositionTable,
-) -> (i32, usize) {
+) -> (i32, usize, Vec<(usize, usize)>) {
     stats.nodes_visited += 1;
 
     if is_terminal_state(state) {
-        return (state_value(state), depth);
+        return (state_value(state), depth, vec![]);
     }
 
     if depth == max_depth {
-        return (heuristic_evaluation(state), depth);
+        return (heuristic_evaluation(state), depth, vec![]);
     }
 
     let depth_remaining = max_depth - depth;
@@ -494,12 +543,12 @@ fn alphabeta(
         if entry.depth_remaining >= depth_remaining {
             stats.tt_hits += 1;
             match entry.flag {
-                TTFlag::Exact => return (entry.value, depth),
+                TTFlag::Exact => return (entry.value, depth, vec![]),
                 TTFlag::LowerBound => alpha = max(alpha, entry.value),
                 TTFlag::UpperBound => beta = min(beta, entry.value),
             }
             if alpha >= beta {
-                return (entry.value, depth);
+                return (entry.value, depth, vec![]);
             }
         }
     }
@@ -522,6 +571,7 @@ fn alphabeta(
     };
 
     let mut best_move_here: Option<(usize, usize)> = None;
+    let mut best_pv: Vec<(usize, usize)> = vec![];
     let mut first = true;
     for (move_x, move_y) in &candidates {
         stats.children_explored += 1;
@@ -547,16 +597,23 @@ fn alphabeta(
             }
         }
 
+        let child_val = (child.0, child.1);
         if is_max_player {
-            if child >= value {
-                value = child;
+            if child_val >= value {
+                value = child_val;
                 best_move_here = Some((*move_x, *move_y));
+                best_pv = std::iter::once((*move_x, *move_y))
+                    .chain(child.2.into_iter())
+                    .collect();
             }
             alpha = max(alpha, value.0);
         } else {
-            if child <= value {
-                value = child;
+            if child_val <= value {
+                value = child_val;
                 best_move_here = Some((*move_x, *move_y));
+                best_pv = std::iter::once((*move_x, *move_y))
+                    .chain(child.2.into_iter())
+                    .collect();
             }
             beta = min(beta, value.0);
         }
@@ -583,5 +640,5 @@ fn alphabeta(
         best_move: best_move_here,
     });
 
-    value
+    (value.0, value.1, best_pv)
 }
