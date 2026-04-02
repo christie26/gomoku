@@ -1,3 +1,9 @@
+TODO
+- 5 row ui
+
+QUESTION
+- when game is done, should we disable undo button?
+
 User status
 DONE - show player name and if it's AI player or human player
 DONE - make timer
@@ -33,5 +39,4 @@ DONE - clean board when new game is started
 DONE - reset timer in new game
 DONE - update capture live
 DONE - capture board ui
-- 5 row ui
-- hover is broken
+DONE - hover is broken

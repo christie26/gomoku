@@ -143,7 +143,18 @@ class BoardCanvas:
     def remove_last_move(self):
         self.canvas.delete("last-move")
 
-    def draw_possible_stone(self, x, y, player, number, selected):
+    def draw_hint_moves(self, moves, best_move=None):
+        for m in moves:
+            x1, y1, score1 = m
+
+            selected = False
+            if best_move:
+                bx, by, _ = best_move
+                selected = bx == x1 and by == y1
+
+            self.draw_a_hint(y1, x1, "O", score1, selected)
+
+    def draw_a_hint(self, x, y, player, number, selected):
         color = "black" if player == "X" else "white"
         cx = PADDING + x * CELL_SIZE
         cy = PADDING + y * CELL_SIZE
@@ -159,7 +170,7 @@ class BoardCanvas:
             fill=color,
             stipple="gray50",
             outline=outline_color,
-            tags="debug",
+            tags="hint",
         )
         # Calculate appropriate font size based on stone size and number length
         number_str = str(number)
@@ -182,8 +193,11 @@ class BoardCanvas:
             text=number_str,
             fill=text_color,
             font=("Arial", font_size, "bold"),
-            tags="debug",
+            tags="hint",
         )
+
+    def remove_all_hint(self):
+        self.canvas.delete("hint")
 
     # ===== HOVER =====
     def handle_hover(self, event):

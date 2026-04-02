@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import simpledialog
-from lib_gomoku import Gomoku, MoveResult, get_ai_move, get_move_pv
+from lib_gomoku import Gomoku, MoveResult, get_ai_move, get_move_pv, get_hint
 import argparse
 import time
 import threading
@@ -126,6 +126,8 @@ class GomokuGUI:
 
     # ===== GAME FLOW =====
     def play_one_turn(self, x, y):
+        self.canvas.remove_all_hint()
+
         result = self.game.is_valid_move(x, y)
 
         if result == MoveResult.VALID:
@@ -144,7 +146,11 @@ class GomokuGUI:
                 self.finish_game(winner)
             else:
                 self.change_turn()
-                if not self.players[self.game.current_player].is_human:
+                p = self.game.current_player
+                if self.players[p].is_human and self.players[p].panel.is_hint_on():
+                    moves = get_hint(self.game)
+                    self.canvas.draw_hint_moves(moves)
+                if not self.players[p].is_human:
                     self.ai_play()
 
             # Record state for undo/redo
@@ -181,15 +187,12 @@ class GomokuGUI:
 
     def ai_play(self):
         def run_ai():
-            mv, moves = get_ai_move(self.game)
-            if mv:
-                x, y, _ = mv
-                for m in moves:
-                    x1, y1, score1 = m
-                    selected = x == x1 and y == y1
-                    if self.debug:
-                        self.canvas.draw_possible_stone(y1, x1, "O", score1, selected)
-                self.root.after(0, lambda: self.play_one_turn(x, y))
+            best_move, moves = get_ai_move(self.game)
+            x, y, _ = best_move
+            if self.debug:
+                self.canvas.draw_hint_moves(moves, best_move)
+                # QUESTION - what happens if there's no best_move ?
+            self.root.after(0, lambda: self.play_one_turn(x, y))
 
         threading.Thread(target=run_ai, daemon=True).start()
 
@@ -268,7 +271,7 @@ class GomokuGUI:
     def debug_onoff(self, debug: bool):
         self.debug = debug
         if not debug:
-            self.canvas.delete("debug")
+            self.canvas.remove_all_hint()
 
     def switch_play_mode(self, play_mode):
         if play_mode == "pvp":

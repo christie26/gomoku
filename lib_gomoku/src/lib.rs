@@ -693,7 +693,7 @@ impl Gomoku {
 
     pub fn handle_move_simple_ruleset(&mut self, x: i32, y: i32) -> (MoveResult, i32) {
         let result = self.is_valid_move_simple_ruleset(x, y);
-        let mut capture_count = 0;
+        let capture_count = 0;
 
         if result == MoveResult::Valid {
             self.current_move = Some((x, y));
@@ -985,6 +985,7 @@ fn lib_gomoku(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Gomoku>()?;
     m.add_function(wrap_pyfunction!(heuristic::heuristic_evaluation, m)?)?;
     m.add_function(wrap_pyfunction!(minimax::get_ai_move, m)?)?;
+    m.add_function(wrap_pyfunction!(minimax::get_hint, m)?)?;
     m.add_function(wrap_pyfunction!(minimax::get_move_pv, m)?)?;
 
     let gomoku_class = m.getattr("Gomoku")?;

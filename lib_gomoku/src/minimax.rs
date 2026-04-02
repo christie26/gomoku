@@ -333,7 +333,7 @@ fn make_next_state(state: &Gomoku, move_x: usize, move_y: usize) -> Gomoku {
 
 #[pyfunction]
 pub fn get_ai_move(
-    py: Python,
+    _py: Python,
     state: &Gomoku,
 ) -> (
     Option<(usize, usize, i32)>,
@@ -342,6 +342,15 @@ pub fn get_ai_move(
     // println!("state: {:#?}", state);
     let (best, moves, _) = get_ai_move_with_stats(state);
     (best, moves)
+}
+
+#[pyfunction]
+pub fn get_hint(
+    _py: Python,
+    state: &Gomoku,
+) -> Vec<(usize, usize, Option<i32>)> {
+    let (_, moves, _) = get_ai_move_with_stats(state);
+    moves
 }
 
 /// Given a game state and a move (x, y), return the principal variation
