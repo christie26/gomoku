@@ -171,15 +171,13 @@ class GomokuGUI:
     def ai_play(self):
         def run_ai():
             mv, moves = get_ai_move(self.game)
-
             if mv:
-                self.canvas.delete("debug")
                 x, y, _ = mv
                 for m in moves:
                     x1, y1, score1 = m
                     selected = x == x1 and y == y1
                     if self.debug:
-                        self.draw_possible_stone(y1, x1, "O", score1, selected)
+                        self.canvas.draw_possible_stone(y1, x1, "O", score1, selected)
                 self.root.after(0, lambda: self.play_one_turn(x, y))
 
         threading.Thread(target=run_ai, daemon=True).start()
