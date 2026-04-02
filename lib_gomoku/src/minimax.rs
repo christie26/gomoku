@@ -339,7 +339,7 @@ pub fn get_ai_move(
     Option<(usize, usize, i32)>,
     Vec<(usize, usize, Option<i32>)>,
 ) {
-    println!("state: {:#?}", state);
+    // println!("state: {:#?}", state);
     let (best, moves, _) = get_ai_move_with_stats(state);
     (best, moves)
 }
