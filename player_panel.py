@@ -82,6 +82,21 @@ class PlayerPanel:
             )
             self.capture_circles.append(circle)
 
+        # --- hint toggle ---
+        self.hint_enabled = tk.BooleanVar(value=False)
+
+        self.hint_checkbox = tk.Checkbutton(
+            bottom_frame,
+            text="Hint",
+            variable=self.hint_enabled,
+            font=(NAME_FONT, 10),
+            bg=LIGHT_BACKGROUND,
+            activebackground=LIGHT_BACKGROUND,
+            highlightthickness=0,
+        )
+
+        self.hint_checkbox.pack(side="right", padx=5)
+
     # timer
     def start_timer(self):
         self.start_time = time.time()
@@ -125,6 +140,16 @@ class PlayerPanel:
 
     def reset_panel(self):
         self.time_label.config(text="0 ms")
+
+    def set_hint_available(self, enabled: bool):
+        state = "normal" if enabled else "disabled"
+        self.hint_checkbox.config(state=state)
+
+        if not enabled:
+            self.hint_enabled.set(False)
+
+    def is_hint_on(self):
+        return self.hint_enabled.get()
 
 
 class Player:
