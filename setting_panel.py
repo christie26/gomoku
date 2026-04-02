@@ -145,7 +145,14 @@ class SettingsPanel:
             font=NAME_FONT,
             background=LIGHT_BACKGROUND,
         )
+        self.debug_tip = tk.Label(
+            self.setting_frame,
+            text="Black should follow positive number, \nWhite should follow negative number.",
+            font=NAME_FONT,
+            background=LIGHT_BACKGROUND,
+        )
         self.debug_checkbox.pack(anchor="w")
+        self.debug_tip.pack(anchor="w")
 
         # 4. Start Button
         button_frame = tk.Frame(
