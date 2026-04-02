@@ -428,13 +428,15 @@ impl Gomoku {
         self.is_on_board(x, y) && self.board[x as usize][y as usize] == self.current_player
     }
 
-    fn apply_capture(&mut self, x0: i32, y0: i32, dx: i32, dy: i32) {
+    fn apply_capture(&mut self, x0: i32, y0: i32, dx: i32, dy: i32) -> Vec<(i32, i32)> {
         let z = zobrist();
         let opp_idx = if self.opponent_player == Stone::Black { 0 } else { 1 };
+        let mut removed = Vec::new();
         for i in 1..3 {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
             // XOR out removed opponent stone
+            removed.push((x, y));
             self.hash ^= z.board[x as usize * 19 + y as usize][opp_idx];
             self.board[x as usize][y as usize] = Stone::Empty;
 
