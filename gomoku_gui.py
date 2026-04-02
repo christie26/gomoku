@@ -59,8 +59,6 @@ class GomokuGUI:
         self.state_history = [self.game.clone_gomoku()]
         self.history_index = 0
 
-        self.player1_name = player1
-        self.player2_name = player2
         self.players = {
             "X": Player(True, player1, True),
             "O": Player(False, player2, True),
