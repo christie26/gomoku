@@ -14,9 +14,9 @@ NAME_FONT = "Rockwell"
 
 
 class BoardCanvas:
-    def __init__(self, parent, canvas_size, game, on_click):
+    def __init__(self, parent, canvas_size, on_click):
         self.canvas_size = canvas_size
-        self.game = game
+        self.game = None
         self.is_playing = False
 
         self.canvas = tk.Canvas(
@@ -206,7 +206,6 @@ class BoardCanvas:
             cx = PADDING + x * CELL_SIZE
             cy = PADDING + y * CELL_SIZE
             r = CELL_SIZE // 2 - 2
-            # print(f"self.game.current_player: {self.game.current_player}")
             if self.game.is_valid_move(y, x) == MoveResult.DOUBLE_THREE:
                 color = "#FF4D4D"
             else:
@@ -222,6 +221,10 @@ class BoardCanvas:
                 width=1,
                 tags="hover",
             )
+
+    def remove_hover(self, event=None):
+        self.hover_point = None
+        self.canvas.delete("hover")
 
     # ===== OVERLAY =====
     def show_overlay(self):

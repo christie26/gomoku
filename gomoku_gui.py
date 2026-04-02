@@ -26,7 +26,6 @@ class GomokuGUI:
         self.root.title("Gomoku")
 
         self.sizeeee = CELL_SIZE * (BOARD_SIZE - 1) + PADDING * 2
-        self.game = Gomoku(size=BOARD_SIZE)
         self.is_playing = False
         self.debug = True
 
@@ -48,15 +47,14 @@ class GomokuGUI:
             highlightbackground=BORDER_COLOR,
             highlightthickness=2,
         )
+        self.canvas = BoardCanvas(self.left_frame, self.sizeeee, self.handle_click)
+
         self.right_frame.pack(side="right", fill="y")
         self.right_frame.pack_propagate(False)
-
-        # ===== CANVAS =====
-        self.canvas = BoardCanvas(
-            self.left_frame, self.sizeeee, self.game, self.handle_click
-        )
+        self.right_frame.bind("<Enter>", self.canvas.remove_hover)
 
         # ===== UNDO/REDO =====
+        self.game = Gomoku(size=BOARD_SIZE)
         self.state_history = [self.game.clone_gomoku()]
         self.history_index = 0
 
@@ -130,7 +128,7 @@ class GomokuGUI:
             self.update_undo_redo_buttons()
 
     def start_game(self):
-        self.game = Gomoku(size=BOARD_SIZE)
+        self.set_game(Gomoku(size=BOARD_SIZE))
         self.canvas.set_game(self.game)
 
         ruleset = self.setting_panel.ruleset.get()
@@ -195,7 +193,8 @@ class GomokuGUI:
         if self.history_index <= 0:
             return
         self.history_index -= 1
-        self.game = self.state_history[self.history_index].clone_gomoku()
+        self.set_game(self.state_history[self.history_index].clone_gomoku())
+
         self.canvas.draw_stones(self.game.board)
         current_move = self.game.current_move
         if current_move:
@@ -205,6 +204,8 @@ class GomokuGUI:
             self.player_frames[p].update_capture(self.game.capture_count[p])
 
         self.update_undo_redo_buttons()
+
+        self.highlight_active_player()
         self.end_turn_timer("X")
         self.end_turn_timer("O")
 
@@ -212,7 +213,7 @@ class GomokuGUI:
         if self.history_index >= len(self.state_history) - 1:
             return
         self.history_index += 1
-        self.game = self.state_history[self.history_index].clone_gomoku()
+        self.set_game(self.state_history[self.history_index].clone_gomoku())
         self.canvas.draw_stones(self.game.board)
         current_move = self.game.current_move
         if current_move:
@@ -222,6 +223,8 @@ class GomokuGUI:
             self.player_frames[p].update_capture(self.game.capture_count[p])
 
         self.update_undo_redo_buttons()
+
+        self.highlight_active_player()
 
     def update_undo_redo_buttons(self):
         self.setting_panel.undo_button.config(
@@ -251,6 +254,10 @@ class GomokuGUI:
         elif play_mode == "avsp":
             self.player_frames["X"].update_player_type(False)
             self.player_frames["O"].update_player_type(True)
+
+    def set_game(self, game):
+        self.game = game
+        self.canvas.set_game(game)
 
 
 def load_board_str(filepath):
