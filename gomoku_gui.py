@@ -1,5 +1,6 @@
 import tkinter as tk
-from lib_gomoku import Gomoku, MoveResult, get_ai_move
+from tkinter import simpledialog
+from lib_gomoku import Gomoku, MoveResult, get_ai_move, get_move_pv
 import argparse
 import time
 import threading
@@ -86,6 +87,7 @@ class GomokuGUI:
         # ===== HISTORY =====
         if history:
             for x, y in history:
+
                 self.play_one_turn(x, y)
 
         self.root.bind("<Left>", self.undo)
@@ -93,12 +95,23 @@ class GomokuGUI:
 
     # ===== HANDLE INPUT ====
     def handle_click(self, event):
-        if self.players[self.game.current_player].is_human and self.is_playing:
-            x = round((event.x - PADDING) / CELL_SIZE)
-            y = round((event.y - PADDING) / CELL_SIZE)
-            self.play_one_turn(y, x)
-        else:
+        x = round((event.x - PADDING) / CELL_SIZE)
+        y = round((event.y - PADDING) / CELL_SIZE)
+        # Ctrl+click: print the PV for this position instead of playing
+        if event.state & 0x4:  # Ctrl key modifier
+            row, col = y, x  # board coords: row=y, col=x
+            if 0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE:
+                print(f"\n--- PV analysis for {chr(ord('A') + col)}{row + 1} ---")
+                pv, score = get_move_pv(self.game, row, col)
+                pv_str = " -> ".join(f"{chr(ord('A') + c)}{r + 1}" for r, c in pv)
+                print(f"  Score: {score}")
+                print(f"  PV: {pv_str}")
+                print(f"  Depth: {len(pv)} moves")
             return
+        self.play_one_turn(y, x)  # note: board is row (y), col (x)
+        self.root.update_idletasks()
+        self.ai_play()
+        self.root.update_idletasks()
 
     # ===== GAME FLOW =====
     def play_one_turn(self, x, y):
@@ -261,13 +274,28 @@ def load_board_str(filepath):
         return content
 
 
+def chess_to_xy(coord: str):
+    """Convert chess coordinate (e.g. 'a1', 's19') to (y, x) 0-indexed."""
+    col = ord(coord[0].lower()) - ord("a")
+    row = int(coord[1:]) - 1
+    if not (0 <= col < 19 and 0 <= row < 19):
+        raise ValueError(f"Coordinate {coord} out of bounds for 19x19 board")
+    return row, col
+
+
 def load_history(filepath):
     with open(filepath, "r") as f:
         content = f.read()
+        lines = content.splitlines()
+        for line in lines:
+            if line.strip() != "":
+                content = line
+                break
         historys = content.removeprefix("move history:").strip()
         history_array = historys.split("->")
         history_tuples = [
-            (int(array.strip("()").split(",")[0]), int(array.strip("()").split(",")[1]))
+            # (int(array.strip("()").split(",")[0]), int(array.strip("()").split(",")[1]))
+            chess_to_xy(array)
             for array in history_array
         ]
 
