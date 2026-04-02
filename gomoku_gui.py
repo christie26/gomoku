@@ -22,7 +22,7 @@ NAME_FONT = "Rockwell"
 
 
 class GomokuGUI:
-    def __init__(self, root, player1, player2, history=None):
+    def __init__(self, root, player1_name, player2_name, history=None):
         self.root = root
         self.root.title("Gomoku")
 
@@ -60,15 +60,33 @@ class GomokuGUI:
         self.history_index = 0
 
         self.players = {
-            "X": Player(True, player1, True),
-            "O": Player(False, player2, True),
+            "X": Player(
+                True,
+                player1_name,
+                True,
+                PlayerPanel(
+                    self.root,
+                    self.right_frame,
+                    player1_name,
+                    True,
+                    True,
+                ),
+            ),
+            "O": Player(
+                False,
+                player2_name,
+                True,
+                PlayerPanel(
+                    self.root,
+                    self.right_frame,
+                    player2_name,
+                    False,
+                    True,
+                ),
+            ),
         }
 
         # ===== PLAYER BOXES =====
-        self.player_frames = {
-            "X": PlayerPanel(self.root, self.right_frame, self.players["X"]),
-            "O": PlayerPanel(self.root, self.right_frame, self.players["O"]),
-        }
 
         # ===== SETTINGS =====
         self.setting_panel = SettingsPanel(
@@ -114,7 +132,7 @@ class GomokuGUI:
             result, capture_count, captured = self.game.handle_move(x, y)
             if captured:
                 self.canvas.show_capture(captured)
-            self.player_frames[self.game.current_player].update_capture(
+            self.players[self.game.current_player].panel.update_capture(
                 self.game.capture_count[self.game.current_player]
             )
 
@@ -149,8 +167,8 @@ class GomokuGUI:
         self.is_playing = True
         self.canvas.reset_board(self.is_playing)
         self.setting_panel.reset_panel(self.is_playing)
-        self.player_frames["X"].reset_panel()
-        self.player_frames["O"].reset_panel()
+        self.players["X"].panel.reset_panel()
+        self.players["O"].panel.reset_panel()
 
     def change_turn(self):
         self.end_turn_timer(self.game.current_player)
@@ -185,15 +203,15 @@ class GomokuGUI:
     def highlight_active_player(self):
         for p in ["X", "O"]:
             if p == self.game.current_player:
-                self.player_frames[p].hightlight_player()
+                self.players[p].panel.hightlight_player()
             else:
-                self.player_frames[p].unhightlight_player()
+                self.players[p].panel.unhightlight_player()
 
     def start_turn_timer(self, p: Player):
-        self.player_frames[p].start_timer()
+        self.players[p].panel.start_timer()
 
     def end_turn_timer(self, p: Player):
-        self.player_frames[p].stop_timer()
+        self.players[p].panel.stop_timer()
 
     # ===== UNDO/REDO =====
     def undo(self, event=None):
@@ -209,7 +227,7 @@ class GomokuGUI:
             self.canvas.draw_last_move(current_move[1], current_move[0])
 
         for p in ["X", "O"]:
-            self.player_frames[p].update_capture(self.game.capture_count[p])
+            self.players[p].panel.update_capture(self.game.capture_count[p])
 
         self.update_undo_redo_buttons()
 
@@ -228,7 +246,7 @@ class GomokuGUI:
             self.canvas.remove_last_move()
             self.canvas.draw_last_move(current_move[1], current_move[0])
         for p in ["X", "O"]:
-            self.player_frames[p].update_capture(self.game.capture_count[p])
+            self.players[p].panel.update_capture(self.game.capture_count[p])
 
         self.update_undo_redo_buttons()
 
@@ -254,14 +272,14 @@ class GomokuGUI:
 
     def switch_play_mode(self, play_mode):
         if play_mode == "pvp":
-            self.player_frames["X"].update_player_type(True)
-            self.player_frames["O"].update_player_type(True)
+            self.players["X"].panel.update_player_type(True)
+            self.players["O"].panel.update_player_type(True)
         elif play_mode == "pvsa":
-            self.player_frames["X"].update_player_type(True)
-            self.player_frames["O"].update_player_type(False)
+            self.players["X"].panel.update_player_type(True)
+            self.players["O"].panel.update_player_type(False)
         elif play_mode == "avsp":
-            self.player_frames["X"].update_player_type(False)
-            self.player_frames["O"].update_player_type(True)
+            self.players["X"].panel.update_player_type(False)
+            self.players["O"].panel.update_player_type(True)
 
     def set_game(self, game):
         self.game = game
