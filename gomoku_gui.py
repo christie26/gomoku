@@ -89,7 +89,7 @@ class GomokuGUI:
             on_start_game=self.start_game,
             on_undo=self.undo,
             on_redo=self.redo,
-            on_debug=self.debug_onoff,
+            on_debug=self.switch_debug,
             on_hint=self.show_hint,
             on_play_mode=self.switch_play_mode,
         )
@@ -121,8 +121,31 @@ class GomokuGUI:
                 return
             self.play_one_turn(y, x)  # note: board is row (y), col (x)
 
-    # ===== GAME FLOW =====
+    # ===== START/END ======
+    def start_game(self):
+        self.set_new_game(Gomoku(size=BOARD_SIZE))
+        self.canvas.set_game(self.game)
 
+        ruleset = self.setting_panel.ruleset.get()
+        print(f"Game is started with {ruleset} ruleset")
+
+        p = self.game.current_player
+        self.highlight_active_player()
+        self.start_turn_timer(p)
+
+        self.is_playing = True
+        self.canvas.reset_board(self.is_playing)
+        self.setting_panel.reset_panel(self.is_playing)
+        self.players["X"].panel.reset_panel()
+        self.players["O"].panel.reset_panel()
+
+    def finish_game(self, winner):
+        self.end_turn_timer(self.game.current_player)
+        self.canvas.show_winner(f"{self.players[winner].name} wins")
+        self.is_playing = False
+        self.setting_panel.reset_panel(False)
+
+    # ===== TURN ======
     def play_one_turn(self, x, y):
         self.canvas.remove_debug()
         self.canvas.remove_hint()
@@ -157,23 +180,6 @@ class GomokuGUI:
             self.history_index += 1
             self.update_undo_redo_buttons()
 
-    def start_game(self):
-        self.set_game(Gomoku(size=BOARD_SIZE))
-        self.canvas.set_game(self.game)
-
-        ruleset = self.setting_panel.ruleset.get()
-        print(f"Game is started with {ruleset} ruleset")
-
-        p = self.game.current_player
-        self.highlight_active_player()
-        self.start_turn_timer(p)
-
-        self.is_playing = True
-        self.canvas.reset_board(self.is_playing)
-        self.setting_panel.reset_panel(self.is_playing)
-        self.players["X"].panel.reset_panel()
-        self.players["O"].panel.reset_panel()
-
     def change_turn(self):
         self.end_turn_timer(self.game.current_player)
 
@@ -193,12 +199,6 @@ class GomokuGUI:
             self.root.after(0, lambda: self.play_one_turn(x, y))
 
         threading.Thread(target=run_ai, daemon=True).start()
-
-    def finish_game(self, winner):
-        self.end_turn_timer(self.game.current_player)
-        self.canvas.show_winner(f"{self.players[winner].name} wins")
-        self.is_playing = False
-        self.setting_panel.reset_panel(False)
 
     # ===== DEBUG/HINT =====
     def show_hint(self):
@@ -230,7 +230,7 @@ class GomokuGUI:
         if self.history_index <= 0:
             return
         self.history_index -= 1
-        self.set_game(self.state_history[self.history_index].clone_gomoku())
+        self.set_new_game(self.state_history[self.history_index].clone_gomoku())
 
         self.canvas.draw_stones(self.game.board)
         current_move = self.game.current_move
@@ -250,7 +250,7 @@ class GomokuGUI:
         if self.history_index >= len(self.state_history) - 1:
             return
         self.history_index += 1
-        self.set_game(self.state_history[self.history_index].clone_gomoku())
+        self.set_new_game(self.state_history[self.history_index].clone_gomoku())
         self.canvas.draw_stones(self.game.board)
         current_move = self.game.current_move
         if current_move:
@@ -276,7 +276,7 @@ class GomokuGUI:
         )
 
     # ===== SETTING =====
-    def debug_onoff(self, debug: bool):
+    def switch_debug(self, debug: bool):
         self.debug = debug
         if debug:
             self.show_debug()
@@ -300,7 +300,7 @@ class GomokuGUI:
             self.players["X"].panel.set_hint_available(False)
             self.players["O"].panel.set_hint_available(False)
 
-    def set_game(self, game):
+    def set_new_game(self, game):
         self.game = game
         self.canvas.set_game(game)
 
