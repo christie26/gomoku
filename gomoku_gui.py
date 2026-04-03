@@ -49,11 +49,6 @@ class GomokuGUI:
         self.right_frame.pack_propagate(False)
         self.right_frame.bind("<Enter>", self.canvas.remove_hover)
 
-        # ===== UNDO/REDO =====
-        self.game = Gomoku(size=BOARD_SIZE)
-        self.state_history = [self.game.clone_gomoku()]
-        self.history_index = 0
-
         self.players = {
             "X": Player(
                 is_X=True,
@@ -87,7 +82,6 @@ class GomokuGUI:
         # ===== HISTORY =====
         if history:
             for x, y in history:
-
                 self.play_one_turn(x, y)
 
         self.root.bind("<Left>", self.undo)
@@ -113,8 +107,11 @@ class GomokuGUI:
 
     # ===== START/END ======
     def start_game(self):
-        self.set_new_game(Gomoku(size=BOARD_SIZE))
-        self.canvas.set_game(self.game)
+        # create new game
+        self.set_game(Gomoku(size=BOARD_SIZE))
+
+        self.state_history = [self.game.clone_gomoku()]
+        self.history_index = 0
 
         ruleset = self.setting_panel.ruleset.get()
         print(f"Game is started with {ruleset} ruleset")
@@ -128,6 +125,8 @@ class GomokuGUI:
         self.setting_panel.reset_panel(self.is_playing)
         self.player_panels["X"].reset_panel()
         self.player_panels["O"].reset_panel()
+
+        # play if current player is AI
         if not self.players[self.game.current_player].is_human:
             self.ai_play()
 
@@ -157,18 +156,18 @@ class GomokuGUI:
             if winner:
                 self.finish_game(winner)
             else:
+                # Record state for undo/redo
+                self.state_history = self.state_history[: self.history_index + 1]
+                self.state_history.append(self.game.clone_gomoku())
+                self.history_index += 1
+                self.update_undo_redo_buttons()
+
                 self.change_turn()
                 p = self.game.current_player
                 if self.debug:
                     self.show_debug()
                 if not self.players[p].is_human:
                     self.ai_play()
-
-            # Record state for undo/redo
-            self.state_history = self.state_history[: self.history_index + 1]
-            self.state_history.append(self.game.clone_gomoku())
-            self.history_index += 1
-            self.update_undo_redo_buttons()
 
     def change_turn(self):
         self.end_turn_timer(self.game.current_player)
@@ -222,7 +221,7 @@ class GomokuGUI:
             return
 
         self.history_index -= 1
-        self.set_new_game(self.state_history[self.history_index].clone_gomoku())
+        self.set_game(self.state_history[self.history_index].clone_gomoku())
 
         if self.history_index == 0:
             self.canvas.remove_last_move()
@@ -236,7 +235,7 @@ class GomokuGUI:
             return
 
         self.history_index += 1
-        self.set_new_game(self.state_history[self.history_index].clone_gomoku())
+        self.set_game(self.state_history[self.history_index].clone_gomoku())
 
         self.common_undo_redo()
 
@@ -295,7 +294,7 @@ class GomokuGUI:
         self.players[player].is_human = is_human
         self.player_panels[player].update_player_type(is_human)
 
-    def set_new_game(self, game):
+    def set_game(self, game):
         self.game = game
         self.canvas.set_game(game)
 
