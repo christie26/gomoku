@@ -41,6 +41,14 @@ class SettingsPanel:
             highlightthickness=1,
             relief="solid",
         )
+        self.hint_button = tk.Button(
+            self.setting_frame,
+            text="Hint",
+            command=self.on_hint,
+            font=NAME_FONT,
+            highlightbackground=LIGHT_BACKGROUND,
+        )
+        self.hint_button.pack(pady=0, padx=0, anchor="w")
 
         # -------------------
         # 1. Play Mode
@@ -143,7 +151,7 @@ class SettingsPanel:
         )
         debug_frame.pack(pady=(15, 0), anchor="w")
 
-        self.debug_enabled = tk.BooleanVar(value=True)
+        self.debug_enabled = tk.BooleanVar(value=False)
 
         self.debug_checkbox = tk.Checkbutton(
             self.setting_frame,
@@ -155,18 +163,9 @@ class SettingsPanel:
         )
         self.debug_checkbox.pack(anchor="w")
 
-        self.hint_button = tk.Button(
-            self.setting_frame,
-            text="Hint",
-            command=self.on_hint,
-            font=NAME_FONT,
-            highlightbackground=LIGHT_BACKGROUND,
-        )
-        self.hint_button.pack(pady=0, padx=0, anchor="w")
-
         self.debug_tip = tk.Label(
             self.setting_frame,
-            text="Black should follow positive number, \nWhite should follow negative number.",
+            text="Black : max, White : min",
             font=NAME_FONT,
             background=LIGHT_BACKGROUND,
         )
