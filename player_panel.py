@@ -15,6 +15,7 @@ class PlayerPanel:
         self.player_name = player_name
         self.start_time = None
         self.capture_count = 0
+        self.is_X = is_X
 
         self.frame = tk.Frame(
             parent,
@@ -114,7 +115,9 @@ class PlayerPanel:
             for i in range(5):
                 circle = self.capture_circles[i]
                 if i < self.capture_count:
-                    self.capture_canvas.itemconfig(circle, fill="black")
+                    self.capture_canvas.itemconfig(
+                        circle, fill="black" if self.is_X else "white"
+                    )
                 else:
                     self.capture_canvas.itemconfig(circle, fill="")
 
