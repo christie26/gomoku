@@ -131,7 +131,7 @@ class BoardCanvas:
     def draw_last_move(self, x, y):
         cx = PADDING + x * CELL_SIZE
         cy = PADDING + y * CELL_SIZE
-        r = CELL_SIZE // 2 - 12
+        r = CELL_SIZE // 6
 
         self.canvas.delete("last-move")
         self.canvas.create_oval(
