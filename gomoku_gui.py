@@ -95,6 +95,7 @@ class GomokuGUI:
             on_undo=self.undo,
             on_redo=self.redo,
             on_debug=self.debug_onoff,
+            on_hint=self.show_hint,
             on_play_mode=self.switch_play_mode,
         )
 
@@ -125,8 +126,10 @@ class GomokuGUI:
         self.play_one_turn(y, x)  # note: board is row (y), col (x)
 
     # ===== GAME FLOW =====
+
     def play_one_turn(self, x, y):
-        self.canvas.remove_all_hint()
+        self.canvas.remove_debug()
+        self.canvas.remove_hint()
 
         result = self.game.is_valid_move(x, y)
 
@@ -147,9 +150,8 @@ class GomokuGUI:
             else:
                 self.change_turn()
                 p = self.game.current_player
-                if self.players[p].is_human and self.players[p].panel.is_hint_on():
-                    moves = get_hint(self.game)
-                    self.canvas.draw_hint_moves(moves)
+                if self.debug:
+                    self.show_debug()
                 if not self.players[p].is_human:
                     self.ai_play()
 
@@ -190,7 +192,7 @@ class GomokuGUI:
             best_move, moves = get_ai_move(self.game)
             x, y, _ = best_move
             if self.debug:
-                self.canvas.draw_hint_moves(moves, best_move)
+                self.canvas.draw_debug(moves, best_move)
                 # QUESTION - what happens if there's no best_move ?
             self.root.after(0, lambda: self.play_one_turn(x, y))
 
@@ -201,6 +203,16 @@ class GomokuGUI:
         self.canvas.show_winner(f"{self.players[winner].name} wins")
         self.is_playing = False
         self.setting_panel.reset_panel(False)
+
+    # ===== DEBUG/HINT =====
+    def show_hint(self):
+        # TODO add variable so that it's not triggered twice
+        best_move, _ = get_ai_move(self.game)
+        self.canvas.draw_hint(best_move)
+
+    def show_debug(self):
+        best_move, moves = get_ai_move(self.game)
+        self.canvas.draw_debug(moves, best_move)
 
     # ===== PLAYER PANEL =====
     def highlight_active_player(self):
@@ -270,8 +282,10 @@ class GomokuGUI:
     # ===== SETTING =====
     def debug_onoff(self, debug: bool):
         self.debug = debug
-        if not debug:
-            self.canvas.remove_all_hint()
+        if debug:
+            self.show_debug()
+        else:
+            self.canvas.remove_debug()
 
     def switch_play_mode(self, play_mode):
         if play_mode == "pvp":

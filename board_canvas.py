@@ -130,6 +130,7 @@ class BoardCanvas:
             cx - r, cy - r, cx + r, cy + r, fill=color, tags="stone"
         )
 
+    # ==== LAST MOVE ====
     def draw_last_move(self, x, y):
         cx = PADDING + x * CELL_SIZE
         cy = PADDING + y * CELL_SIZE
@@ -143,7 +144,8 @@ class BoardCanvas:
     def remove_last_move(self):
         self.canvas.delete("last-move")
 
-    def draw_hint_moves(self, moves, best_move=None):
+    # ==== DEBUG ====
+    def draw_debug(self, moves, best_move=None):
         for m in moves:
             x1, y1, score1 = m
 
@@ -152,9 +154,9 @@ class BoardCanvas:
                 bx, by, _ = best_move
                 selected = bx == x1 and by == y1
 
-            self.draw_a_hint(y1, x1, "O", score1, selected)
+            self.draw_debug_stone(y1, x1, "O", score1, selected)
 
-    def draw_a_hint(self, x, y, player, number, selected):
+    def draw_debug_stone(self, x, y, player, number, selected):
         color = "black" if player == "X" else "white"
         cx = PADDING + x * CELL_SIZE
         cy = PADDING + y * CELL_SIZE
@@ -170,7 +172,7 @@ class BoardCanvas:
             fill=color,
             stipple="gray50",
             outline=outline_color,
-            tags="hint",
+            tags="debug",
         )
         # Calculate appropriate font size based on stone size and number length
         number_str = str(number)
@@ -193,10 +195,31 @@ class BoardCanvas:
             text=number_str,
             fill=text_color,
             font=("Arial", font_size, "bold"),
+            tags="debug",
+        )
+
+    def remove_debug(self):
+        self.canvas.delete("debug")
+
+    # ===== HINT =====
+    def draw_hint(self, best_move):
+        x, y, _ = best_move
+        cx = PADDING + x * CELL_SIZE
+        cy = PADDING + y * CELL_SIZE
+        r = CELL_SIZE // 2 - 2
+
+        self.canvas.create_oval(
+            cx - r,
+            cy - r,
+            cx + r,
+            cy + r,
+            fill="",
+            stipple="gray50",
+            outline="red",
             tags="hint",
         )
 
-    def remove_all_hint(self):
+    def remove_hint(self):
         self.canvas.delete("hint")
 
     # ===== HOVER =====

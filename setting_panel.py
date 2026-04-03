@@ -7,13 +7,21 @@ BORDER_COLOR = "#6f5c43"
 
 class SettingsPanel:
     def __init__(
-        self, right_frame, on_start_game, on_undo, on_redo, on_debug, on_play_mode
+        self,
+        right_frame,
+        on_start_game,
+        on_undo,
+        on_redo,
+        on_debug,
+        on_play_mode,
+        on_hint,
     ):
         self.is_playing = False
         self.on_start_game = on_start_game
         self.on_undo = on_undo
         self.on_redo = on_redo
         self.on_debug = on_debug
+        self.on_hint = on_hint
         self.switch_play_mode = on_play_mode
 
         self.setting_frame = tk.Frame(right_frame, padx=10, pady=10)
@@ -145,18 +153,28 @@ class SettingsPanel:
             font=NAME_FONT,
             background=LIGHT_BACKGROUND,
         )
+        self.debug_checkbox.pack(anchor="w")
+
+        self.hint_button = tk.Button(
+            self.setting_frame,
+            text="Hint",
+            command=self.on_hint,
+            font=NAME_FONT,
+            highlightbackground=LIGHT_BACKGROUND,
+        )
+        self.hint_button.pack(pady=0, padx=0, anchor="w")
+
         self.debug_tip = tk.Label(
             self.setting_frame,
             text="Black should follow positive number, \nWhite should follow negative number.",
             font=NAME_FONT,
             background=LIGHT_BACKGROUND,
         )
-        self.debug_checkbox.pack(anchor="w")
         self.debug_tip.pack(anchor="w")
 
         # 4. Start Button
         button_frame = tk.Frame(
-            self.setting_frame, pady=20, background=LIGHT_BACKGROUND
+            self.setting_frame, pady=15, background=LIGHT_BACKGROUND
         )
         button_frame.pack(fill="x")
 
@@ -167,7 +185,7 @@ class SettingsPanel:
             font=NAME_FONT,
             highlightbackground=LIGHT_BACKGROUND,
         )
-        self.start_button.pack(pady=5, padx=5, anchor="w")
+        self.start_button.pack(pady=3, padx=5, anchor="w")
 
         # 5. Undo / Redo
         self.undo_button = tk.Button(
@@ -178,7 +196,7 @@ class SettingsPanel:
             font=NAME_FONT,
             highlightbackground=LIGHT_BACKGROUND,
         )
-        self.undo_button.pack(pady=5, padx=5, anchor="w")
+        self.undo_button.pack(pady=3, padx=5, anchor="w")
 
         self.redo_button = tk.Button(
             button_frame,
@@ -188,7 +206,7 @@ class SettingsPanel:
             font=NAME_FONT,
             highlightbackground=LIGHT_BACKGROUND,
         )
-        self.redo_button.pack(pady=5, padx=5, anchor="w")
+        self.redo_button.pack(pady=3, padx=5, anchor="w")
 
     def _on_debug_changed(self):
         value = self.debug_enabled.get()
