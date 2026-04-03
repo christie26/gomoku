@@ -18,7 +18,6 @@ class SettingsPanel:
         on_play_mode,
         on_hint,
     ):
-        self.is_playing = False
         self.on_start_game = on_start_game
         self.on_undo = on_undo
         self.on_redo = on_redo
@@ -218,7 +217,6 @@ class SettingsPanel:
         self.switch_play_mode(value)
 
     def start_game(self):
-        self.is_playing = True
         self.on_start_game()
 
     def reset_panel(self, is_playing: bool):
