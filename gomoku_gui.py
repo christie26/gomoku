@@ -82,6 +82,7 @@ class GomokuGUI:
 
         # ===== HISTORY =====
         if history:
+            self.start_game()
             for x, y in history:
                 self.play_one_turn(x, y)
 
