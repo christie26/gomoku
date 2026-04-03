@@ -243,6 +243,9 @@ class GomokuGUI:
         self.highlight_active_player()
         self.end_turn_timer("X")
         self.end_turn_timer("O")
+        if self.debug:
+            self.canvas.remove_debug()
+            # self.show_debug()
 
     def redo(self, event=None):
         if self.history_index >= len(self.state_history) - 1:
@@ -260,6 +263,9 @@ class GomokuGUI:
         self.update_undo_redo_buttons()
 
         self.highlight_active_player()
+        if self.debug:
+            self.canvas.remove_debug()
+            # self.show_debug()
 
     def update_undo_redo_buttons(self):
         self.setting_panel.undo_button.config(
