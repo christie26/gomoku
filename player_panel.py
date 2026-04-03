@@ -1,11 +1,12 @@
 import tkinter as tk
 import time
 
-LIGHT_BACKGROUND = "#FAEBD7"
-SELECT_BACKGROUND = "#A68A64"
-BORDER_COLOR = "#6f5c43"
-
-NAME_FONT = "Rockwell"
+from constants import (
+    LIGHT_BACKGROUND,
+    SELECT_BACKGROUND,
+    BORDER_COLOR,
+    NAME_FONT,
+)
 
 
 class PlayerPanel:

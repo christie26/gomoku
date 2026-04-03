@@ -1,8 +1,10 @@
 import tkinter as tk
 
-NAME_FONT = "Rockwell"
-LIGHT_BACKGROUND = "#FAEBD7"
-BORDER_COLOR = "#6f5c43"
+from constants import (
+    LIGHT_BACKGROUND,
+    BORDER_COLOR,
+    NAME_FONT,
+)
 
 
 class SettingsPanel:

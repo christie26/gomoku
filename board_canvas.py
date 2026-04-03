@@ -1,16 +1,13 @@
 import tkinter as tk
 from lib_gomoku import Gomoku, MoveResult, get_ai_move
-
-CELL_SIZE = 32
-LABEL_PADDING = 10
-BOARD_SIZE = 19
-PADDING = 30
-
-LIGHT_BACKGROUND = "#FAEBD7"
-SELECT_BACKGROUND = "#A68A64"
-BORDER_COLOR = "#6f5c43"
-
-NAME_FONT = "Rockwell"
+from constants import (
+    CELL_SIZE,
+    LABEL_PADDING,
+    BOARD_SIZE,
+    PADDING,
+    BORDER_COLOR,
+    NAME_FONT,
+)
 
 
 class BoardCanvas:
