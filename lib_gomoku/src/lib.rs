@@ -480,7 +480,7 @@ impl Gomoku {
                     .get_mut(&self.current_player)
                     .unwrap()
                     .push(points);
-            } else if total_my == 3 && (plus_open || minus_open) {
+            } else if total_my == 3 && plus_open && minus_open {
                 let mut points = Vec::new();
                 for i in (-(minus_my + 1))..=(plus_my + 1) {
                     points.push((x0 + dx * i, y0 + dy * i));
@@ -489,7 +489,7 @@ impl Gomoku {
                     .get_mut(&self.current_player)
                     .unwrap()
                     .push(points);
-            } else if total_my == 3 && (plus_open || minus_open) {
+            } else if total_my == 3 && (plus_open != minus_open) {
                 let plus_end = plus_my + 1 + (plus_open as i32);
                 let minus_end = minus_my + (minus_open as i32);
 

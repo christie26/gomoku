@@ -110,7 +110,7 @@ impl SearchStats {
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
-const MAX_DEPTH: usize = 5;
+const MAX_DEPTH: usize = 7;
 
 pub const BOARD_SIZE: usize = 19;
 const DIRECTIONS: &[(i32, i32)] = &[(1, 0), (0, 1), (1, 1), (1, -1)];
