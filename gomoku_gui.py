@@ -128,6 +128,8 @@ class GomokuGUI:
         self.setting_panel.reset_panel(self.is_playing)
         self.player_panels["X"].reset_panel()
         self.player_panels["O"].reset_panel()
+        if not self.players[self.game.current_player].is_human:
+            self.ai_play()
 
     def finish_game(self, winner):
         self.end_turn_timer(self.game.current_player)
