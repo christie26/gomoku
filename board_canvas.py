@@ -202,7 +202,7 @@ class BoardCanvas:
 
     # ===== HINT =====
     def draw_hint(self, best_move):
-        x, y, _ = best_move
+        y, x, _ = best_move
         cx = PADDING + x * CELL_SIZE
         cy = PADDING + y * CELL_SIZE
         r = CELL_SIZE // 2 - 2
