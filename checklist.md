@@ -3,12 +3,14 @@ DONE - scale correctly
 DONE - before start game click shouldn't work
 DONE - debug tool is off but he can see it
 DONE - initialy debug tool didn't work
+DONE - rerun debug tool in undo/redo
+DONE - disable hint before start 
+DONE - capture stone color
+DONE - debug tool background color
+DONE - last undo doesn't remove last move mark
 
-- disable hint before start 
+- when starting new game, the undo/redo list still has the values of last game
 - debug and hint show different thing 
-- debug tool background color
-
-TODO
 - 5 row ui
 
 QUESTION
