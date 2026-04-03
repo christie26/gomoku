@@ -9,13 +9,21 @@ from constants import (
 )
 
 
+class Player:
+    def __init__(self, is_X: bool, name: str, is_human: bool):
+        self.is_X = is_X
+        self.name = name
+        self.is_human = is_human
+
+
 class PlayerPanel:
-    def __init__(self, root, parent, player_name: str, is_X: bool, is_human: bool):
+    def __init__(self, root, parent, player: Player):
         self.root = root
-        self.player_name = player_name
         self.start_time = None
         self.capture_count = 0
-        self.is_X = is_X
+        self.player_name = player.name
+        self.is_X = player.is_X
+        self.is_human = player.is_human
 
         self.frame = tk.Frame(
             parent,
@@ -35,7 +43,7 @@ class PlayerPanel:
         bottom_frame.pack(fill="x", pady=(5, 0))
 
         # icon
-        stone = "⚫" if is_X else "⚪"
+        stone = "⚫" if self.is_X else "⚪"
         self.icon_label = tk.Label(
             top_frame, text=stone, font=("Arial", 16), bg=LIGHT_BACKGROUND
         )
@@ -44,7 +52,7 @@ class PlayerPanel:
         # name
         self.name_label = tk.Label(
             top_frame,
-            text=("AI" if not is_human else f"Player {player_name}"),
+            text=("AI" if not self.is_human else f"Player {self.player_name}"),
             font=(NAME_FONT, 14),
             bg=LIGHT_BACKGROUND,
         )
@@ -123,17 +131,10 @@ class PlayerPanel:
 
     # update name
     def update_player_type(self, is_human: bool):
+        self.is_human = is_human
         self.name_label.config(
             text=("AI" if not is_human else f"Player {self.player_name}")
         )
 
     def reset_panel(self):
         self.time_label.config(text="0 ms")
-
-
-class Player:
-    def __init__(self, is_X: bool, name: str, is_human: bool, panel: PlayerPanel):
-        self.is_X = is_X
-        self.name = name
-        self.is_human = is_human
-        self.panel = panel

@@ -56,29 +56,19 @@ class GomokuGUI:
 
         self.players = {
             "X": Player(
-                True,
-                player1_name,
-                True,
-                PlayerPanel(
-                    self.root,
-                    self.right_frame,
-                    player1_name,
-                    True,
-                    True,
-                ),
+                is_X=True,
+                name=player1_name,
+                is_human=True,
             ),
             "O": Player(
-                False,
-                player2_name,
-                True,
-                PlayerPanel(
-                    self.root,
-                    self.right_frame,
-                    player2_name,
-                    False,
-                    True,
-                ),
+                is_X=False,
+                name=player2_name,
+                is_human=True,
             ),
+        }
+        self.player_panels = {
+            "X": PlayerPanel(self.root, self.right_frame, self.players["X"]),
+            "O": PlayerPanel(self.root, self.right_frame, self.players["O"]),
         }
 
         # ===== PLAYER BOXES =====
@@ -136,8 +126,8 @@ class GomokuGUI:
         self.is_playing = True
         self.canvas.reset_board(self.is_playing)
         self.setting_panel.reset_panel(self.is_playing)
-        self.players["X"].panel.reset_panel()
-        self.players["O"].panel.reset_panel()
+        self.player_panels["X"].reset_panel()
+        self.player_panels["O"].reset_panel()
 
     def finish_game(self, winner):
         self.end_turn_timer(self.game.current_player)
@@ -155,9 +145,8 @@ class GomokuGUI:
             result, capture_count, captured = self.game.handle_move(x, y)
             if captured:
                 self.canvas.show_capture(captured)
-            self.players[self.game.current_player].panel.update_capture(
-                self.game.capture_count[self.game.current_player]
-            )
+            p = self.game.current_player
+            self.player_panels[p].update_capture(self.game.capture_count[p])
 
             self.canvas.draw_stones(self.game.board)
 
@@ -215,15 +204,15 @@ class GomokuGUI:
     def highlight_active_player(self):
         for p in ["X", "O"]:
             if p == self.game.current_player:
-                self.players[p].panel.hightlight_player()
+                self.player_panels[p].hightlight_player()
             else:
-                self.players[p].panel.unhightlight_player()
+                self.player_panels[p].unhightlight_player()
 
     def start_turn_timer(self, p: Player):
-        self.players[p].panel.start_timer()
+        self.player_panels[p].start_timer()
 
     def end_turn_timer(self, p: Player):
-        self.players[p].panel.stop_timer()
+        self.player_panels[p].stop_timer()
 
     # ===== UNDO/REDO =====
     def undo(self, event=None):
@@ -260,7 +249,7 @@ class GomokuGUI:
             self.canvas.draw_last_move(current_move[1], current_move[0])
         # 3. update capture
         for p in ["X", "O"]:
-            self.players[p].panel.update_capture(self.game.capture_count[p])
+            self.player_panels[p].update_capture(self.game.capture_count[p])
         # 4. show debug
         if self.debug:
             self.show_debug()
@@ -291,14 +280,18 @@ class GomokuGUI:
 
     def switch_play_mode(self, play_mode):
         if play_mode == "pvp":
-            self.players["X"].panel.update_player_type(True)
-            self.players["O"].panel.update_player_type(True)
+            self.switch_player_human("X", True)
+            self.switch_player_human("O", True)
         elif play_mode == "pvsa":
-            self.players["X"].panel.update_player_type(True)
-            self.players["O"].panel.update_player_type(False)
+            self.switch_player_human("X", True)
+            self.switch_player_human("O", False)
         elif play_mode == "avsp":
-            self.players["X"].panel.update_player_type(False)
-            self.players["O"].panel.update_player_type(True)
+            self.switch_player_human("X", False)
+            self.switch_player_human("O", True)
+
+    def switch_player_human(self, player, is_human):
+        self.players[player].is_human = is_human
+        self.player_panels[player].update_player_type(is_human)
 
     def set_new_game(self, game):
         self.game = game
