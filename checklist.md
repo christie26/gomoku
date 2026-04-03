@@ -9,20 +9,20 @@ DONE - capture stone color
 DONE - debug tool background color
 DONE - last undo doesn't remove last move mark
 
-- when starting new game, the undo/redo list still has the values of last game
+DONE - when starting new game, the undo/redo list still has the values of last game
 - debug and hint show different thing 
 - 5 row ui
+- history doesn't work
 
 QUESTION
-- hint is a button and only show red circle which is the best move in that situation
-- hint button goes under undo button (not per player)
-- debug is checkbox is not per player 
-- when we turn on debug tool, we should show the possible moves 
-- debug tool always show the next move
-- debug mode only make sense for player
+DONE - hint is a button and only show red circle which is the best move in that situation
+DONE - hint button is not per player
+DONE - debug is checkbox is not per player 
+DONE - when we turn on debug tool, we should show the possible moves 
+DONE - debug tool always show the next move
 
 
-- when game is done, should we disable undo button?
+DONE - when game is done, should we disable undo button? - yes
 
 User status
 DONE - show player name and if it's AI player or human player
