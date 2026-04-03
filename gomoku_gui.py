@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import simpledialog
-from lib_gomoku import Gomoku, MoveResult, get_ai_move, get_move_pv, get_hint
+from lib_gomoku import Gomoku, MoveResult, get_ai_move, get_move_pv
 import argparse
 import time
 import threading

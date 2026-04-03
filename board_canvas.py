@@ -1,5 +1,5 @@
 import tkinter as tk
-from lib_gomoku import Gomoku, MoveResult, get_ai_move
+from lib_gomoku import MoveResult
 from constants import (
     CELL_SIZE,
     LABEL_PADDING,

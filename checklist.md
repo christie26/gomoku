@@ -1,3 +1,13 @@
+NOTE
+DONE - scale correctly
+DONE - before start game click shouldn't work
+DONE - debug tool is off but he can see it
+DONE - initialy debug tool didn't work
+
+- disable hint before start 
+- debug and hint show different thing 
+- debug tool background color
+
 TODO
 - 5 row ui
 

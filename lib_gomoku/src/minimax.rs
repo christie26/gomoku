@@ -344,15 +344,6 @@ pub fn get_ai_move(
     (best, moves)
 }
 
-#[pyfunction]
-pub fn get_hint(
-    _py: Python,
-    state: &Gomoku,
-) -> Vec<(usize, usize, Option<i32>)> {
-    let (_, moves, _) = get_ai_move_with_stats(state);
-    moves
-}
-
 /// Given a game state and a move (x, y), return the principal variation
 /// (sequence of moves from that point to the leaf) and the evaluated score.
 #[pyfunction]
