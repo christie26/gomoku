@@ -147,8 +147,7 @@ class GomokuGUI:
 
     # ===== TURN ======
     def play_one_turn(self, x, y):
-        self.canvas.remove_debug()
-        self.canvas.remove_hint()
+        self.clean_for_new_turn()
 
         result = self.game.is_valid_move(x, y)
 
@@ -185,12 +184,17 @@ class GomokuGUI:
 
         self.game.switch_player()
         p = self.game.current_player
+        self.clean_for_new_turn()
 
         self.highlight_active_player()
         self.start_turn_timer(p)
 
-    def ai_play(self):
+    def clean_for_new_turn(self):
+        self.canvas.remove_last_move()
+        self.canvas.remove_debug()
+        self.canvas.remove_hint()
 
+    def ai_play(self):
         def run_ai():
             best_move, moves = get_ai_move(self.game)
             x, y, _ = best_move
@@ -224,42 +228,45 @@ class GomokuGUI:
 
     # ===== UNDO/REDO =====
     def undo(self, event=None):
-        self.canvas.remove_last_move()
         if self.history_index <= 0:
             return
+
         self.history_index -= 1
         self.set_new_game(self.state_history[self.history_index].clone_gomoku())
 
-        self.canvas.draw_stones(self.game.board)
-        current_move = self.game.current_move
-        if current_move:
-            self.canvas.draw_last_move(current_move[1], current_move[0])
+        self.common_undo_redo()
 
-        for p in ["X", "O"]:
-            self.players[p].panel.update_capture(self.game.capture_count[p])
-
-        self.update_undo_redo_buttons()
-
-        self.highlight_active_player()
         self.end_turn_timer("X")
         self.end_turn_timer("O")
 
     def redo(self, event=None):
         if self.history_index >= len(self.state_history) - 1:
             return
+
         self.history_index += 1
         self.set_new_game(self.state_history[self.history_index].clone_gomoku())
+
+        self.common_undo_redo()
+
+    def common_undo_redo(self):
+        # 0. clean
+        self.clean_for_new_turn()
+        # 1. draw stones
         self.canvas.draw_stones(self.game.board)
+        # 2. draw last move
         current_move = self.game.current_move
         if current_move:
-            self.canvas.remove_last_move()
             self.canvas.draw_last_move(current_move[1], current_move[0])
+        # 3. update capture
         for p in ["X", "O"]:
             self.players[p].panel.update_capture(self.game.capture_count[p])
+        # 4. show debug
+        if self.debug:
+            self.show_debug()
+        # 5. highlight active player
+        self.highlight_active_player()
 
         self.update_undo_redo_buttons()
-
-        self.highlight_active_player()
 
     def update_undo_redo_buttons(self):
         self.setting_panel.undo_button.config(
