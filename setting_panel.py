@@ -46,6 +46,7 @@ class SettingsPanel:
             self.setting_frame,
             text="Hint",
             command=self.on_hint,
+            state=tk.DISABLED,
             font=NAME_FONT,
             highlightbackground=LIGHT_BACKGROUND,
         )
@@ -223,8 +224,10 @@ class SettingsPanel:
         if is_playing:
             for rb in self.setting_ratios:
                 rb.config(state="disabled")
+            self.hint_button.config(state="normal")
             self.start_button.config(state="disabled")
         else:
             for rb in self.setting_ratios:
                 rb.config(state="normal")
+            self.hint_button.config(state="disabled")
             self.start_button.config(state="normal")
