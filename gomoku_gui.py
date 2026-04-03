@@ -233,6 +233,8 @@ class GomokuGUI:
         self.history_index -= 1
         self.set_new_game(self.state_history[self.history_index].clone_gomoku())
 
+        if self.history_index == 0:
+            self.canvas.remove_last_move()
         self.common_undo_redo()
 
         self.end_turn_timer("X")
