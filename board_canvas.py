@@ -142,7 +142,7 @@ class BoardCanvas:
         self.canvas.delete("last-move")
 
     # ==== DEBUG ====
-    def draw_debug(self, moves, best_move=None):
+    def draw_debug(self, moves, best_move, player):
         for m in moves:
             x1, y1, score1 = m
 
@@ -151,10 +151,10 @@ class BoardCanvas:
                 bx, by, _ = best_move
                 selected = bx == x1 and by == y1
 
-            self.draw_debug_stone(y1, x1, "O", score1, selected)
+            self.draw_debug_stone(y1, x1, player, score1, selected)
 
     def draw_debug_stone(self, x, y, player, number, selected):
-        color = "black" if player == "X" else "white"
+        color = "#333333" if player == "X" else "#DDDDDD"
         cx = PADDING + x * CELL_SIZE
         cy = PADDING + y * CELL_SIZE
         r = CELL_SIZE // 2 - 2

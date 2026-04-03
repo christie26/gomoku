@@ -209,7 +209,7 @@ class GomokuGUI:
 
     def show_debug(self):
         best_move, moves = get_ai_move(self.game)
-        self.canvas.draw_debug(moves, best_move)
+        self.canvas.draw_debug(moves, best_move, self.game.current_player)
 
     # ===== PLAYER PANEL =====
     def highlight_active_player(self):
