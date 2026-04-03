@@ -190,7 +190,6 @@ class GomokuGUI:
         self.start_turn_timer(p)
 
     def clean_for_new_turn(self):
-        self.canvas.remove_last_move()
         self.canvas.remove_debug()
         self.canvas.remove_hint()
 

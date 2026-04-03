@@ -133,7 +133,7 @@ class BoardCanvas:
         cy = PADDING + y * CELL_SIZE
         r = CELL_SIZE // 6
 
-        self.canvas.delete("last-move")
+        self.remove_last_move()
         self.canvas.create_oval(
             cx - r, cy - r, cx + r, cy + r, fill="red", outline="red", tags="last-move"
         )
