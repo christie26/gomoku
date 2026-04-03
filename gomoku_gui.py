@@ -293,18 +293,12 @@ class GomokuGUI:
         if play_mode == "pvp":
             self.players["X"].panel.update_player_type(True)
             self.players["O"].panel.update_player_type(True)
-            self.players["X"].panel.set_hint_available(True)
-            self.players["O"].panel.set_hint_available(True)
         elif play_mode == "pvsa":
             self.players["X"].panel.update_player_type(True)
             self.players["O"].panel.update_player_type(False)
-            self.players["X"].panel.set_hint_available(False)
-            self.players["O"].panel.set_hint_available(False)
         elif play_mode == "avsp":
             self.players["X"].panel.update_player_type(False)
             self.players["O"].panel.update_player_type(True)
-            self.players["X"].panel.set_hint_available(False)
-            self.players["O"].panel.set_hint_available(False)
 
     def set_new_game(self, game):
         self.game = game

@@ -231,3 +231,5 @@ class SettingsPanel:
                 rb.config(state="normal")
             self.hint_button.config(state="disabled")
             self.start_button.config(state="normal")
+            self.undo_button.config(state=tk.DISABLED)
+            self.redo_button.config(state=tk.DISABLED)
