@@ -23,7 +23,7 @@ class GomokuGUI:
 
         self.sizeeee = CELL_SIZE * (BOARD_SIZE - 1) + PADDING * 2
         self.is_playing = False
-        self.debug = True
+        self.debug = False
 
         # ===== MAIN LAYOUT =====
         self.main_frame = tk.Frame(
@@ -190,12 +190,10 @@ class GomokuGUI:
         self.start_turn_timer(p)
 
     def ai_play(self):
+
         def run_ai():
             best_move, moves = get_ai_move(self.game)
             x, y, _ = best_move
-            if self.debug:
-                self.canvas.draw_debug(moves, best_move)
-                # QUESTION - what happens if there's no best_move ?
             self.root.after(0, lambda: self.play_one_turn(x, y))
 
         threading.Thread(target=run_ai, daemon=True).start()
