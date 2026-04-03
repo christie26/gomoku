@@ -24,6 +24,7 @@ class GomokuGUI:
         self.sizeeee = CELL_SIZE * (BOARD_SIZE - 1) + PADDING * 2
         self.is_playing = False
         self.debug = False
+        self.play_mode = "pvp"
 
         # ===== MAIN LAYOUT =====
         self.main_frame = tk.Frame(
@@ -260,16 +261,20 @@ class GomokuGUI:
         self.update_undo_redo_buttons()
 
     def update_undo_redo_buttons(self):
-        self.setting_panel.undo_button.config(
-            state=tk.NORMAL if self.history_index > 0 else tk.DISABLED
-        )
-        self.setting_panel.redo_button.config(
-            state=(
-                tk.NORMAL
-                if self.history_index < len(self.state_history) - 1
-                else tk.DISABLED
+        if self.play_mode != "pvp":
+            self.setting_panel.undo_button.config(state=tk.DISABLED)
+            self.setting_panel.redo_button.config(state=tk.DISABLED)
+        else:
+            self.setting_panel.undo_button.config(
+                state=tk.NORMAL if self.history_index > 0 else tk.DISABLED
             )
-        )
+            self.setting_panel.redo_button.config(
+                state=(
+                    tk.NORMAL
+                    if self.history_index < len(self.state_history) - 1
+                    else tk.DISABLED
+                )
+            )
 
     # ===== SETTING =====
     def switch_debug(self, debug: bool):
@@ -280,6 +285,7 @@ class GomokuGUI:
             self.canvas.remove_debug()
 
     def switch_play_mode(self, play_mode):
+        self.play_mode = play_mode
         if play_mode == "pvp":
             self.switch_player_human("X", True)
             self.switch_player_human("O", True)
