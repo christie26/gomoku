@@ -2,6 +2,14 @@ TODO
 - 5 row ui
 
 QUESTION
+- hint is a button and only show red circle which is the best move in that situation
+- hint button goes under undo button (not per player)
+- debug is checkbox is not per player 
+- when we turn on debug tool, we should show the possible moves 
+- debug tool always show the next move
+- debug mode only make sense for player
+
+
 - when game is done, should we disable undo button?
 
 User status
