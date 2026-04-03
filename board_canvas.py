@@ -7,6 +7,8 @@ from constants import (
     PADDING,
     BORDER_COLOR,
     NAME_FONT,
+    BLACK_HOVER,
+    WHITE_HOVER,
 )
 
 
@@ -154,7 +156,7 @@ class BoardCanvas:
             self.draw_debug_stone(y1, x1, player, score1, selected)
 
     def draw_debug_stone(self, x, y, player, number, selected):
-        color = "#333333" if player == "X" else "#DDDDDD"
+        color = BLACK_HOVER if player == "X" else WHITE_HOVER
         cx = PADDING + x * CELL_SIZE
         cy = PADDING + y * CELL_SIZE
         r = CELL_SIZE // 2 - 2
@@ -243,7 +245,7 @@ class BoardCanvas:
             if self.game.is_valid_move(y, x) == MoveResult.DOUBLE_THREE:
                 color = "#FF4D4D"
             else:
-                color = "#333333" if self.game.current_player == "X" else "#DDDDDD"
+                color = BLACK_HOVER if self.game.current_player == "X" else WHITE_HOVER
 
             self.canvas.create_oval(
                 cx - r,
