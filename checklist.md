@@ -1,3 +1,3 @@
-- debug and hint show different thing 
+DONE - debug and hint show different thing 
+DONE - history doesn't work
 - 5 row ui
-- history doesn't work
