@@ -3,8 +3,10 @@ use crate::{zobrist, Gomoku, Stone};
 
 use linked_hash_set::LinkedHashSet;
 use pyo3::prelude::*;
+use rayon::prelude::*;
 
 use std::cmp::{max, min};
+use std::sync::Mutex;
 use std::time::Instant;
 
 // =====================================================================
@@ -36,6 +38,7 @@ impl Cell {
     }
 }
 
+#[derive(Clone)]
 struct SearchBoard {
     cells: [[Cell; 19]; 19],
     current: Cell,
@@ -675,6 +678,35 @@ impl TranspositionTable {
     }
 }
 
+// --- Sharded Transposition Table for parallel access ---
+
+const TT_SHARDS: usize = 64;
+const TT_SHARD_MASK: u64 = (TT_SHARDS as u64) - 1;
+
+pub struct ShardedTT {
+    shards: Vec<Mutex<TranspositionTable>>,
+}
+
+impl ShardedTT {
+    pub fn new(size_bits_per_shard: usize) -> Self {
+        let mut shards = Vec::with_capacity(TT_SHARDS);
+        for _ in 0..TT_SHARDS {
+            shards.push(Mutex::new(TranspositionTable::new(size_bits_per_shard)));
+        }
+        ShardedTT { shards }
+    }
+
+    fn lookup(&self, hash: u64) -> Option<TTEntry> {
+        let shard = (hash & TT_SHARD_MASK) as usize;
+        self.shards[shard].lock().unwrap().lookup(hash).copied()
+    }
+
+    fn store(&self, hash: u64, entry: TTEntry) {
+        let shard = (hash & TT_SHARD_MASK) as usize;
+        self.shards[shard].lock().unwrap().store(hash, entry);
+    }
+}
+
 pub struct SearchStats {
     pub nodes_visited: u64,
     pub cutoffs: u64,
@@ -730,11 +762,22 @@ impl SearchStats {
         }
         (1.0 - self.nodes_visited as f64 / full).max(0.0) * 100.0
     }
+
+    /// Merge counters from a child worker into this stats. Per-thread fields like
+    /// max_depth, branch_times, depth_times and pv stay with the master.
+    pub fn merge(&mut self, other: &SearchStats) {
+        self.nodes_visited += other.nodes_visited;
+        self.cutoffs += other.cutoffs;
+        self.total_children += other.total_children;
+        self.children_explored += other.children_explored;
+        self.internal_nodes += other.internal_nodes;
+        self.tt_hits += other.tt_hits;
+    }
 }
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
-const MAX_DEPTH: usize = 7;
+const MAX_DEPTH: usize = 8;
 
 pub const BOARD_SIZE: usize = 19;
 const DIRECTIONS: &[(i32, i32)] = &[(1, 0), (0, 1), (1, 1), (1, -1)];
@@ -951,6 +994,10 @@ fn sb_state_value(board: &SearchBoard, depth: usize) -> i32 {
     }
 }
 
+// Strict sequential PVS inside the search. Parallelism is applied only at the
+// root in `get_ai_move_with_stats`. Recursive YBWC was tried but caused a
+// 100×+ blowup in nodes_visited because losing α-tightening between siblings
+// compounds at every level of recursion.
 fn sb_alphabeta(
     board: &mut SearchBoard,
     mut alpha: i32,
@@ -959,7 +1006,7 @@ fn sb_alphabeta(
     depth: usize,
     max_depth: usize,
     stats: &mut SearchStats,
-    tt: &mut TranspositionTable,
+    tt: &ShardedTT,
 ) -> (i32, Vec<(usize, usize)>) {
     stats.nodes_visited += 1;
 
@@ -1014,19 +1061,27 @@ fn sb_alphabeta(
 
         let (mut child_val, mut child_pv);
         if first {
-            (child_val, child_pv) = sb_alphabeta(board, alpha, beta, !is_max_player, depth + 1, max_depth, stats, tt);
+            (child_val, child_pv) = sb_alphabeta(
+                board, alpha, beta, !is_max_player, depth + 1, max_depth, stats, tt,
+            );
             first = false;
+        } else if is_max_player {
+            (child_val, child_pv) = sb_alphabeta(
+                board, alpha, alpha + 1, false, depth + 1, max_depth, stats, tt,
+            );
+            if child_val > alpha && child_val < beta {
+                (child_val, child_pv) = sb_alphabeta(
+                    board, alpha, beta, false, depth + 1, max_depth, stats, tt,
+                );
+            }
         } else {
-            if is_max_player {
-                (child_val, child_pv) = sb_alphabeta(board, alpha, alpha + 1, false, depth + 1, max_depth, stats, tt);
-                if child_val > alpha && child_val < beta {
-                    (child_val, child_pv) = sb_alphabeta(board, alpha, beta, false, depth + 1, max_depth, stats, tt);
-                }
-            } else {
-                (child_val, child_pv) = sb_alphabeta(board, beta - 1, beta, true, depth + 1, max_depth, stats, tt);
-                if child_val < beta && child_val > alpha {
-                    (child_val, child_pv) = sb_alphabeta(board, alpha, beta, true, depth + 1, max_depth, stats, tt);
-                }
+            (child_val, child_pv) = sb_alphabeta(
+                board, beta - 1, beta, true, depth + 1, max_depth, stats, tt,
+            );
+            if child_val < beta && child_val > alpha {
+                (child_val, child_pv) = sb_alphabeta(
+                    board, alpha, beta, true, depth + 1, max_depth, stats, tt,
+                );
             }
         }
 
@@ -1107,7 +1162,7 @@ pub fn get_move_pv(state: &Gomoku, x: usize, y: usize) -> (Vec<(usize, usize)>, 
     let mut board = SearchBoard::from_gomoku(state);
     let is_max_player = board.current == Cell::Black;
     let max_depth = if board.move_count < 4 { 3 } else { MAX_DEPTH };
-    let mut tt = TranspositionTable::new(20);
+    let tt = ShardedTT::new(14);
 
     let undo = board.make_move(x, y);
 
@@ -1118,7 +1173,7 @@ pub fn get_move_pv(state: &Gomoku, x: usize, y: usize) -> (Vec<(usize, usize)>, 
         stats.max_depth = depth;
         let (value, child_pv) = sb_alphabeta(
             &mut board, MIN_VALUE, MAX_VALUE, !is_max_player,
-            1, depth, &mut stats, &mut tt,
+            1, depth, &mut stats, &tt,
         );
         final_value = value;
         final_pv = child_pv;
@@ -1152,7 +1207,7 @@ pub fn get_ai_move_with_stats(
     let mut best_move: Option<(usize, usize, i32)> = None;
     let mut final_stats = SearchStats::new();
     let mut depth_times: Vec<(usize, f64, u64)> = Vec::new();
-    let mut tt = TranspositionTable::new(20);
+    let tt = ShardedTT::new(14);
 
     for depth in 1..=max_depth {
         let depth_start = Instant::now();
@@ -1166,58 +1221,163 @@ pub fn get_ai_move_with_stats(
         let mut best_value = if is_max_player { MIN_VALUE - 1 } else { MAX_VALUE + 1 };
         let mut iteration_best_move: Option<(usize, usize, i32)> = None;
         let mut iteration_pv: Vec<(usize, usize)> = Vec::new();
-        let mut branch_times = Vec::new();
+        let mut branch_times: Vec<(usize, usize, Option<i32>, f64)> = Vec::new();
 
-        let mut first = true;
-        for (move_r, move_c, score) in all_moves.iter_mut() {
+        if all_moves.is_empty() {
+            depth_times.push((depth, depth_start.elapsed().as_secs_f64(), stats.nodes_visited));
+            final_stats = stats;
+            break;
+        }
+
+        // ---- Phase 1: Sequential first child with full window ----
+        {
+            let m = &mut all_moves[0];
+            let move_r = m.0;
+            let move_c = m.1;
             stats.children_explored += 1;
             let branch_start = Instant::now();
 
-            let undo = board.make_move(*move_r, *move_c);
-
-            let (mut value, mut child_pv);
-            if first {
-                (value, child_pv) = sb_alphabeta(&mut board, alpha, beta, !is_max_player, 1, depth, &mut stats, &mut tt);
-                first = false;
-            } else {
-                if is_max_player {
-                    (value, child_pv) = sb_alphabeta(&mut board, alpha, alpha + 1, false, 1, depth, &mut stats, &mut tt);
-                    if value > alpha && value < beta {
-                        (value, child_pv) = sb_alphabeta(&mut board, alpha, beta, false, 1, depth, &mut stats, &mut tt);
-                    }
-                } else {
-                    (value, child_pv) = sb_alphabeta(&mut board, beta - 1, beta, true, 1, depth, &mut stats, &mut tt);
-                    if value < beta && value > alpha {
-                        (value, child_pv) = sb_alphabeta(&mut board, alpha, beta, true, 1, depth, &mut stats, &mut tt);
-                    }
-                }
-            }
-
+            let undo = board.make_move(move_r, move_c);
+            let (value, child_pv) = sb_alphabeta(
+                &mut board, alpha, beta, !is_max_player, 1, depth, &mut stats, &tt,
+            );
             board.undo_move(&undo);
 
             let branch_elapsed = branch_start.elapsed().as_secs_f64();
-            *score = Some(value);
-            branch_times.push((*move_r, *move_c, Some(value), branch_elapsed));
+            m.2 = Some(value);
+            branch_times.push((move_r, move_c, Some(value), branch_elapsed));
 
             if is_max_player && value > best_value {
                 best_value = value;
                 alpha = max(alpha, best_value);
-                iteration_best_move = Some((*move_r, *move_c, value));
-                iteration_pv = std::iter::once((*move_r, *move_c))
+                iteration_best_move = Some((move_r, move_c, value));
+                iteration_pv = std::iter::once((move_r, move_c))
                     .chain(child_pv.into_iter())
                     .collect();
             } else if !is_max_player && value < best_value {
                 best_value = value;
                 beta = min(beta, best_value);
-                iteration_best_move = Some((*move_r, *move_c, value));
-                iteration_pv = std::iter::once((*move_r, *move_c))
+                iteration_best_move = Some((move_r, move_c, value));
+                iteration_pv = std::iter::once((move_r, move_c))
                     .chain(child_pv.into_iter())
                     .collect();
             }
+        }
 
-            if alpha >= beta {
-                stats.cutoffs += 1;
-                break;
+        // ---- Phase 2: Parallel YBWC for the remaining root moves ----
+        if alpha < beta && all_moves.len() > 1 {
+            let parent_alpha = alpha;
+            let parent_beta = beta;
+
+            let tasks: Vec<((usize, usize), SearchBoard)> = all_moves[1..]
+                .iter()
+                .map(|m| {
+                    let r = m.0;
+                    let c = m.1;
+                    let mut clone = board.clone();
+                    let _ = clone.make_move(r, c);
+                    ((r, c), clone)
+                })
+                .collect();
+
+            let results: Vec<(
+                (usize, usize),
+                i32,
+                Vec<(usize, usize)>,
+                SearchStats,
+                f64,
+            )> = tasks
+                .into_par_iter()
+                .map(|((r, c), mut child_board)| {
+                    let mut child_stats = SearchStats::new();
+                    let branch_start = Instant::now();
+                    let (v, pv) = if is_max_player {
+                        let (mut v, mut pv) = sb_alphabeta(
+                            &mut child_board,
+                            parent_alpha,
+                            parent_alpha + 1,
+                            false,
+                            1,
+                            depth,
+                            &mut child_stats,
+                            &tt,
+                        );
+                        if v > parent_alpha && v < parent_beta {
+                            let r2 = sb_alphabeta(
+                                &mut child_board,
+                                parent_alpha,
+                                parent_beta,
+                                false,
+                                1,
+                                depth,
+                                &mut child_stats,
+                                &tt,
+                            );
+                            v = r2.0;
+                            pv = r2.1;
+                        }
+                        (v, pv)
+                    } else {
+                        let (mut v, mut pv) = sb_alphabeta(
+                            &mut child_board,
+                            parent_beta - 1,
+                            parent_beta,
+                            true,
+                            1,
+                            depth,
+                            &mut child_stats,
+                            &tt,
+                        );
+                        if v < parent_beta && v > parent_alpha {
+                            let r2 = sb_alphabeta(
+                                &mut child_board,
+                                parent_alpha,
+                                parent_beta,
+                                true,
+                                1,
+                                depth,
+                                &mut child_stats,
+                                &tt,
+                            );
+                            v = r2.0;
+                            pv = r2.1;
+                        }
+                        (v, pv)
+                    };
+                    let branch_elapsed = branch_start.elapsed().as_secs_f64();
+                    ((r, c), v, pv, child_stats, branch_elapsed)
+                })
+                .collect();
+
+            // Merge phase: serial best-update, stats merge, branch_times.
+            for ((r, c), value, child_pv, child_stats, branch_elapsed) in results {
+                stats.children_explored += 1;
+                stats.merge(&child_stats);
+
+                // Write the score back into all_moves.
+                for m in all_moves.iter_mut() {
+                    if m.0 == r && m.1 == c {
+                        m.2 = Some(value);
+                        break;
+                    }
+                }
+                branch_times.push((r, c, Some(value), branch_elapsed));
+
+                if is_max_player && value > best_value {
+                    best_value = value;
+                    alpha = max(alpha, best_value);
+                    iteration_best_move = Some((r, c, value));
+                    iteration_pv = std::iter::once((r, c))
+                        .chain(child_pv.into_iter())
+                        .collect();
+                } else if !is_max_player && value < best_value {
+                    best_value = value;
+                    beta = min(beta, best_value);
+                    iteration_best_move = Some((r, c, value));
+                    iteration_pv = std::iter::once((r, c))
+                        .chain(child_pv.into_iter())
+                        .collect();
+                }
             }
         }
 
