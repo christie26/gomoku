@@ -6,18 +6,7 @@ import threading
 from setting_panel import SettingsPanel
 from player_panel import Player, PlayerPanel
 from board_canvas import BoardCanvas
-
-CELL_SIZE = 32
-LABEL_PADDING = 10
-BOARD_SIZE = 19
-PADDING = 30
-
-LIGHT_BACKGROUND = "#FAEBD7"
-SELECT_BACKGROUND = "#A68A64"
-BORDER_COLOR = "#6f5c43"
-
-LABEL_FONT = "Phosphate"
-NAME_FONT = "Rockwell"
+from screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, LIGHT_BACKGROUND, SELECT_BACKGROUND, BORDER_COLOR, LABEL_FONT, NAME_FONT
 
 
 class GomokuGUI:
