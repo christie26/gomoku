@@ -132,6 +132,9 @@ class BoardCanvas:
     def remove_last_move(self):
         self.canvas.delete("last-move")
 
+    def delete_debug(self):
+        self.canvas.delete("debug")
+
     def draw_possible_stone(self, x, y, player, number, selected):
         color = "black" if player == "X" else "white"
         cx = PADDING + x * CELL_SIZE

@@ -146,6 +146,8 @@ class GomokuGUI:
         def run_ai():
             mv, moves = get_ai_move(self.game)
             if mv:
+                if self.debug:
+                    self.canvas.delete_debug()
                 x, y, _ = mv
                 for m in moves:
                     x1, y1, score1 = m
@@ -231,7 +233,7 @@ class GomokuGUI:
     def debug_onoff(self, debug: bool):
         self.debug = debug
         if not debug:
-            self.canvas.canvas.delete("debug")
+            self.canvas.delete_debug()
 
     def switch_play_mode(self, play_mode):
         if play_mode == "pvp":
