@@ -41,7 +41,6 @@ class GomokuGUI:
         self.right_frame.pack(side="right", fill="y")
         self.right_frame.pack_propagate(False)
         self.right_frame.bind("<Enter>", self.canvas.remove_hover)
-
         # ===== UNDO/REDO =====
         self.game = Gomoku(size=BOARD_SIZE)
         self.state_history = [self.game.clone_gomoku()]
@@ -68,6 +67,7 @@ class GomokuGUI:
             on_redo=self.redo,
             on_debug=self.debug_onoff,
             on_play_mode=self.switch_play_mode,
+            on_hint=self.show_hint
         )
 
         # ===== HISTORY =====
@@ -89,6 +89,8 @@ class GomokuGUI:
 
     # ===== GAME FLOW =====
     def play_one_turn(self, x, y):
+        if self.players[self.game.current_player].is_human or not self.debug:
+            self.canvas.delete_debug()
         result = self.game.is_valid_move(x, y)
 
         if result == MoveResult.VALID:
@@ -163,6 +165,11 @@ class GomokuGUI:
         self.canvas.show_winner(f"{self.players[winner].name} wins")
         self.is_playing = False
         self.setting_panel.reset_panel(False)
+
+    def show_hint(self):
+        mv, _ = get_ai_move(self.game)
+        x, y, _ = mv
+        self.canvas.draw_possible_stone(y, x, self.game.current_player, None, True)
 
     # ===== PLAYER PANEL =====
     def highlight_active_player(self):

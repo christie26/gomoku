@@ -154,7 +154,7 @@ class BoardCanvas:
             tags="debug",
         )
         # Calculate appropriate font size based on stone size and number length
-        number_str = str(number)
+        number_str = str(number) if number is not None else ""
         # Base font size proportional to stone radius
         base_font_size = max(6, r // 2)
 
