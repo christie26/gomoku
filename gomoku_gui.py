@@ -231,7 +231,7 @@ class GomokuGUI:
     def debug_onoff(self, debug: bool):
         self.debug = debug
         if not debug:
-            self.canvas.delete("debug")
+            self.canvas.canvas.delete("debug")
 
     def switch_play_mode(self, play_mode):
         if play_mode == "pvp":
