@@ -6,7 +6,7 @@ import threading
 from setting_panel import SettingsPanel
 from player_panel import Player, PlayerPanel
 from board_canvas import BoardCanvas
-from screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, LIGHT_BACKGROUND, SELECT_BACKGROUND, BORDER_COLOR, LABEL_FONT, NAME_FONT
+from screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, LIGHT_BACKGROUND, SELECT_BACKGROUND, BORDER_COLOR, LABEL_FONT, NAME_FONT, SETTING_PANEL_WIDTH
 
 
 class GomokuGUI:
@@ -31,7 +31,7 @@ class GomokuGUI:
 
         self.right_frame = tk.Frame(
             self.main_frame,
-            width=250,
+            width=SETTING_PANEL_WIDTH,
             background=LIGHT_BACKGROUND,
             highlightbackground=BORDER_COLOR,
             highlightthickness=2,
