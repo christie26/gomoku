@@ -66,6 +66,63 @@ impl MoveResult {
 type Position = (i32, i32);
 type Pattern = Vec<Position>;
 
+struct LineScan {
+    contig_my: i32,
+    contig_open: bool,
+    total_my: i32,
+    empty_count: i32,
+    hole: bool,
+}
+
+impl Gomoku {
+    fn scan_line(&self, sign: i32, dx: i32, dy: i32, x0: i32, y0: i32) -> LineScan {
+        let mut contig_my = 0;
+        let mut contig_open = false;
+        let mut contig_done = false;
+        let mut total_my = 0;
+        let mut empty_count = 0;
+        let mut hole = false;
+        let mut i = 1;
+
+        loop {
+            let x = x0 + dx * i * sign;
+            let y = y0 + dy * i * sign;
+
+            if !self.is_on_board(x, y)
+                || self.board[x as usize][y as usize] == self.opponent_player
+                || empty_count == 2
+            {
+                break;
+            }
+
+            if self.board[x as usize][y as usize] == self.current_player {
+                if !contig_done {
+                    contig_my += 1;
+                }
+                if empty_count > 0 {
+                    hole = true;
+                }
+                total_my += 1;
+            } else {
+                if !contig_done {
+                    contig_done = true;
+                    contig_open = true;
+                }
+                empty_count += 1;
+            }
+            i += 1;
+        }
+
+        LineScan {
+            contig_my,
+            contig_open,
+            total_my,
+            empty_count,
+            hole,
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 #[pyclass]
 pub enum Stone {
@@ -251,8 +308,10 @@ impl Gomoku {
         let directions = [(1, -1), (1, 0), (1, 1), (0, 1)];
 
         for (dx, dy) in directions {
-            let (plus_my, plus_empty, plus_hole) = self.count_free_three(1, dx, dy, x0, y0);
-            let (minus_my, minus_empty, minus_hole) = self.count_free_three(-1, dx, dy, x0, y0);
+            let plus = self.scan_line(1, dx, dy, x0, y0);
+            let minus = self.scan_line(-1, dx, dy, x0, y0);
+            let (plus_my, plus_empty, plus_hole) = (plus.total_my, plus.empty_count, plus.hole);
+            let (minus_my, minus_empty, minus_hole) = (minus.total_my, minus.empty_count, minus.hole);
 
             if plus_my + minus_my == 2 && plus_empty + minus_empty >= 3 {
                 let mut adjusted_plus_empty = plus_empty;
@@ -278,43 +337,15 @@ impl Gomoku {
         new_free_threes
     }
 
-    fn count_free_three(&self, sign: i32, dx: i32, dy: i32, x0: i32, y0: i32) -> (i32, i32, bool) {
-        let mut my_count = 0;
-        let mut empty_count = 0;
-        let mut i = 1;
-        let mut hole = false;
-
-        loop {
-            let x = x0 + dx * i * sign;
-            let y = y0 + dy * i * sign;
-
-            if !self.is_on_board(x, y)
-                || self.board[x as usize][y as usize] == self.opponent_player
-                || empty_count == 2
-            {
-                break;
-            }
-
-            if self.board[x as usize][y as usize] == self.current_player {
-                if empty_count > 0 {
-                    hole = true;
-                }
-                my_count += 1;
-            } else {
-                empty_count += 1;
-            }
-            i += 1;
-        }
-        (my_count, empty_count, hole)
-    }
-
     fn get_free_threes_from_capture(&self, x0: i32, y0: i32) -> Vec<Pattern> {
         let mut new_free_threes = Vec::new();
         let directions = [(1, -1), (1, 0), (1, 1), (0, 1)];
 
         for (dx, dy) in directions {
-            let (plus_my, plus_empty, plus_hole) = self.count_free_three(1, dx, dy, x0, y0);
-            let (minus_my, minus_empty, minus_hole) = self.count_free_three(-1, dx, dy, x0, y0);
+            let plus = self.scan_line(1, dx, dy, x0, y0);
+            let minus = self.scan_line(-1, dx, dy, x0, y0);
+            let (plus_my, plus_empty, plus_hole) = (plus.total_my, plus.empty_count, plus.hole);
+            let (minus_my, minus_empty, minus_hole) = (minus.total_my, minus.empty_count, minus.hole);
 
             if (plus_my == 3 && plus_empty == 2) || (minus_my == 3 && minus_empty == 2) {
                 if plus_my == 3 && plus_empty == 2 {
@@ -418,8 +449,10 @@ impl Gomoku {
         let directions = [(1, 0), (0, 1), (1, 1), (1, -1)];
 
         for (dx, dy) in directions {
-            let (plus_my, plus_open) = self.count_open(1, dx, dy, x0, y0);
-            let (minus_my, minus_open) = self.count_open(-1, dx, dy, x0, y0);
+            let plus = self.scan_line(1, dx, dy, x0, y0);
+            let minus = self.scan_line(-1, dx, dy, x0, y0);
+            let (plus_my, plus_open) = (plus.contig_my, plus.contig_open);
+            let (minus_my, minus_open) = (minus.contig_my, minus.contig_open);
 
             let total_my = plus_my + minus_my;
 
@@ -488,7 +521,8 @@ impl Gomoku {
         ];
 
         for (dx, dy) in directions {
-            let (count_my, open) = self.count_open(1, dx, dy, x0, y0);
+            let scan = self.scan_line(1, dx, dy, x0, y0);
+            let (count_my, open) = (scan.contig_my, scan.contig_open);
 
             if count_my == 2 && open {
                 let mut points = Vec::new();
@@ -530,29 +564,6 @@ impl Gomoku {
                 }
             }
         }
-    }
-
-    fn count_open(&self, sign: i32, dx: i32, dy: i32, x0: i32, y0: i32) -> (i32, bool) {
-        let mut my_count = 0;
-        let mut i = 1;
-
-        loop {
-            let x = x0 + dx * i * sign;
-            let y = y0 + dy * i * sign;
-
-            if !self.is_on_board(x, y) || self.board[x as usize][y as usize] != self.current_player
-            {
-                break;
-            }
-            my_count += 1;
-            i += 1;
-        }
-
-        let x = x0 + dx * i * sign;
-        let y = y0 + dy * i * sign;
-        let open = self.is_on_board(x, y) && self.board[x as usize][y as usize] == Stone::Empty;
-
-        (my_count, open)
     }
 
     fn add_free_threes(&mut self, new_free_threes: Vec<Pattern>, player: &Stone) {
