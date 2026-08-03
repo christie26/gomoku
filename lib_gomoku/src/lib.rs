@@ -102,7 +102,7 @@ fn classify(
     let total = plus.total_my + minus.total_my + center_stone;
     match total {
         2 if plus.contig_open && minus.contig_open => Some(PatternKind::OpenTwo),
-        3 if plus.contig_open && minus.contig_open => Some(PatternKind::OpenThree),
+        3 if plus.contig_open && minus.contig_open && plus.empty_count + minus.empty_count < 3 => Some(PatternKind::OpenThree),
         4 if plus.contig_open && minus.contig_open => Some(PatternKind::OpenFour),
         4 if plus.contig_open ^ minus.contig_open => Some(PatternKind::BlockFour),
         5 => Some(PatternKind::FiveRow),
