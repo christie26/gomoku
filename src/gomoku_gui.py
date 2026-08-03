@@ -117,6 +117,7 @@ class GomokuGUI:
             self.state_history.append(self.game.clone_gomoku())
             self.history_index += 1
             self.update_undo_redo_buttons()
+            self.game.print_state()
 
     def start_game(self):
         self.set_game(Gomoku(size=BOARD_SIZE))
