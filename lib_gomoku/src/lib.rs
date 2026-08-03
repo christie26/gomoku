@@ -280,6 +280,17 @@ pub fn position_name(pos: &(i32, i32)) -> String {
         format!("{x}{y}")
 }
 
+fn print_pattern_kind(name: &str, patterns: &[Pattern]) {
+    let rendered: Vec<String> = patterns
+        .iter()
+        .map(|pattern| {
+            let positions: Vec<String> = pattern.iter().map(position_name).collect();
+            format!("[{}]", positions.join(","))
+        })
+        .collect();
+    println!("  {name}: {} {}", patterns.len(), rendered.join(" "));
+}
+
 impl std::fmt::Display for Stone {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let c = match self {
@@ -372,7 +383,16 @@ impl Gomoku {
         println!("current_player: {:?}", self.current_player);
         println!("opponent_player: {:?}", self.opponent_player);
         println!("capture_count: {:?}", self.capture_count);
-        println!("patterns: {:?}", self.patterns);
+        for player in [Stone::Black, Stone::White] {
+            println!("patterns[{player}]:");
+            let p = self.patterns.get(&player).unwrap();
+            print_pattern_kind("open_two", &p.open_two);
+            print_pattern_kind("open_three", &p.open_three);
+            print_pattern_kind("free_three", &p.free_three);
+            print_pattern_kind("block_four", &p.block_four);
+            print_pattern_kind("open_four", &p.open_four);
+            print_pattern_kind("five_row", &p.five_row);
+        }
         println!("win_capture_count: {:?}", self.win_capture_count);
         println!("current_move: {:?}", self.current_move);
     }
