@@ -140,6 +140,63 @@ fn endpoint_trim_rule(
     }
 }
 
+// free_three_from_scan/free_three_from_capture_scan/capture_open_pattern take already-scanned
+// LineScan pairs instead of scanning themselves, so callers that need both a free-three check and
+// an open-pattern classification for the same axis (add_patterns_for_move/_capture) scan each line
+// once and reuse the result, instead of each check re-scanning independently.
+fn free_three_from_scan(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minus: &LineScan) -> Option<Pattern> {
+    if plus.total_my + minus.total_my != 2 || plus.empty_count + minus.empty_count < 3 {
+        return None;
+    }
+
+    let mut adjusted_plus_empty = plus.empty_count;
+    let mut adjusted_minus_empty = minus.empty_count;
+
+    if plus.hole && minus.empty_count == 2 {
+        adjusted_minus_empty = 1;
+    }
+    if minus.hole && plus.empty_count == 2 {
+        adjusted_plus_empty = 1;
+    }
+
+    let plus_end = adjusted_plus_empty + plus.total_my;
+    let minus_end = adjusted_minus_empty + minus.total_my;
+
+    Some((-minus_end..=plus_end).map(|i| (x0 + dx * i, y0 + dy * i)).collect())
+}
+
+fn free_three_from_capture_scan(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minus: &LineScan) -> Vec<Pattern> {
+    let mut out = Vec::new();
+    let plus_three = plus.total_my == 3 && plus.empty_count == 2;
+    let minus_three = minus.total_my == 3 && minus.empty_count == 2;
+
+    if plus_three || minus_three {
+        if plus_three {
+            out.push((0..=(plus.total_my + plus.empty_count)).map(|i| (x0 + dx * i, y0 + dy * i)).collect());
+        }
+        if minus_three {
+            out.push((-(minus.total_my + minus.empty_count)..=0).map(|i| (x0 + dx * i, y0 + dy * i)).collect());
+        }
+    } else if !plus.hole && !minus.hole && plus.total_my + minus.total_my == 3 && plus.empty_count > 0 && minus.empty_count > 0 {
+        let plus_end = plus.total_my + 1;
+        let minus_end = minus.total_my + 1;
+        out.push((-minus_end..=plus_end).map(|i| (x0 + dx * i, y0 + dy * i)).collect());
+    }
+    out
+}
+
+// scan is a one-sided run (plus of some direction); used twice per axis in add_patterns_for_capture
+// with (dx,dy) and (-dx,-dy) to cover both sides without a second scan_line call.
+fn capture_open_pattern(dx: i32, dy: i32, x0: i32, y0: i32, scan: &LineScan) -> Option<(PatternKind, Pattern)> {
+    let kind = classify(scan.contig_my, scan.contig_open, 0, true, 0)?;
+    let (lower, upper) = if kind == PatternKind::FiveRow {
+        (1, scan.contig_my)
+    } else {
+        (0, scan.contig_my + scan.contig_open as i32)
+    };
+    Some((kind, (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect()))
+}
+
 impl Gomoku {
     fn scan_line(&self, sign: i32, dx: i32, dy: i32, x0: i32, y0: i32) -> LineScan {
         let mut contig_my = 0;
@@ -342,89 +399,19 @@ impl Gomoku {
         MoveResult::Valid
     }
 
-    fn is_double_three_move(&self, x: i32, y: i32) -> bool {
-        let new_free_threes = self.get_free_threes_from_move(x, y);
-
-        if new_free_threes.len() > 1 {
-            true
-        } else {
-            false
-        }
-    }
-
-    fn get_free_threes_from_move(&self, x0: i32, y0: i32) -> Vec<Pattern> {
-      // TODO we can add caching here
-        let mut new_free_threes = Vec::new();
+    fn is_double_three_move(&self, x0: i32, y0: i32) -> bool {
         let directions = [(1, -1), (1, 0), (1, 1), (0, 1)];
 
-        for (dx, dy) in directions {
-            let plus = self.scan_line(1, dx, dy, x0, y0);
-            let minus = self.scan_line(-1, dx, dy, x0, y0);
-            let (plus_my, plus_empty, plus_hole) = (plus.total_my, plus.empty_count, plus.hole);
-            let (minus_my, minus_empty, minus_hole) = (minus.total_my, minus.empty_count, minus.hole);
+        let free_three_count = directions
+            .into_iter()
+            .filter(|&(dx, dy)| {
+                let plus = self.scan_line(1, dx, dy, x0, y0);
+                let minus = self.scan_line(-1, dx, dy, x0, y0);
+                free_three_from_scan(dx, dy, x0, y0, &plus, &minus).is_some()
+            })
+            .count();
 
-            if plus_my + minus_my == 2 && plus_empty + minus_empty >= 3 {
-                let mut adjusted_plus_empty = plus_empty;
-                let mut adjusted_minus_empty = minus_empty;
-
-                if plus_hole && minus_empty == 2 {
-                    adjusted_minus_empty = 1;
-                }
-                if minus_hole && plus_empty == 2 {
-                    adjusted_plus_empty = 1;
-                }
-
-                let plus_end = adjusted_plus_empty + plus_my;
-                let minus_end = adjusted_minus_empty + minus_my;
-
-                let mut points = Vec::new();
-                for i in (-minus_end as i32)..=(plus_end as i32) {
-                    points.push((x0 + dx * i, y0 + dy * i));
-                }
-                new_free_threes.push(points);
-            }
-        }
-        new_free_threes
-    }
-
-    fn get_free_threes_from_capture(&self, x0: i32, y0: i32) -> Vec<Pattern> {
-        let mut new_free_threes = Vec::new();
-        let directions = [(1, -1), (1, 0), (1, 1), (0, 1)];
-
-        for (dx, dy) in directions {
-            let plus = self.scan_line(1, dx, dy, x0, y0);
-            let minus = self.scan_line(-1, dx, dy, x0, y0);
-            let (plus_my, plus_empty, plus_hole) = (plus.total_my, plus.empty_count, plus.hole);
-            let (minus_my, minus_empty, minus_hole) = (minus.total_my, minus.empty_count, minus.hole);
-
-            if (plus_my == 3 && plus_empty == 2) || (minus_my == 3 && minus_empty == 2) {
-                if plus_my == 3 && plus_empty == 2 {
-                    let mut points = Vec::new();
-                    for i in 0..=(plus_my + plus_empty) {
-                        points.push((x0 + dx * i, y0 + dy * i));
-                    }
-                    new_free_threes.push(points);
-                }
-                if minus_my == 3 && minus_empty == 2 {
-                    let mut points = Vec::new();
-                    for i in (-(minus_my + minus_empty))..=0 {
-                        points.push((x0 + dx * i, y0 + dy * i));
-                    }
-                    new_free_threes.push(points);
-                }
-            } else if !plus_hole && !minus_hole {
-                if plus_my + minus_my == 3 && plus_empty > 0 && minus_empty > 0 {
-                    let plus_end = plus_my + 1;
-                    let minus_end = minus_my + 1;
-                    let mut points = Vec::new();
-                    for i in (-minus_end)..=(plus_end) {
-                        points.push((x0 + dx * i, y0 + dy * i));
-                    }
-                    new_free_threes.push(points);
-                }
-            }
-        }
-        new_free_threes
+        free_three_count > 1
     }
 
     fn capture_center(&mut self, x0: i32, y0: i32) -> (i32, Vec<(i32, i32)>) {
@@ -499,29 +486,17 @@ impl Gomoku {
         self.add_patterns_for_move(x, y);
     }
 
-    fn add_patterns_for_move(&mut self, x: i32, y: i32) {
+    fn add_patterns_for_move(&mut self, x0: i32, y0: i32) {
         let player = self.current_player;
-        for pattern in self.get_free_threes_from_move(x, y) {
-            self.register(PatternKind::FreeThree, &player, pattern);
-        }
-        self.add_opens_from_move(x, y);
-    }
-
-    fn add_patterns_for_capture(&mut self, x: i32, y: i32) {
-        let player = self.current_player;
-        for pattern in self.get_free_threes_from_capture(x, y) {
-            self.register(PatternKind::FreeThree, &player, pattern);
-        }
-        self.add_opens_from_capture(x, y);
-    }
-
-    fn add_opens_from_move(&mut self, x0: i32, y0: i32) {
         let directions = [(1, 0), (0, 1), (1, 1), (1, -1)];
-        let player = self.current_player;
 
         for (dx, dy) in directions {
             let plus = self.scan_line(1, dx, dy, x0, y0);
             let minus = self.scan_line(-1, dx, dy, x0, y0);
+
+            if let Some(pattern) = free_three_from_scan(dx, dy, x0, y0, &plus, &minus) {
+                self.register(PatternKind::FreeThree, &player, pattern);
+            }
 
             let Some(kind) = classify(plus.contig_my, plus.contig_open, minus.contig_my, minus.contig_open, 1)
             else {
@@ -541,34 +516,25 @@ impl Gomoku {
         }
     }
 
-    fn add_opens_from_capture(&mut self, x0: i32, y0: i32) {
-        let directions = [
-            (1, 0),
-            (0, 1),
-            (1, 1),
-            (1, -1),
-            (-1, 0),
-            (0, -1),
-            (-1, -1),
-            (-1, 1),
-        ];
+    fn add_patterns_for_capture(&mut self, x0: i32, y0: i32) {
         let player = self.current_player;
+        let directions = [(1, -1), (1, 0), (1, 1), (0, 1)];
 
         for (dx, dy) in directions {
             let plus = self.scan_line(1, dx, dy, x0, y0);
+            let minus = self.scan_line(-1, dx, dy, x0, y0);
 
-            // (x0,y0)은 캡처로 비워진 칸: 돌 수엔 0을 기여하고, 그 자신이 이미 열린 한쪽 끝이다.
-            let Some(kind) = classify(plus.contig_my, plus.contig_open, 0, true, 0) else {
-                continue;
-            };
+            for pattern in free_three_from_capture_scan(dx, dy, x0, y0, &plus, &minus) {
+                self.register(PatternKind::FreeThree, &player, pattern);
+            }
 
-            let (lower, upper) = if kind == PatternKind::FiveRow {
-                (1, plus.contig_my) // 원점(x0,y0)은 돌이 아니므로 패턴에서 제외
-            } else {
-                (0, plus.contig_my + plus.contig_open as i32)
-            };
-            let pattern: Pattern = (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect();
-            self.register(kind, &player, pattern);
+            // (x0,y0)은 캡처로 비워진 칸: 양쪽을 각각 독립된 한쪽짜리 런(run)으로 취급한다.
+            if let Some((kind, pattern)) = capture_open_pattern(dx, dy, x0, y0, &plus) {
+                self.register(kind, &player, pattern);
+            }
+            if let Some((kind, pattern)) = capture_open_pattern(-dx, -dy, x0, y0, &minus) {
+                self.register(kind, &player, pattern);
+            }
         }
     }
 
