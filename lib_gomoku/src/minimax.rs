@@ -119,14 +119,15 @@ fn get_critical_moves(
     state: &Gomoku,
 ) -> LinkedHashSet<(usize, usize)> {
     for player in [&state.opponent_player, &state.current_player] {
+        let p = state.patterns.get(player).unwrap();
         for (pattern_type, patterns) in [
-            ("block_four", &state.block_four),
-            ("open_four", &state.open_four),
-            ("open_three", &state.open_three),
-            ("open_two", &state.open_two),
-            ("free_three", &state.free_three),
+            ("block_four", &p.block_four),
+            ("open_four", &p.open_four),
+            ("open_three", &p.open_three),
+            ("open_two", &p.open_two),
+            ("free_three", &p.free_three),
         ] {
-            for pattern in patterns.get(player).unwrap() {
+            for pattern in patterns {
                 let points: Vec<(i32, i32)> = if pattern_type == "free_three" {
                     pattern.clone()
                 } else {

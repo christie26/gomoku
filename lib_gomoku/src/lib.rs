@@ -74,6 +74,72 @@ struct LineScan {
     hole: bool,
 }
 
+#[derive(Clone, Debug, Default)]
+struct PlayerPatterns {
+    open_two: Vec<Pattern>,
+    open_three: Vec<Pattern>,
+    free_three: Vec<Pattern>,
+    open_four: Vec<Pattern>,
+    block_four: Vec<Pattern>,
+    five_row: Vec<Pattern>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PatternKind {
+    OpenTwo,
+    OpenThree,
+    FreeThree,
+    BlockFour,
+    OpenFour,
+    FiveRow,
+}
+
+// center_stone: (x0,y0) 자신이 내 돌이면 1(move), 캡처로 비워진 칸이면 0(capture).
+fn classify(
+    plus_contig_my: i32,
+    plus_open: bool,
+    minus_contig_my: i32,
+    minus_open: bool,
+    center_stone: i32,
+) -> Option<PatternKind> {
+    let total = plus_contig_my + minus_contig_my + center_stone;
+    match total {
+        2 if plus_open && minus_open => Some(PatternKind::OpenTwo),
+        3 if plus_open && minus_open => Some(PatternKind::OpenThree),
+        4 if plus_open && minus_open => Some(PatternKind::OpenFour),
+        4 if plus_open ^ minus_open => Some(PatternKind::BlockFour),
+        5 => Some(PatternKind::FiveRow),
+        _ => None,
+    }
+}
+
+// pos가 pattern의 진짜 바깥쪽 끝(첫/마지막 좌표)일 때만 trim하고, kind별로 남은 모양을 재분류한다.
+// OpenFour는 한쪽 끝이 막히면 BlockFour로 강등되고, FreeThree는 같은 kind로 유지된 채 줄어든다.
+// 그 외 kind는 trim 규칙이 없어 pos를 포함하면 항상 통째로 제거된다.
+fn endpoint_trim_rule(
+    kind: PatternKind,
+    pattern: &Pattern,
+    pos: Position,
+) -> Option<(PatternKind, Pattern)> {
+    let is_first = pattern.first() == Some(&pos);
+    let is_last = pattern.last() == Some(&pos);
+    if !is_first && !is_last {
+        return None;
+    }
+    let trimmed = || -> Pattern {
+        if is_first {
+            pattern[1..].to_vec()
+        } else {
+            pattern[..pattern.len() - 1].to_vec()
+        }
+    };
+    match kind {
+        PatternKind::OpenFour => Some((PatternKind::BlockFour, trimmed())),
+        PatternKind::FreeThree => Some((PatternKind::FreeThree, trimmed())),
+        _ => None,
+    }
+}
+
 impl Gomoku {
     fn scan_line(&self, sign: i32, dx: i32, dy: i32, x0: i32, y0: i32) -> LineScan {
         let mut contig_my = 0;
@@ -121,6 +187,25 @@ impl Gomoku {
             hole,
         }
     }
+
+    fn patterns_mut(&mut self, kind: PatternKind, player: &Stone) -> &mut Vec<Pattern> {
+        let p = self.patterns.get_mut(player).unwrap();
+        match kind {
+            PatternKind::OpenTwo => &mut p.open_two,
+            PatternKind::OpenThree => &mut p.open_three,
+            PatternKind::FreeThree => &mut p.free_three,
+            PatternKind::BlockFour => &mut p.block_four,
+            PatternKind::OpenFour => &mut p.open_four,
+            PatternKind::FiveRow => &mut p.five_row,
+        }
+    }
+
+    fn register(&mut self, kind: PatternKind, player: &Stone, pattern: Pattern) {
+        let list = self.patterns_mut(kind, player);
+        if !list.contains(&pattern) {
+            list.push(pattern);
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
@@ -163,12 +248,7 @@ pub struct Gomoku {
     pub current_player: Stone,
     opponent_player: Stone,
     capture_count: HashMap<Stone, i32>,
-    open_two: HashMap<Stone, Vec<Pattern>>,
-    open_three: HashMap<Stone, Vec<Pattern>>,
-    free_three: HashMap<Stone, Vec<Pattern>>,
-    open_four: HashMap<Stone, Vec<Pattern>>,
-    block_four: HashMap<Stone, Vec<Pattern>>,
-    five_row: HashMap<Stone, Vec<Pattern>>,
+    patterns: HashMap<Stone, PlayerPatterns>,
     win_capture_count: i32,
     current_move: Option<Position>,
     move_count: usize,
@@ -184,29 +264,9 @@ impl Gomoku {
         capture_count.insert(Stone::Black, 0);
         capture_count.insert(Stone::White, 0);
 
-        let mut free_three = HashMap::new();
-        free_three.insert(Stone::Black, Vec::new());
-        free_three.insert(Stone::White, Vec::new());
-
-        let mut five_row = HashMap::new();
-        five_row.insert(Stone::Black, Vec::new());
-        five_row.insert(Stone::White, Vec::new());
-
-        let mut open_two = HashMap::new();
-        open_two.insert(Stone::Black, Vec::new());
-        open_two.insert(Stone::White, Vec::new());
-
-        let mut open_three = HashMap::new();
-        open_three.insert(Stone::Black, Vec::new());
-        open_three.insert(Stone::White, Vec::new());
-
-        let mut open_four = HashMap::new();
-        open_four.insert(Stone::Black, Vec::new());
-        open_four.insert(Stone::White, Vec::new());
-
-        let mut block_four = HashMap::new();
-        block_four.insert(Stone::Black, Vec::new());
-        block_four.insert(Stone::White, Vec::new());
+        let mut patterns = HashMap::new();
+        patterns.insert(Stone::Black, PlayerPatterns::default());
+        patterns.insert(Stone::White, PlayerPatterns::default());
 
         Gomoku {
             size,
@@ -214,12 +274,7 @@ impl Gomoku {
             current_player: Stone::Black,
             opponent_player: Stone::White,
             capture_count,
-            free_three,
-            five_row,
-            open_two,
-            open_three,
-            open_four,
-            block_four,
+            patterns,
             win_capture_count: 5,
             current_move: None,
             move_count: 0,
@@ -260,12 +315,7 @@ impl Gomoku {
         println!("current_player: {:?}", self.current_player);
         println!("opponent_player: {:?}", self.opponent_player);
         println!("capture_count: {:?}", self.capture_count);
-        println!("free_three: {:?}", self.free_three);
-        println!("five_row: {:?}", self.five_row);
-        println!("open_two: {:?}", self.open_two);
-        println!("open_three: {:?}", self.open_three);
-        println!("open_four: {:?}", self.open_four);
-        println!("block_four: {:?}", self.block_four);
+        println!("patterns: {:?}", self.patterns);
         println!("win_capture_count: {:?}", self.win_capture_count);
         println!("current_move: {:?}", self.current_move);
     }
@@ -427,84 +477,67 @@ impl Gomoku {
             removed.push((x, y));
             self.board[x as usize][y as usize] = Stone::Empty;
 
-            self.remove_free_three(x, y, &self.opponent_player.clone());
-            self.remove_opens(x, y);
+            self.remove_patterns_at(x, y);
         }
 
+        // apply_capture는 두 자리를 모두 비우고(remove) 나서야 두 자리 모두에 대해
+        // add를 해야 한다 (한쪽만 비워진 채로 add하면 스캔이 반대쪽의 아직-남은
+        // 상대 돌에 막혀 틀린 결과가 나옴) — 그래서 remove_patterns_at과
+        // add_patterns_for_capture를 이 두 루프로 분리해서 순서를 강제한다.
         for i in 1..3 {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
 
-            self.add_free_threes(
-                self.get_free_threes_from_capture(x, y),
-                &self.current_player.clone(),
-            );
-            self.add_opens_from_capture(x, y);
+            self.add_patterns_for_capture(x, y);
         }
 
         removed
     }
 
+    fn update_patterns_for_move(&mut self, x: i32, y: i32) {
+        self.remove_patterns_at(x, y);
+        self.add_patterns_for_move(x, y);
+    }
+
+    fn add_patterns_for_move(&mut self, x: i32, y: i32) {
+        let player = self.current_player;
+        for pattern in self.get_free_threes_from_move(x, y) {
+            self.register(PatternKind::FreeThree, &player, pattern);
+        }
+        self.add_opens_from_move(x, y);
+    }
+
+    fn add_patterns_for_capture(&mut self, x: i32, y: i32) {
+        let player = self.current_player;
+        for pattern in self.get_free_threes_from_capture(x, y) {
+            self.register(PatternKind::FreeThree, &player, pattern);
+        }
+        self.add_opens_from_capture(x, y);
+    }
+
     fn add_opens_from_move(&mut self, x0: i32, y0: i32) {
         let directions = [(1, 0), (0, 1), (1, 1), (1, -1)];
+        let player = self.current_player;
 
         for (dx, dy) in directions {
             let plus = self.scan_line(1, dx, dy, x0, y0);
             let minus = self.scan_line(-1, dx, dy, x0, y0);
-            let (plus_my, plus_open) = (plus.contig_my, plus.contig_open);
-            let (minus_my, minus_open) = (minus.contig_my, minus.contig_open);
 
-            let total_my = plus_my + minus_my;
+            let Some(kind) = classify(plus.contig_my, plus.contig_open, minus.contig_my, minus.contig_open, 1)
+            else {
+                continue;
+            };
 
-            if total_my == 1 && plus_open && minus_open {
-                let mut points = Vec::new();
-                for i in (-(minus_my + 1))..=(plus_my + 1) {
-                    points.push((x0 + dx * i, y0 + dy * i));
-                }
-                self.open_two
-                    .get_mut(&self.current_player)
-                    .unwrap()
-                    .push(points);
-            } else if total_my == 2 && plus_open && minus_open {
-                let mut points = Vec::new();
-                for i in (-(minus_my + 1))..=(plus_my + 1) {
-                    points.push((x0 + dx * i, y0 + dy * i));
-                }
-                self.open_three
-                    .get_mut(&self.current_player)
-                    .unwrap()
-                    .push(points);
-            } else if total_my == 3 && (plus_open || minus_open) {
-                let mut points = Vec::new();
-                for i in (-(minus_my + 1))..=(plus_my + 1) {
-                    points.push((x0 + dx * i, y0 + dy * i));
-                }
-                self.open_four
-                    .get_mut(&self.current_player)
-                    .unwrap()
-                    .push(points);
-            } else if total_my == 3 && (plus_open || minus_open) {
-                let plus_end = plus_my + 1 + (plus_open as i32);
-                let minus_end = minus_my + (minus_open as i32);
-
-                let mut points = Vec::new();
-                for i in (-(minus_end))..(plus_end) {
-                    points.push((x0 + dx * i, y0 + dy * i));
-                }
-                self.block_four
-                    .get_mut(&self.current_player)
-                    .unwrap()
-                    .push(points);
-            } else if total_my == 4 {
-                let mut points = Vec::new();
-                for i in (-minus_my)..=(plus_my) {
-                    points.push((x0 + dx * i, y0 + dy * i));
-                }
-                self.five_row
-                    .get_mut(&self.current_player)
-                    .unwrap()
-                    .push(points);
-            }
+            let (lower, upper) = if kind == PatternKind::FiveRow {
+                (-minus.contig_my, plus.contig_my)
+            } else {
+                (
+                    -(minus.contig_my + minus.contig_open as i32),
+                    plus.contig_my + plus.contig_open as i32,
+                )
+            };
+            let pattern: Pattern = (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect();
+            self.register(kind, &player, pattern);
         }
     }
 
@@ -519,130 +552,58 @@ impl Gomoku {
             (-1, -1),
             (-1, 1),
         ];
+        let player = self.current_player;
 
         for (dx, dy) in directions {
-            let scan = self.scan_line(1, dx, dy, x0, y0);
-            let (count_my, open) = (scan.contig_my, scan.contig_open);
+            let plus = self.scan_line(1, dx, dy, x0, y0);
 
-            if count_my == 2 && open {
-                let mut points = Vec::new();
-                for i in (0)..=(count_my + 1) {
-                    points.push((x0 + dx * i, y0 + dy * i));
-                }
-                self.open_two
-                    .get_mut(&self.current_player)
-                    .unwrap()
-                    .push(points);
-            } else if count_my == 3 && open {
-                let mut points = Vec::new();
-                for i in (0)..=(count_my + 1) {
-                    points.push((x0 + dx * i, y0 + dy * i));
-                }
-                self.open_three
-                    .get_mut(&self.current_player)
-                    .unwrap()
-                    .push(points);
-            } else if count_my == 4 && open {
-                if open {
-                    let mut points = Vec::new();
-                    for i in (0)..=(count_my + 1) {
-                        points.push((x0 + dx * i, y0 + dy * i));
-                    }
-                    self.open_four
-                        .get_mut(&self.current_player)
-                        .unwrap()
-                        .push(points);
-                } else {
-                    let mut points = Vec::new();
-                    for i in (0)..=(count_my) {
-                        points.push((x0 + dx * i, y0 + dy * i));
-                    }
-                    self.block_four
-                        .get_mut(&self.current_player)
-                        .unwrap()
-                        .push(points);
-                }
-            }
+            // (x0,y0)은 캡처로 비워진 칸: 돌 수엔 0을 기여하고, 그 자신이 이미 열린 한쪽 끝이다.
+            let Some(kind) = classify(plus.contig_my, plus.contig_open, 0, true, 0) else {
+                continue;
+            };
+
+            let (lower, upper) = if kind == PatternKind::FiveRow {
+                (1, plus.contig_my) // 원점(x0,y0)은 돌이 아니므로 패턴에서 제외
+            } else {
+                (0, plus.contig_my + plus.contig_open as i32)
+            };
+            let pattern: Pattern = (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect();
+            self.register(kind, &player, pattern);
         }
     }
 
-    fn add_free_threes(&mut self, new_free_threes: Vec<Pattern>, player: &Stone) {
-        let player_list = self.free_three.get_mut(player).unwrap();
-        for pattern in new_free_threes {
-            if !player_list.contains(&pattern) {
-                player_list.push(pattern);
-            }
-        }
-    }
-
-    fn remove_free_three(&mut self, x: i32, y: i32, player: &Stone) {
-        let player_list = self.free_three.get_mut(player).unwrap();
+    fn remove_patterns_at(&mut self, x: i32, y: i32) {
         let pos = (x, y);
+        const KINDS: [PatternKind; 6] = [
+            PatternKind::OpenTwo,
+            PatternKind::OpenThree,
+            PatternKind::FreeThree,
+            PatternKind::BlockFour,
+            PatternKind::OpenFour,
+            PatternKind::FiveRow,
+        ];
+        let mut pending: Vec<(Stone, PatternKind, Pattern)> = Vec::new();
 
-        player_list.retain_mut(|free_three| {
-            if !free_three.contains(&pos) {
-                return true;
-            }
-            if free_three.len() == 7 && (free_three[0] == pos || free_three[6] == pos) {
-                free_three.retain(|&p| p != pos);
-                return true;
-            }
-            false
-        });
-    }
-
-    fn remove_opens(&mut self, x: i32, y: i32) {
-        let pos = (x, y);
-        let players = [self.current_player.clone(), self.opponent_player.clone()];
-
-        let mut new_block_four_x = Vec::new();
-        let mut new_block_four_y = Vec::new();
-        for player in &players {
-            self.open_two
-                .get_mut(player)
-                .unwrap()
-                .retain(|pattern| !pattern.contains(&pos));
-            self.open_three
-                .get_mut(player)
-                .unwrap()
-                .retain(|pattern| !pattern.contains(&pos));
-            self.open_four.get_mut(player).unwrap().retain(|pattern| {
-                if !pattern.contains(&pos) {
-                    true
-                } else {
-                    if pos == pattern[0] {
-                        if player == &Stone::Black {
-                            new_block_four_x.push(pattern[1..].to_vec());
-                        } else {
-                            new_block_four_y.push(pattern[1..].to_vec());
-                        }
-                    } else if pos == pattern[pattern.len() - 1] {
-                        if player == &Stone::Black {
-                            new_block_four_x.push(pattern[..pattern.len() - 1].to_vec());
-                        } else {
-                            new_block_four_y.push(pattern[..pattern.len() - 1].to_vec());
-                        }
+        for player in [Stone::Black, Stone::White] {
+            for kind in KINDS {
+                self.patterns_mut(kind, &player).retain_mut(|pattern| {
+                    if !pattern.contains(&pos) {
+                        return true;
                     }
-                    false
-                }
-            });
-            self.block_four
-                .get_mut(player)
-                .unwrap()
-                .retain(|pattern| !pattern.contains(&pos));
-            self.five_row
-                .get_mut(player)
-                .unwrap()
-                .retain(|pattern| !pattern.contains(&pos));
+                    match endpoint_trim_rule(kind, pattern, pos) {
+                        Some((new_kind, new_pattern)) => {
+                            pending.push((player, new_kind, new_pattern));
+                            false
+                        }
+                        None => false,
+                    }
+                });
+            }
         }
-        self.block_four
-            .get_mut(&Stone::Black)
-            .unwrap()
-            .extend(new_block_four_x);
-        self.block_four
-            .get_mut(&Stone::White)
-            .unwrap()
-            .extend(new_block_four_y);
+
+        for (player, kind, pattern) in pending {
+            self.register(kind, &player, pattern);
+        }
     }
 
     fn is_valid_move_simple_ruleset(&self, x: i32, y: i32) -> MoveResult {
@@ -670,14 +631,7 @@ impl Gomoku {
             self.move_count += 1;
             self.board[x as usize][y as usize] = self.current_player.clone();
 
-            self.remove_free_three(x, y, &self.opponent_player.clone());
-            self.remove_opens(x, y);
-
-            self.add_free_threes(
-                self.get_free_threes_from_move(x, y),
-                &self.current_player.clone(),
-            );
-            self.add_opens_from_move(x, y);
+            self.update_patterns_for_move(x, y);
 
             let (count, positions) = self.capture_center(x, y);
             capture_count = count;
@@ -765,27 +719,14 @@ impl Gomoku {
             }
 
             // 2. check opponent's five_row
-            if let Some(opponent_fives) = self.five_row.get(&self.opponent_player) {
-                if !opponent_fives.is_empty() {
+            if let Some(opponent_patterns) = self.patterns.get(&self.opponent_player) {
+                if !opponent_patterns.five_row.is_empty() {
                     return Some(self.opponent_player.to_string());
                 }
-                // for five_row in opponent_fives {
-                //     println!("five_row: {:?}", five_row);
-                //     let mut all_opponent = true;
-                //     for &(fx, fy) in five_row {
-                //         if self.board[fx as usize][fy as usize] != self.opponent_player {
-                //             all_opponent = false;
-                //             break;
-                //         }
-                //     }
-                //     if all_opponent {
-                //         return Some(self.opponent_player.to_string());
-                //     }
-                // }
             }
             // 3. check current's five_row
-            if let Some(my_fives) = self.five_row.get(&self.current_player) {
-                'each_five: for five_row in my_fives {
+            if let Some(my_patterns) = self.patterns.get(&self.current_player) {
+                'each_five: for five_row in &my_patterns.five_row {
                     for &(fx, fy) in five_row {
                         if self.stone_in_capturable_pair(fx as i32, fy as i32) {
                             continue 'each_five;
@@ -856,41 +797,41 @@ impl Gomoku {
 
     #[getter]
     fn free_three_list(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.free_three
+        self.patterns
             .iter()
-            .map(|(stone, c)| (stone.to_string(), c.clone()))
+            .map(|(stone, p)| (stone.to_string(), p.free_three.clone()))
             .collect()
     }
 
     #[getter]
     fn five_row(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.five_row
+        self.patterns
             .iter()
-            .map(|(stone, c)| (stone.to_string(), c.clone()))
+            .map(|(stone, p)| (stone.to_string(), p.five_row.clone()))
             .collect()
     }
 
     #[getter]
     fn open_two(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.open_two
+        self.patterns
             .iter()
-            .map(|(stone, c)| (stone.to_string(), c.clone()))
+            .map(|(stone, p)| (stone.to_string(), p.open_two.clone()))
             .collect()
     }
 
     #[getter]
     fn open_three(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.open_three
+        self.patterns
             .iter()
-            .map(|(stone, c)| (stone.to_string(), c.clone()))
+            .map(|(stone, p)| (stone.to_string(), p.open_three.clone()))
             .collect()
     }
 
     #[getter]
     fn open_four(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.open_four
+        self.patterns
             .iter()
-            .map(|(stone, c)| (stone.to_string(), c.clone()))
+            .map(|(stone, p)| (stone.to_string(), p.open_four.clone()))
             .collect()
     }
 
