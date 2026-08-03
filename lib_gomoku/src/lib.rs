@@ -142,6 +142,7 @@ fn free_three_for_move(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minu
         return None;
     }
 
+    // adjust empty space number because [..0.@0..] in this case, empty space on the rightest side is useless
     let mut adjusted_plus_empty = plus.empty_count;
     let mut adjusted_minus_empty = minus.empty_count;
 
@@ -178,15 +179,16 @@ fn free_three_for_capture(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, m
     out
 }
 
-// fn capture_open_pattern(dx: i32, dy: i32, x0: i32, y0: i32, scan: &LineScan) -> Option<(PatternKind, Pattern)> {
-//     let kind = classify(scan.contig_my, scan.contig_open, 0, true, 0)?;
-//     let (lower, upper) = if kind == PatternKind::FiveRow {
-//         (1, scan.contig_my)
-//     } else {
-//         (0, scan.contig_my + scan.contig_open as i32)
-//     };
-//     Some((kind, (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect()))
-// }
+fn capture_open_pattern(dx: i32, dy: i32, x0: i32, y0: i32, scan: &LineScan) -> Option<(PatternKind, Pattern)> {
+    let neutral = LineScan { contig_my: 0, contig_open: true, total_my: 0, empty_count: 0, hole: false };
+    let kind = classify(scan, &neutral, 0)?;
+    let (lower, upper) = if kind == PatternKind::FiveRow {
+        (1, scan.contig_my)
+    } else {
+        (0, scan.contig_my + scan.contig_open as i32)
+    };
+    Some((kind, (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect()))
+}
 
 impl Gomoku {
     fn scan_line(&self, sign: i32, dx: i32, dy: i32, x0: i32, y0: i32) -> LineScan {
@@ -538,12 +540,12 @@ impl Gomoku {
             }
 
             // (x0,y0)은 캡처로 비워진 칸: 양쪽을 각각 독립된 한쪽짜리 런(run)으로 취급한다.
-            // if let Some((kind, pattern)) = capture_open_pattern(dx, dy, x0, y0, &plus) {
-            //     self.register(kind, &player, pattern);
-            // }
-            // if let Some((kind, pattern)) = capture_open_pattern(-dx, -dy, x0, y0, &minus) {
-            //     self.register(kind, &player, pattern);
-            // }
+            if let Some((kind, pattern)) = capture_open_pattern(dx, dy, x0, y0, &plus) {
+                self.register(kind, &player, pattern);
+            }
+            if let Some((kind, pattern)) = capture_open_pattern(-dx, -dy, x0, y0, &minus) {
+                self.register(kind, &player, pattern);
+            }
         }
     }
 
