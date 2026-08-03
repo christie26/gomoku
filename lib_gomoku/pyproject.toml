@@ -3,7 +3,7 @@ requires = ["maturin>=1.8,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "faster_functions"
+name = "lib_gomoku"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Rust",

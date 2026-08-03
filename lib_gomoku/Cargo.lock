@@ -27,6 +27,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
+name = "colored"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
+dependencies = [
+ "windows-sys",
+]
+
+[[package]]
 name = "ctrlc"
 version = "3.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -34,16 +43,6 @@ checksum = "46f93780a459b7d656ef7f071fe699c4d3d2cb201c4b24d085b6ddc505276e73"
 dependencies = [
  "nix",
  "windows-sys",
-]
-
-[[package]]
-name = "faster_functions"
-version = "0.1.0"
-dependencies = [
- "ctrlc",
- "linked_hash_set",
- "pyo3",
- "signal-hook",
 ]
 
 [[package]]
@@ -57,6 +56,17 @@ name = "indoc"
 version = "2.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4c7245a08504955605670dbf141fceab975f15ca21570696aebe9d2e71576bd"
+
+[[package]]
+name = "lib_gomoku"
+version = "0.1.0"
+dependencies = [
+ "colored",
+ "ctrlc",
+ "linked_hash_set",
+ "pyo3",
+ "signal-hook",
+]
 
 [[package]]
 name = "libc"
