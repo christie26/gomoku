@@ -1,6 +1,6 @@
 import tkinter as tk
 from lib_gomoku import Gomoku, MoveResult, get_ai_move
-from src.screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, LIGHT_BACKGROUND, SELECT_BACKGROUND, BORDER_COLOR, LABEL_FONT, NAME_FONT
+from screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, LIGHT_BACKGROUND, SELECT_BACKGROUND, BORDER_COLOR, LABEL_FONT, NAME_FONT
 
 class BoardCanvas:
     def __init__(self, parent, canvas_size, on_click):
