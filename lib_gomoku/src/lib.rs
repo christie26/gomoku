@@ -379,10 +379,10 @@ impl Gomoku {
 
     pub fn print_state(&self) {
         self.print_board(vec![]);
-        println!("size: {:?}", self.size);
+        // println!("size: {:?}", self.size);
         println!("current_player: {:?}", self.current_player);
         println!("opponent_player: {:?}", self.opponent_player);
-        println!("capture_count: {:?}", self.capture_count);
+        println!("current_move: {:?}", self.current_move);
         for player in [Stone::Black, Stone::White] {
             println!("patterns[{player}]:");
             let p = self.patterns.get(&player).unwrap();
@@ -392,9 +392,8 @@ impl Gomoku {
             print_pattern_kind("block_four", &p.block_four);
             print_pattern_kind("open_four", &p.open_four);
             print_pattern_kind("five_row", &p.five_row);
-        }
-        println!("win_capture_count: {:?}", self.win_capture_count);
-        println!("current_move: {:?}", self.current_move);
+        // println!("win_capture_count: {:?}", self.win_capture_count);
+        println!("capture_count: {:?}", self.capture_count);
     }
 
     fn clone_gomoku(&self) -> Gomoku {
