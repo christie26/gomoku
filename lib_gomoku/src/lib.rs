@@ -96,7 +96,7 @@ enum PatternKind {
 
 fn classify(
     plus: &LineScan, 
-    minus: &LineScan
+    minus: &LineScan,
     center_stone: i32,
 ) -> Option<PatternKind> {
     let total = plus.contig_my + minus.contig_my + center_stone;
