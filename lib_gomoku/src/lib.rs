@@ -137,7 +137,7 @@ fn endpoint_trim_rule(
     }
 }
 
-fn free_three_from_scan(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minus: &LineScan) -> Option<Pattern> {
+fn free_three_for_move(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minus: &LineScan) -> Option<Pattern> {
     if plus.total_my + minus.total_my != 2 || plus.empty_count + minus.empty_count < 3 {
         return None;
     }
@@ -158,7 +158,7 @@ fn free_three_from_scan(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, min
     Some((-minus_end..=plus_end).map(|i| (x0 + dx * i, y0 + dy * i)).collect())
 }
 
-fn free_three_from_capture_scan(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minus: &LineScan) -> Vec<Pattern> {
+fn free_three_for_capture(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minus: &LineScan) -> Vec<Pattern> {
     let mut out = Vec::new();
     let plus_three = plus.total_my == 3 && plus.empty_count == 2;
     let minus_three = minus.total_my == 3 && minus.empty_count == 2;
@@ -420,7 +420,7 @@ impl Gomoku {
             .filter(|&(dx, dy)| {
                 let plus = self.scan_line(1, dx, dy, x0, y0);
                 let minus = self.scan_line(-1, dx, dy, x0, y0);
-                free_three_from_scan(dx, dy, x0, y0, &plus, &minus).is_some()
+                free_three_for_move(dx, dy, x0, y0, &plus, &minus).is_some()
             })
             .count();
 
@@ -503,7 +503,7 @@ impl Gomoku {
             let plus = self.scan_line(1, dx, dy, x0, y0);
             let minus = self.scan_line(-1, dx, dy, x0, y0);
 
-            if let Some(pattern) = free_three_from_scan(dx, dy, x0, y0, &plus, &minus) {
+            if let Some(pattern) = free_three_for_move(dx, dy, x0, y0, &plus, &minus) {
                 self.register(PatternKind::FreeThree, &player, pattern);
             }
 
@@ -533,7 +533,7 @@ impl Gomoku {
             let plus = self.scan_line(1, dx, dy, x0, y0);
             let minus = self.scan_line(-1, dx, dy, x0, y0);
 
-            for pattern in free_three_from_capture_scan(dx, dy, x0, y0, &plus, &minus) {
+            for pattern in free_three_for_capture(dx, dy, x0, y0, &plus, &minus) {
                 self.register(PatternKind::FreeThree, &player, pattern);
             }
 
