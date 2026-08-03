@@ -149,8 +149,8 @@ fn endpoint_trim_rule(
 fn free_three_for_move(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minus: &LineScan) -> Option<Pattern> {
     if plus.total_my + minus.total_my != 2 
     || plus.empty_count + minus.empty_count < 3 
-    || not plus.end_open 
-    || not minus.end_open {
+    || ! plus.end_open 
+    || ! minus.end_open {
         return None;
     }
 
@@ -212,16 +212,17 @@ impl Gomoku {
                 break;
             }
             else if empty_count == 2 {
-              end_open = true
-              break
+              end_open = true;
+              break;
             }
 
             if self.board[x as usize][y as usize] == self.current_player {
                 // my stone
-                if !contig_done
-                    contig_my += 1;
-                else
+                if !contig_done {
+                  contig_my += 1;
+                } else {
                   hole = true;
+                }
                 total_my += 1;
             } else {
                 // empty 
