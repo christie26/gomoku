@@ -94,20 +94,17 @@ enum PatternKind {
     FiveRow,
 }
 
-// center_stone: (x0,y0) 자신이 내 돌이면 1(move), 캡처로 비워진 칸이면 0(capture).
 fn classify(
-    plus_contig_my: i32,
-    plus_open: bool,
-    minus_contig_my: i32,
-    minus_open: bool,
+    plus: &LineScan, 
+    minus: &LineScan
     center_stone: i32,
 ) -> Option<PatternKind> {
-    let total = plus_contig_my + minus_contig_my + center_stone;
+    let total = plus.contig_my + minus.contig_my + center_stone;
     match total {
-        2 if plus_open && minus_open => Some(PatternKind::OpenTwo),
-        3 if plus_open && minus_open => Some(PatternKind::OpenThree),
-        4 if plus_open && minus_open => Some(PatternKind::OpenFour),
-        4 if plus_open ^ minus_open => Some(PatternKind::BlockFour),
+        2 if plus.contig_open && minus.contig_open => Some(PatternKind::OpenTwo),
+        3 if plus.contig_open && minus.contig_open => Some(PatternKind::OpenThree),
+        4 if plus.contig_open && minus.contig_open => Some(PatternKind::OpenFour),
+        4 if plus.contig_open ^ minus.contig_open => Some(PatternKind::BlockFour),
         5 => Some(PatternKind::FiveRow),
         _ => None,
     }
@@ -140,10 +137,6 @@ fn endpoint_trim_rule(
     }
 }
 
-// free_three_from_scan/free_three_from_capture_scan/capture_open_pattern take already-scanned
-// LineScan pairs instead of scanning themselves, so callers that need both a free-three check and
-// an open-pattern classification for the same axis (add_patterns_for_move/_capture) scan each line
-// once and reuse the result, instead of each check re-scanning independently.
 fn free_three_from_scan(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minus: &LineScan) -> Option<Pattern> {
     if plus.total_my + minus.total_my != 2 || plus.empty_count + minus.empty_count < 3 {
         return None;
@@ -185,17 +178,15 @@ fn free_three_from_capture_scan(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineS
     out
 }
 
-// scan is a one-sided run (plus of some direction); used twice per axis in add_patterns_for_capture
-// with (dx,dy) and (-dx,-dy) to cover both sides without a second scan_line call.
-fn capture_open_pattern(dx: i32, dy: i32, x0: i32, y0: i32, scan: &LineScan) -> Option<(PatternKind, Pattern)> {
-    let kind = classify(scan.contig_my, scan.contig_open, 0, true, 0)?;
-    let (lower, upper) = if kind == PatternKind::FiveRow {
-        (1, scan.contig_my)
-    } else {
-        (0, scan.contig_my + scan.contig_open as i32)
-    };
-    Some((kind, (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect()))
-}
+// fn capture_open_pattern(dx: i32, dy: i32, x0: i32, y0: i32, scan: &LineScan) -> Option<(PatternKind, Pattern)> {
+//     let kind = classify(scan.contig_my, scan.contig_open, 0, true, 0)?;
+//     let (lower, upper) = if kind == PatternKind::FiveRow {
+//         (1, scan.contig_my)
+//     } else {
+//         (0, scan.contig_my + scan.contig_open as i32)
+//     };
+//     Some((kind, (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect()))
+// }
 
 impl Gomoku {
     fn scan_line(&self, sign: i32, dx: i32, dy: i32, x0: i32, y0: i32) -> LineScan {
@@ -219,6 +210,7 @@ impl Gomoku {
             }
 
             if self.board[x as usize][y as usize] == self.current_player {
+              // 내 돌
                 if !contig_done {
                     contig_my += 1;
                 }
@@ -227,6 +219,7 @@ impl Gomoku {
                 }
                 total_my += 1;
             } else {
+              // 빈칸
                 if !contig_done {
                     contig_done = true;
                     contig_open = true;
@@ -487,10 +480,6 @@ impl Gomoku {
             self.remove_patterns_at(x, y);
         }
 
-        // apply_capture는 두 자리를 모두 비우고(remove) 나서야 두 자리 모두에 대해
-        // add를 해야 한다 (한쪽만 비워진 채로 add하면 스캔이 반대쪽의 아직-남은
-        // 상대 돌에 막혀 틀린 결과가 나옴) — 그래서 remove_patterns_at과
-        // add_patterns_for_capture를 이 두 루프로 분리해서 순서를 강제한다.
         for i in 1..3 {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
@@ -518,7 +507,7 @@ impl Gomoku {
                 self.register(PatternKind::FreeThree, &player, pattern);
             }
 
-            let Some(kind) = classify(plus.contig_my, plus.contig_open, minus.contig_my, minus.contig_open, 1)
+            let Some(kind) = classify(&plus, &minus, 1)
             else {
                 continue;
             };
@@ -549,12 +538,12 @@ impl Gomoku {
             }
 
             // (x0,y0)은 캡처로 비워진 칸: 양쪽을 각각 독립된 한쪽짜리 런(run)으로 취급한다.
-            if let Some((kind, pattern)) = capture_open_pattern(dx, dy, x0, y0, &plus) {
-                self.register(kind, &player, pattern);
-            }
-            if let Some((kind, pattern)) = capture_open_pattern(-dx, -dy, x0, y0, &minus) {
-                self.register(kind, &player, pattern);
-            }
+            // if let Some((kind, pattern)) = capture_open_pattern(dx, dy, x0, y0, &plus) {
+            //     self.register(kind, &player, pattern);
+            // }
+            // if let Some((kind, pattern)) = capture_open_pattern(-dx, -dy, x0, y0, &minus) {
+            //     self.register(kind, &player, pattern);
+            // }
         }
     }
 
