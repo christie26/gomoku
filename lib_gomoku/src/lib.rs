@@ -68,7 +68,7 @@ type Pattern = Vec<Position>;
 
 struct LineScan {
     contig_my: i32,
-    contig_open: bool,
+    end_open: bool,
     total_my: i32,
     empty_count: i32,
     hole: bool,
@@ -100,13 +100,22 @@ fn classify(
     center_stone: i32,
 ) -> Option<PatternKind> {
     let total = plus.total_my + minus.total_my + center_stone;
-    match total {
-        2 if plus.contig_open && minus.contig_open => Some(PatternKind::OpenTwo),
-        3 if plus.contig_open && minus.contig_open && plus.empty_count + minus.empty_count < 3 => Some(PatternKind::OpenThree),
-        4 if plus.contig_open && minus.contig_open => Some(PatternKind::OpenFour),
-        4 if plus.contig_open ^ minus.contig_open => Some(PatternKind::BlockFour),
-        5 => Some(PatternKind::FiveRow),
-        _ => None,
+    let contig_total = plus.contig_my + minus.contig_my + center_stone;
+    let empty = plus.empty_count + minus.empty_count + (1 - center_stone);    
+    if contig_total == 5 {
+        Some(PatternKind::FiveRow)
+    } else if contig_total == 4 && plus.end_open && minus.end_open {
+        Some(PatternKind::OpenFour)
+    } else if total == 4 && empty == 1 {
+        Some(PatternKind::BlockFour)
+    } else if total == 3 && empty == 3 {
+        Some(PatternKind::FreeThree)
+    } else if total == 3 && empty == 2 {
+        Some(PatternKind::OpenThree)
+    } else if total == 2 && plus.end_open && minus.end_open {
+        Some(PatternKind::OpenTwo)
+    } else {
+        None
     }
 }
 
@@ -138,7 +147,10 @@ fn endpoint_trim_rule(
 }
 
 fn free_three_for_move(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minus: &LineScan) -> Option<Pattern> {
-    if plus.total_my + minus.total_my != 2 || plus.empty_count + minus.empty_count < 3 {
+    if plus.total_my + minus.total_my != 2 
+    || plus.empty_count + minus.empty_count < 3 
+    || not plus.end_open 
+    || not minus.end_open {
         return None;
     }
 
@@ -179,21 +191,11 @@ fn free_three_for_capture(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, m
     out
 }
 
-fn capture_open_pattern(dx: i32, dy: i32, x0: i32, y0: i32, scan: &LineScan) -> Option<(PatternKind, Pattern)> {
-    let neutral = LineScan { contig_my: 0, contig_open: true, total_my: 0, empty_count: 0, hole: false };
-    let kind = classify(scan, &neutral, 0)?;
-    let (lower, upper) = if kind == PatternKind::FiveRow {
-        (1, scan.contig_my)
-    } else {
-        (0, scan.contig_my + scan.contig_open as i32)
-    };
-    Some((kind, (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect()))
-}
 
 impl Gomoku {
     fn scan_line(&self, sign: i32, dx: i32, dy: i32, x0: i32, y0: i32) -> LineScan {
         let mut contig_my = 0;
-        let mut contig_open = false;
+        let mut end_open = false;
         let mut contig_done = false;
         let mut total_my = 0;
         let mut empty_count = 0;
@@ -206,26 +208,24 @@ impl Gomoku {
 
             if !self.is_on_board(x, y)
                 || self.board[x as usize][y as usize] == self.opponent_player
-                || empty_count == 2
             {
                 break;
             }
+            else if empty_count == 2 {
+              end_open = true
+              break
+            }
 
             if self.board[x as usize][y as usize] == self.current_player {
-              // 내 돌
-                if !contig_done {
+                // my stone
+                if !contig_done
                     contig_my += 1;
-                }
-                if empty_count > 0 {
-                    hole = true;
-                }
+                else
+                  hole = true;
                 total_my += 1;
             } else {
-              // 빈칸
-                if !contig_done {
-                    contig_done = true;
-                    contig_open = true;
-                }
+                // empty 
+                contig_done = true;
                 empty_count += 1;
             }
             i += 1;
@@ -233,7 +233,7 @@ impl Gomoku {
 
         LineScan {
             contig_my,
-            contig_open,
+            end_open,
             total_my,
             empty_count,
             hole,
@@ -518,8 +518,8 @@ impl Gomoku {
                 (-minus.contig_my, plus.contig_my)
             } else {
                 (
-                    -(minus.contig_my + minus.contig_open as i32),
-                    plus.contig_my + plus.contig_open as i32,
+                    -(minus.contig_my + minus.end_open as i32),
+                    plus.contig_my + plus.end_open as i32,
                 )
             };
             let pattern: Pattern = (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect();
@@ -539,13 +539,21 @@ impl Gomoku {
                 self.register(PatternKind::FreeThree, &player, pattern);
             }
 
-            // (x0,y0)은 캡처로 비워진 칸: 양쪽을 각각 독립된 한쪽짜리 런(run)으로 취급한다.
-            if let Some((kind, pattern)) = capture_open_pattern(dx, dy, x0, y0, &plus) {
-                self.register(kind, &player, pattern);
-            }
-            if let Some((kind, pattern)) = capture_open_pattern(-dx, -dy, x0, y0, &minus) {
-                self.register(kind, &player, pattern);
-            }
+            let Some(kind) = classify(&plus, &minus, 0)
+            else {
+                continue;
+            };
+
+            let (lower, upper) = if kind == PatternKind::FiveRow {
+                (-minus.contig_my, plus.contig_my)
+            } else {
+                (
+                    -(minus.contig_my + minus.end_open as i32),
+                    plus.contig_my + plus.end_open as i32,
+                )
+            };
+            let pattern: Pattern = (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect();
+            self.register(kind, &player, pattern);
         }
     }
 
