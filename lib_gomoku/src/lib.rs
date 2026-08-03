@@ -392,8 +392,9 @@ impl Gomoku {
             print_pattern_kind("block_four", &p.block_four);
             print_pattern_kind("open_four", &p.open_four);
             print_pattern_kind("five_row", &p.five_row);
-        // println!("win_capture_count: {:?}", self.win_capture_count);
+        }
         println!("capture_count: {:?}", self.capture_count);
+        // println!("win_capture_count: {:?}", self.win_capture_count);
     }
 
     fn clone_gomoku(&self) -> Gomoku {
