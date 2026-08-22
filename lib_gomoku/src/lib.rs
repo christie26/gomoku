@@ -106,6 +106,9 @@ fn classify(
         Some(PatternKind::FiveRow)
     } else if contig_total == 4 && plus.end_open && minus.end_open {
         Some(PatternKind::OpenFour)
+    } else if contig_total == 4 && (plus.end_open || minus.end_open) {
+        // 한쪽 끝만 넓게 열려 있으면 total==4 && empty==1 조건을 못 맞추므로 별도로 잡는다.
+        Some(PatternKind::BlockFour)
     } else if total == 4 && empty == 1 {
         Some(PatternKind::BlockFour)
     } else if total == 3 && empty == 3 {
@@ -119,31 +122,25 @@ fn classify(
     }
 }
 
-// pos가 pattern의 진짜 바깥쪽 끝(첫/마지막 좌표)일 때만 trim하고, kind별로 남은 모양을 재분류한다.
-// OpenFour는 한쪽 끝이 막히면 BlockFour로 강등되고, FreeThree는 같은 kind로 유지된 채 줄어든다.
-// 그 외 kind는 trim 규칙이 없어 pos를 포함하면 항상 통째로 제거된다.
-fn endpoint_trim_rule(
+// 패턴의 실제 좌표 범위: FiveRow는 이미 꽉 찼으니 contig만, 나머지는 열린 끝의 reach 칸까지 포함한다.
+fn build_pattern_range(
     kind: PatternKind,
-    pattern: &Pattern,
-    pos: Position,
-) -> Option<(PatternKind, Pattern)> {
-    let is_first = pattern.first() == Some(&pos);
-    let is_last = pattern.last() == Some(&pos);
-    if !is_first && !is_last {
-        return None;
-    }
-    let trimmed = || -> Pattern {
-        if is_first {
-            pattern[1..].to_vec()
-        } else {
-            pattern[..pattern.len() - 1].to_vec()
-        }
+    dx: i32,
+    dy: i32,
+    x0: i32,
+    y0: i32,
+    plus: &LineScan,
+    minus: &LineScan,
+) -> Pattern {
+    let (lower, upper) = if kind == PatternKind::FiveRow {
+        (-minus.contig_my, plus.contig_my)
+    } else {
+        (
+            -(minus.contig_my + minus.empty_count),
+            plus.contig_my + plus.empty_count,
+        )
     };
-    match kind {
-        PatternKind::OpenFour => Some((PatternKind::BlockFour, trimmed())),
-        PatternKind::FreeThree => Some((PatternKind::FreeThree, trimmed())),
-        _ => None,
-    }
+    (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect()
 }
 
 fn free_three_for_move(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minus: &LineScan) -> Option<Pattern> {
@@ -194,6 +191,18 @@ fn free_three_for_capture(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, m
 
 impl Gomoku {
     fn scan_line(&self, sign: i32, dx: i32, dy: i32, x0: i32, y0: i32) -> LineScan {
+        self.scan_line_as(self.current_player, sign, dx, dy, x0, y0)
+    }
+
+    // scan_line은 원래 self.current_player를 "나"로 취급했는데, 지금 수를 두는 사람과
+    // 재계산하려는 패턴 주인이 다를 수 있는 rescan_pattern에서는 그게 틀린 기준이 된다.
+    // 그래서 "나"를 명시적으로 받는 버전을 따로 두고, scan_line은 이걸 감싸기만 한다.
+    fn scan_line_as(&self, me: Stone, sign: i32, dx: i32, dy: i32, x0: i32, y0: i32) -> LineScan {
+        let opponent = match me {
+            Stone::Black => Stone::White,
+            Stone::White => Stone::Black,
+            Stone::Empty => Stone::Empty,
+        };
         let mut contig_my = 0;
         let mut end_open = false;
         let mut contig_done = false;
@@ -207,8 +216,11 @@ impl Gomoku {
             let y = y0 + dy * i * sign;
 
             if !self.is_on_board(x, y)
-                || self.board[x as usize][y as usize] == self.opponent_player
+                || self.board[x as usize][y as usize] == opponent
             {
+                if empty_count == 2 {
+                  end_open = true;
+                }
                 break;
             }
             else if empty_count == 2 {
@@ -216,7 +228,7 @@ impl Gomoku {
               break;
             }
 
-            if self.board[x as usize][y as usize] == self.current_player {
+            if self.board[x as usize][y as usize] == me {
                 // my stone
                 if !contig_done {
                   contig_my += 1;
@@ -251,6 +263,36 @@ impl Gomoku {
             PatternKind::OpenFour => &mut p.open_four,
             PatternKind::FiveRow => &mut p.five_row,
         }
+    }
+
+    fn patterns_ref(&self, kind: PatternKind, player: &Stone) -> &Vec<Pattern> {
+        let p = self.patterns.get(player).unwrap();
+        match kind {
+            PatternKind::OpenTwo => &p.open_two,
+            PatternKind::OpenThree => &p.open_three,
+            PatternKind::FreeThree => &p.free_three,
+            PatternKind::BlockFour => &p.block_four,
+            PatternKind::OpenFour => &p.open_four,
+            PatternKind::FiveRow => &p.five_row,
+        }
+    }
+
+    // pos를 잃은 뒤에도 살아남은 돌 하나(anchor)를 기준으로 scan_line+classify를 다시 돌려
+    // 그 라인의 진짜 현재 모양을 재계산한다. 좌표 슬라이싱 추측이 아니라 board 실체를 읽는다.
+    fn rescan_pattern(&self, pattern: &Pattern, pos: Position, player: &Stone) -> Option<(PatternKind, Pattern)> {
+        if pattern.len() < 2 {
+            return None;
+        }
+        let (dx, dy) = (pattern[1].0 - pattern[0].0, pattern[1].1 - pattern[0].1);
+
+        let &(ax, ay) = pattern.iter().find(|&&(px, py)| {
+            (px, py) != pos && self.board[px as usize][py as usize] == *player
+        })?;
+
+        let plus = self.scan_line_as(*player, 1, dx, dy, ax, ay);
+        let minus = self.scan_line_as(*player, -1, dx, dy, ax, ay);
+        let kind = classify(&plus, &minus, 1)?;
+        Some((kind, build_pattern_range(kind, dx, dy, ax, ay, &plus, &minus)))
     }
 
     fn register(&mut self, kind: PatternKind, player: &Stone, pattern: Pattern) {
@@ -515,15 +557,7 @@ impl Gomoku {
                 continue;
             };
 
-            let (lower, upper) = if kind == PatternKind::FiveRow {
-                (-minus.contig_my, plus.contig_my)
-            } else {
-                (
-                    -(minus.contig_my + minus.end_open as i32),
-                    plus.contig_my + plus.end_open as i32,
-                )
-            };
-            let pattern: Pattern = (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect();
+            let pattern = build_pattern_range(kind, dx, dy, x0, y0, &plus, &minus);
             self.register(kind, &player, pattern);
         }
     }
@@ -545,15 +579,7 @@ impl Gomoku {
                 continue;
             };
 
-            let (lower, upper) = if kind == PatternKind::FiveRow {
-                (-minus.contig_my, plus.contig_my)
-            } else {
-                (
-                    -(minus.contig_my + minus.end_open as i32),
-                    plus.contig_my + plus.end_open as i32,
-                )
-            };
-            let pattern: Pattern = (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect();
+            let pattern = build_pattern_range(kind, dx, dy, x0, y0, &plus, &minus);
             self.register(kind, &player, pattern);
         }
     }
@@ -570,23 +596,29 @@ impl Gomoku {
         ];
         let mut pending: Vec<(Stone, PatternKind, Pattern)> = Vec::new();
 
+        // 1) READ: pos를 포함한 패턴마다, 살아남은 돌 기준으로 현재 모양을 다시 계산해둔다.
+        //    (self.patterns를 불변으로만 빌리므로 아래 retain의 가변 대여와 안 겹친다)
         for player in [Stone::Black, Stone::White] {
             for kind in KINDS {
-                self.patterns_mut(kind, &player).retain_mut(|pattern| {
+                for pattern in self.patterns_ref(kind, &player) {
                     if !pattern.contains(&pos) {
-                        return true;
+                        continue;
                     }
-                    match endpoint_trim_rule(kind, pattern, pos) {
-                        Some((new_kind, new_pattern)) => {
-                            pending.push((player, new_kind, new_pattern));
-                            false
-                        }
-                        None => false,
+                    if let Some((new_kind, new_pattern)) = self.rescan_pattern(pattern, pos, &player) {
+                        pending.push((player, new_kind, new_pattern));
                     }
-                });
+                }
             }
         }
 
+        // 2) MUTATE: pos를 포함했던 패턴은 전부 제거한다 (대체본은 pending에 이미 있음).
+        for player in [Stone::Black, Stone::White] {
+            for kind in KINDS {
+                self.patterns_mut(kind, &player).retain(|pattern| !pattern.contains(&pos));
+            }
+        }
+
+        // 3) APPLY: 재계산된 패턴을 등록한다.
         for (player, kind, pattern) in pending {
             self.register(kind, &player, pattern);
         }
@@ -856,4 +888,197 @@ fn lib_gomoku(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let move_result_class = m.getattr("MoveResult")?;
     move_result_class.setattr("__module__", "lib_gomoku")?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // 테스트 전용 헬퍼: player를 강제로 세팅하고 수를 둔다. Valid가 아니면 바로 실패시켜서
+    // (더블쓰리 등으로) 세팅 자체가 잘못됐을 때 조용히 넘어가지 않게 한다.
+    fn place(game: &mut Gomoku, player: Stone, x: i32, y: i32) {
+        game.current_player = player;
+        game.opponent_player = match player {
+            Stone::Black => Stone::White,
+            Stone::White => Stone::Black,
+            Stone::Empty => panic!("Empty는 플레이어가 될 수 없다"),
+        };
+        let (result, _, _) = game.handle_move(x, y);
+        assert_eq!(result, MoveResult::Valid, "({x},{y}) {:?} 착수가 실패함", player);
+    }
+
+    fn black_patterns(game: &Gomoku) -> &PlayerPatterns {
+        game.patterns.get(&Stone::Black).unwrap()
+    }
+
+    // 아래 테스트는 전부 19x19 새 board, row=5 가로줄만 사용한다.
+    // 다른 방향(세로/대각선)엔 아무 돌도 없어서 그쪽에서 우연히 패턴이 잡힐 일이 없다.
+
+    #[test]
+    fn open_two_registers_when_both_ends_open() {
+        // ..XX..  (양쪽 다 2칸 이상 열림) -> open_two 1개 등록
+        let mut game = Gomoku::new(19);
+        place(&mut game, Stone::Black, 5, 5);
+        place(&mut game, Stone::Black, 5, 6);
+
+        let expected = vec![(5, 3), (5, 4), (5, 5), (5, 6), (5, 7), (5, 8)];
+        assert_eq!(black_patterns(&game).open_two, vec![expected]);
+    }
+
+    #[test]
+    fn open_two_disappears_when_near_side_blocked() {
+        // ..XX.. 상태에서 White가 바로 옆(5,4)을 막음.
+        // 이 엔진은 "한쪽만 막힌 두 개"는 애초에 추적하지 않으므로(open_two 정의상 양쪽 다 열려야 함)
+        // 완전히 사라져야 한다.
+        let mut game = Gomoku::new(19);
+        place(&mut game, Stone::Black, 5, 5);
+        place(&mut game, Stone::Black, 5, 6);
+        place(&mut game, Stone::White, 5, 4);
+
+        assert!(black_patterns(&game).open_two.is_empty());
+    }
+
+    #[test]
+    fn open_three_registers_with_one_side_dead_and_other_open() {
+        // O.XXX.. : 왼쪽은 White로 완전히 막히고(empty=0), 오른쪽은 넓게 열림(empty=2)
+        // total==3 && empty==2 -> classify()의 OpenThree 분기가 잡아야 한다.
+        let mut game = Gomoku::new(19);
+        place(&mut game, Stone::White, 5, 4);
+        place(&mut game, Stone::Black, 5, 5);
+        place(&mut game, Stone::Black, 5, 6);
+        place(&mut game, Stone::Black, 5, 7);
+
+        let expected = vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)];
+        assert_eq!(black_patterns(&game).open_three, vec![expected]);
+    }
+
+    #[test]
+    fn open_three_disappears_when_open_side_also_blocked() {
+        // 위 상태에서 White가 열린 쪽 바로 옆(5,8)까지 막으면 O-XXX-O 형태.
+        // 양쪽 다 죽었으니 open_three는 완전히 사라져야 한다 (block_three 같은 건 없음).
+        let mut game = Gomoku::new(19);
+        place(&mut game, Stone::White, 5, 4);
+        place(&mut game, Stone::Black, 5, 5);
+        place(&mut game, Stone::Black, 5, 6);
+        place(&mut game, Stone::Black, 5, 7);
+        place(&mut game, Stone::White, 5, 8);
+
+        assert!(black_patterns(&game).open_three.is_empty());
+    }
+
+    #[test]
+    fn free_three_registers_when_wide_open_both_sides() {
+        // ...XXX... 양쪽 다 넓게 열림 -> free_three_for_move 경로로 free_three 등록.
+        // 이 모양은 classify() 기준으론 empty==4라 OpenThree(empty==2)/FreeThree(empty==3) 어느
+        // 분기에도 안 걸린다 (free_three_for_move가 별도로 잡는 경우). open_three는 비어 있어야 한다.
+        let mut game = Gomoku::new(19);
+        place(&mut game, Stone::Black, 5, 5);
+        place(&mut game, Stone::Black, 5, 6);
+        place(&mut game, Stone::Black, 5, 7);
+
+        let expected = vec![(5, 3), (5, 4), (5, 5), (5, 6), (5, 7), (5, 8), (5, 9)];
+        assert_eq!(black_patterns(&game).free_three, vec![expected]);
+        assert!(black_patterns(&game).open_three.is_empty());
+    }
+
+    #[test]
+    fn block_four_registers_when_one_side_open() {
+        // O.XXXX.. : 이번에 고친 classify() 버그의 회귀 테스트.
+        // contig_total==4에 한쪽만 end_open이라 total==4&&empty==1 조건을 못 맞춰서
+        // 예전엔 None(패턴 없음)이었던 케이스.
+        let mut game = Gomoku::new(19);
+        place(&mut game, Stone::White, 5, 4);
+        place(&mut game, Stone::Black, 5, 5);
+        place(&mut game, Stone::Black, 5, 6);
+        place(&mut game, Stone::Black, 5, 7);
+        place(&mut game, Stone::Black, 5, 8);
+
+        let expected = vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)];
+        assert_eq!(black_patterns(&game).block_four, vec![expected]);
+        assert!(black_patterns(&game).open_four.is_empty());
+    }
+
+    #[test]
+    fn open_four_downgrades_to_block_four_when_blocked() {
+        // ...XXXX... (양쪽 다 열림) -> open_four 등록.
+        // 그 다음 White가 한쪽 바로 옆(5,4)을 막으면: 저장된 open_four 좌표 리스트에서 (5,4)는
+        // 맨 앞/맨 뒤가 아니라 중간(interior)이라, 예전 endpoint_trim_rule은 그냥 통째로 삭제하고
+        // 끝났다 (block_four로 안 내려가고 위협 자체가 소리소문없이 사라짐 - 이번에 찾은 버그).
+        // 지금은 rescan_pattern이 남은 돌(5,5)을 anchor 삼아 다시 스캔해서 block_four로 정확히
+        // 강등시켜야 한다.
+        let mut game = Gomoku::new(19);
+        place(&mut game, Stone::Black, 5, 5);
+        place(&mut game, Stone::Black, 5, 6);
+        place(&mut game, Stone::Black, 5, 7);
+        place(&mut game, Stone::Black, 5, 8);
+
+        let open_four_expected = vec![
+            (5, 3), (5, 4), (5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10),
+        ];
+        assert_eq!(black_patterns(&game).open_four, vec![open_four_expected]);
+
+        place(&mut game, Stone::White, 5, 4);
+
+        assert!(black_patterns(&game).open_four.is_empty());
+        let block_four_expected = vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)];
+        assert_eq!(black_patterns(&game).block_four, vec![block_four_expected]);
+    }
+
+    #[test]
+    fn five_row_registers_on_five_in_a_row() {
+        // XXXXX 완성 -> five_row 등록되고, 직전까지 있던 open_four는 완전히 없어져야 한다
+        // (완성된 오목이 예전 open_four로 이중 집계되면 안 됨).
+        let mut game = Gomoku::new(19);
+        place(&mut game, Stone::Black, 5, 5);
+        place(&mut game, Stone::Black, 5, 6);
+        place(&mut game, Stone::Black, 5, 7);
+        place(&mut game, Stone::Black, 5, 8);
+        place(&mut game, Stone::Black, 5, 9);
+
+        let expected = vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)];
+        assert_eq!(black_patterns(&game).five_row, vec![expected]);
+        assert!(black_patterns(&game).open_four.is_empty());
+        assert!(black_patterns(&game).block_four.is_empty());
+    }
+
+    #[test]
+    fn capture_removes_pattern_when_both_stones_captured() {
+        // ..XX.. 로 open_two를 만든 뒤, White가 O-X-X-O 형태로 감싸서 캡처.
+        // 캡처로 Black 돌 두 개가 통째로 사라지면, rescan_pattern이 살아남은 돌(anchor)을
+        // 못 찾아서 open_two도 같이 완전히 사라져야 한다.
+        let mut game = Gomoku::new(19);
+        place(&mut game, Stone::Black, 5, 5);
+        place(&mut game, Stone::Black, 5, 6);
+        place(&mut game, Stone::White, 5, 4);
+        place(&mut game, Stone::White, 5, 7); // (5,5),(5,6) capture 됨
+
+        assert_eq!(game.board[5][5], Stone::Empty);
+        assert_eq!(game.board[5][6], Stone::Empty);
+        assert!(black_patterns(&game).open_two.is_empty());
+    }
+
+    #[test]
+    fn capture_registers_pattern_with_full_reach_range() {
+        // X-O-O-X: Black이 (5,8)을 두면서 White 두 개(5,6),(5,7)를 캡처.
+        // 캡처로 새로 빈 칸이 된 (5,6)/(5,7)을 기준으로 add_patterns_for_capture가 다시 스캔한다.
+        // 예전엔 이 경로만 end_open(0/1)으로 범위를 잡아서, 실제 돌인 (5,8)조차 등록된 패턴
+        // 범위 밖으로 빠지는 불일치가 있었다 (6번 이슈).
+        // 지금은 add_patterns_for_move와 같은 build_pattern_range(empty_count 기반)를 써서
+        // (5,5)와 (5,8) 둘 다 포함된 온전한 range가 나와야 한다.
+        let mut game = Gomoku::new(19);
+        place(&mut game, Stone::Black, 5, 5);
+        place(&mut game, Stone::White, 5, 6);
+        place(&mut game, Stone::White, 5, 7);
+        place(&mut game, Stone::Black, 5, 8); // capture 발생, (5,6)/(5,7) 빈칸으로
+
+        assert_eq!(game.board[5][6], Stone::Empty);
+        assert_eq!(game.board[5][7], Stone::Empty);
+
+        let full_range = vec![(5, 3), (5, 4), (5, 5), (5, 6), (5, 7), (5, 8)];
+        assert!(
+            black_patterns(&game).open_two.contains(&full_range),
+            "capture 이후 open_two 패턴에 (5,8) 돌까지 포함된 전체 range가 있어야 함: {:?}",
+            black_patterns(&game).open_two
+        );
+    }
 }
