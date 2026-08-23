@@ -526,14 +526,53 @@ impl Gomoku {
             self.remove_patterns_at(x, y);
         }
 
+        // 캡처 라인(dx,dy) 자체는 두 빈칸이 같은 라인 위에 있어서, 각 빈칸을 독립된 center로
+        // 스캔하면 서로 다른 range가 두 번 등록된다(register()의 dedup은 내용이 완전히 같을
+        // 때만 걸러줌). mover(x0,y0)를 새 돌처럼 취급해 이 라인만 한 번에 재구성한다.
+        self.add_patterns_for_capture_axis(x0, y0, dx, dy);
+
+        // 캡처 라인이 아닌 나머지 방향은 두 빈칸에서 서로 다른 독립적인 라인이라 각자 스캔한다.
         for i in 1..3 {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
 
-            self.add_patterns_for_capture(x, y);
+            self.add_patterns_for_capture_off_axis(x, y, dx, dy);
         }
 
         removed
+    }
+
+    // 캡처 라인 위의 패턴을 mover 기준 하나의 계산으로 합친다. mover 쪽(반대편)은 그냥
+    // 평범하게 스캔하고, anchor 쪽은 "캡처로 빈 두 칸 + anchor부터 이어지는 스캔"을 합성해서
+    // scan_line의 2칸-cap 때문에 anchor 너머를 못 보는 문제를 피한다.
+    fn add_patterns_for_capture_axis(&mut self, mover_x: i32, mover_y: i32, dx: i32, dy: i32) {
+        let player = self.current_player;
+
+        let near_anchor_x = mover_x + dx * 2;
+        let near_anchor_y = mover_y + dy * 2;
+        // near_anchor에서 anchor 방향으로 스캔하면 i=1이 정확히 anchor 자신이라 hole 없이
+        // anchor부터 그 너머까지 정확하게 본다.
+        let beyond_anchor = self.scan_line(1, dx, dy, near_anchor_x, near_anchor_y);
+
+        let plus_toward_anchor = LineScan {
+            contig_my: 0,
+            end_open: beyond_anchor.end_open,
+            total_my: beyond_anchor.total_my,
+            empty_count: 2 + beyond_anchor.empty_count,
+            hole: true,
+        };
+        let minus_away = self.scan_line(-1, dx, dy, mover_x, mover_y);
+
+        if let Some(pattern) = free_three_for_move(dx, dy, mover_x, mover_y, &plus_toward_anchor, &minus_away) {
+            self.register(PatternKind::FreeThree, &player, pattern);
+        }
+
+        let Some(kind) = classify(&plus_toward_anchor, &minus_away, 1) else {
+            return;
+        };
+
+        let pattern = build_pattern_range(kind, dx, dy, mover_x, mover_y, &plus_toward_anchor, &minus_away);
+        self.register(kind, &player, pattern);
     }
 
     fn update_patterns_for_move(&mut self, x: i32, y: i32) {
@@ -563,11 +602,17 @@ impl Gomoku {
         }
     }
 
-    fn add_patterns_for_capture(&mut self, x0: i32, y0: i32) {
+    // 캡처로 빈 칸(x0,y0) 하나에서, 캡처가 일어난 축(capture_dx,capture_dy)을 제외한
+    // 나머지 3방향을 스캔한다. 캡처 축은 add_patterns_for_capture_axis가 따로 한 번에 처리한다.
+    fn add_patterns_for_capture_off_axis(&mut self, x0: i32, y0: i32, capture_dx: i32, capture_dy: i32) {
         let player = self.current_player;
         let directions = [(1, -1), (1, 0), (1, 1), (0, 1)];
 
         for (dx, dy) in directions {
+            if (dx, dy) == (capture_dx, capture_dy) || (dx, dy) == (-capture_dx, -capture_dy) {
+                continue;
+            }
+
             let plus = self.scan_line(1, dx, dy, x0, y0);
             let minus = self.scan_line(-1, dx, dy, x0, y0);
 
@@ -1189,9 +1234,9 @@ mod tests {
 
     #[test]
     fn capture_registers_pattern_with_full_reach_range() {
-        // 0-O-O-0: Black이 (5,8)을 두면서 White 두 개를 캡처. 캡처로 빈 칸이 된 자리를 기준으로
-        // 다시 스캔해도, add_patterns_for_move와 같은 build_pattern_range를 써서 (5,5)~(5,8)이
-        // 전부 포함된 온전한 range가 나와야 한다.
+        // 0-O-O-0: Black이 (5,8)을 두면서 White 두 개를 캡처. anchor(5,5)와 mover(5,8) 둘 다
+        // 자기 바깥쪽으로 열려 있으니, 일반 move로 만든 open_two와 똑같이 양쪽 다 2칸씩 열린
+        // reach까지 포함한 하나의 range((5,3)~(5,10))가 나와야 한다.
         let mut game = Gomoku::new(19);
         place(&mut game, Stone::Black, 5, 5);
         place(&mut game, Stone::White, 5, 6);
@@ -1201,10 +1246,222 @@ mod tests {
         assert_eq!(game.board[5][6], Stone::Empty);
         assert_eq!(game.board[5][7], Stone::Empty);
 
-        let full_range = vec![(5, 3), (5, 4), (5, 5), (5, 6), (5, 7), (5, 8)];
+        let full_range = vec![(5, 10), (5, 9), (5, 8), (5, 7), (5, 6), (5, 5), (5, 4), (5, 3)];
+        assert_eq!(
+            black_patterns(&game).open_two,
+            vec![full_range],
+            "capture 이후 open_two 패턴에 anchor/mover 양쪽 reach가 모두 포함된 range 하나만 있어야 함: {:?}",
+            black_patterns(&game).open_two
+        );
+    }
+
+    // ===== 캡처로 만들어지는 패턴 =====
+    //
+    // 캡처는 mover-White-White-anchor 4칸을 만들며, White 두 개가 빈칸이 된다.
+    // 그 두 빈칸이 놓인 축(캡처 축)은 add_patterns_for_capture_axis가 mover를 새 돌처럼
+    // 취급해서 한 번에 계산하고, 나머지 3방향(off-axis)은 각 빈칸에서 독립적으로 스캔한다.
+
+    // mover를 (row, mover_col)에 두면서 anchor(=mover_col-3)와의 사이 White 두 개를 캡처하게
+    // 만드는 헬퍼. beyond_anchor_pattern은 anchor보다 한 칸 더 먼 쪽(캡처 반대 방향)에서부터,
+    // away_pattern은 mover보다 한 칸 더 먼 쪽(anchor 반대 방향)에서부터 이어붙인다.
+    // '0'=Black, 'O'=White(벽), '.'=빈칸(자리만 건너뜀). setup_window와 달리 감싸는 쪽/감싸이는
+    // 쪽 순서가 고정이라 재사용 가능한 헬퍼로 분리했다.
+    fn setup_capture_axis(row: i32, mover_col: i32, beyond_anchor_pattern: &str, away_pattern: &str) -> (Gomoku, PlayerPatterns) {
+        let mut game = Gomoku::new(19);
+        let anchor_col = mover_col - 3;
+
+        for (i, ch) in beyond_anchor_pattern.chars().enumerate() {
+            let col = anchor_col - 1 - i as i32;
+            match ch {
+                '0' => place(&mut game, Stone::Black, row, col),
+                'O' => place(&mut game, Stone::White, row, col),
+                _ => {}
+            }
+        }
+        place(&mut game, Stone::Black, row, anchor_col);
+        place(&mut game, Stone::White, row, anchor_col + 1);
+        place(&mut game, Stone::White, row, anchor_col + 2);
+
+        for (i, ch) in away_pattern.chars().enumerate() {
+            let col = mover_col + 1 + i as i32;
+            match ch {
+                '0' => place(&mut game, Stone::Black, row, col),
+                'O' => place(&mut game, Stone::White, row, col),
+                _ => {}
+            }
+        }
+
+        let before = black_patterns(&game).clone();
+        place(&mut game, Stone::Black, row, mover_col); // capture 발동
+        (game, before)
+    }
+
+    #[test]
+    fn register_open_two_via_capture_axis_variants() {
+        // (beyond_anchor_pattern, away_pattern, expected)
+        let cases: Vec<(&str, &str, Option<Vec<Position>>)> = vec![
+            // 0..0
+            ("", "", Some(vec![(5, 10), (5, 9), (5, 8), (5, 7), (5, 6), (5, 5), (5, 4), (5, 3)])),
+            // O + 0..0
+            ("O", "", Some(vec![(5, 10), (5, 9), (5, 8), (5, 7), (5, 6), (5, 5)])),
+            // 0..0 + .O
+            ("", ".O", Some(vec![(5, 9), (5, 8), (5, 7), (5, 6), (5, 5), (5, 4), (5, 3)])),
+            // 0..0 + O
+            ("", "O", None),
+        ];
+
+        let mut failures = Vec::new();
+        for (beyond_anchor_pattern, away_pattern, expected) in cases {
+            let (game, before) = setup_capture_axis(5, 8, beyond_anchor_pattern, away_pattern);
+            if !before.open_two.is_empty() {
+                failures.push(format!("beyond={beyond_anchor_pattern:?} away={away_pattern:?}: 캡처 전에 이미 등록됨"));
+                continue;
+            }
+
+            let actual = &black_patterns(&game).open_two;
+            match expected {
+                Some(expected) => {
+                    if *actual != vec![expected] {
+                        failures.push(format!("beyond={beyond_anchor_pattern:?} away={away_pattern:?}: 등록된 결과가 기대값과 다름: {actual:?}"));
+                    }
+                }
+                None => {
+                    if !actual.is_empty() {
+                        failures.push(format!("beyond={beyond_anchor_pattern:?} away={away_pattern:?}: 등록되지 않아야 하는데 {actual:?}"));
+                    }
+                }
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn register_open_three_via_capture_axis_variants() {
+        // (beyond_anchor_pattern, away_pattern, expected)
+        //
+        // open_three(total==3&&empty==2)를 캡처 축에서 만들려면 캡처 두 칸(=고정 empty 2) 외의
+        // empty가 전혀 없어야 한다. anchor 쪽에 "돌 하나 더 + 바로 벽"을 놓으면(대칭 케이스로
+        // 시도했던 "0O") anchor가 White-Black-Black-White 4칸을 완성시켜, 진짜 캡처(mover 착수)
+        // 전에 이 조합 자체가 setup 도중 캡처되어 사라진다. 그래서 "돌 하나 더"는 mover 쪽에만
+        // 안전하게 놓을 수 있다(mover는 항상 마지막에 두므로 이 4칸이 setup 중에는 완성 안 됨).
+        let cases: Vec<(&str, &str, Vec<Position>)> = vec![
+            // anchor 혼자 바로 벽, mover 저편은 돌 하나 더 + 바로 벽 -> 총 3돌 + 2빈칸(캡처 두 칸)
+            ("O", "0O", vec![(5, 9), (5, 8), (5, 7), (5, 6), (5, 5)]),
+        ];
+
+        let mut failures = Vec::new();
+        for (beyond_anchor_pattern, away_pattern, expected) in cases {
+            let (game, before) = setup_capture_axis(5, 8, beyond_anchor_pattern, away_pattern);
+            if !before.open_three.is_empty() {
+                failures.push(format!("beyond={beyond_anchor_pattern:?} away={away_pattern:?}: 캡처 전에 이미 등록됨"));
+                continue;
+            }
+
+            let actual = &black_patterns(&game).open_three;
+            if *actual != vec![expected] {
+                failures.push(format!("beyond={beyond_anchor_pattern:?} away={away_pattern:?}: 등록된 결과가 기대값과 다름: {actual:?}"));
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn register_block_four_via_capture_axis() {
+        // mover 저편에 3개 이어진 돌 + 벽 -> mover까지 포함해 contig 4개, anchor 쪽은 넓게 열림.
+        // contig_total==4 && end_open 분기로 block_four가 등록돼야 한다.
+        let (game, before) = setup_capture_axis(5, 8, "", "000O");
+        assert!(before.block_four.is_empty(), "캡처 전에 이미 등록됨");
+
+        let expected = vec![
+            (5, 11), (5, 10), (5, 9), (5, 8), (5, 7), (5, 6), (5, 5), (5, 4), (5, 3),
+        ];
+        assert_eq!(black_patterns(&game).block_four, vec![expected]);
+        assert!(black_patterns(&game).open_four.is_empty());
+    }
+
+    #[test]
+    fn register_free_three_via_capture_axis_variants() {
+        // (beyond_anchor_pattern, away_pattern, expected)
+        let cases: Vec<(&str, &str, Vec<Position>)> = vec![
+            // anchor는 혼자 넓게 열려 있고, mover 저편은 한 칸 띄워 돌 하나 + 그 너머 넓게 열림 ->
+            // 양쪽 다 end_open인 free_three_for_move 경로.
+            ("", ".0", vec![(5, 10), (5, 9), (5, 8), (5, 7), (5, 6), (5, 5), (5, 4), (5, 3)]),
+            // anchor는 혼자 바로 벽, mover 저편은 한 칸 띄워 돌 하나 + 바로 벽 -> combined empty==3
+            // (캡처 두 칸 + away의 gap 한 칸)이라 open_three가 아니라 free_three로 잡힌다.
+            ("O", ".0O", vec![(5, 10), (5, 9), (5, 8), (5, 7), (5, 6), (5, 5)]),
+        ];
+
+        let mut failures = Vec::new();
+        for (beyond_anchor_pattern, away_pattern, expected) in cases {
+            let (game, before) = setup_capture_axis(5, 8, beyond_anchor_pattern, away_pattern);
+            if !before.free_three.is_empty() {
+                failures.push(format!("beyond={beyond_anchor_pattern:?} away={away_pattern:?}: 캡처 전에 이미 등록됨"));
+                continue;
+            }
+
+            let actual = &black_patterns(&game).free_three;
+            if *actual != vec![expected.clone()] {
+                failures.push(format!("beyond={beyond_anchor_pattern:?} away={away_pattern:?}: 등록된 결과가 기대값과 다름: {actual:?}"));
+            }
+            if !black_patterns(&game).open_three.is_empty() {
+                failures.push(format!("beyond={beyond_anchor_pattern:?} away={away_pattern:?}: free_three와 open_three가 동시에 등록됨: {:?}", black_patterns(&game).open_three));
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+
+    // 캡처 축이 아닌 방향(off-axis)은 캡처로 빈 칸이 된 두 셀에서 각각 독립적으로 스캔한다.
+    // 두 셀(mover에 붙은 쪽/anchor에 붙은 쪽) 모두에서 실제로 동작하는지 각각 확인한다.
+
+    #[test]
+    fn capture_exposes_off_axis_pattern_through_near_mover_cell() {
+        // 가로 캡처: Black(5,5)-White(5,6)-White(5,7)-Black(5,8). (5,7)은 mover(5,8)에 붙은 칸.
+        // 세로로 (4,7)/(6,7)에 미리 Black을 둬서, 캡처로 (5,7)이 비면 그 자리를 지나는 세로
+        // open_two가 새로 생겨야 한다.
+        let mut game = Gomoku::new(19);
+        place(&mut game, Stone::Black, 4, 7);
+        place(&mut game, Stone::Black, 6, 7);
+        place(&mut game, Stone::Black, 5, 5);
+        place(&mut game, Stone::White, 5, 6);
+        place(&mut game, Stone::White, 5, 7);
+
+        let before = black_patterns(&game).clone();
+        place(&mut game, Stone::Black, 5, 8); // capture 발동, (5,6)/(5,7) 빈칸으로
+
+        assert!(before.open_two.is_empty(), "캡처 전에 이미 등록됨");
+        assert_eq!(game.board[5][7], Stone::Empty);
+
+        let vertical_expected = vec![(2, 7), (3, 7), (4, 7), (5, 7), (6, 7), (7, 7), (8, 7)];
         assert!(
-            black_patterns(&game).open_two.contains(&full_range),
-            "capture 이후 open_two 패턴에 (5,8)까지 포함된 전체 range가 있어야 함: {:?}",
+            black_patterns(&game).open_two.contains(&vertical_expected),
+            "(5,7)을 지나는 세로 open_two가 있어야 함: {:?}",
+            black_patterns(&game).open_two
+        );
+    }
+
+    #[test]
+    fn capture_exposes_off_axis_pattern_through_near_anchor_cell() {
+        // 위와 대칭: (5,6)은 anchor(5,5)에 붙은 칸. 세로로 (3,6)/(7,6)에 Black을 둬서
+        // 캡처 후 (5,6)을 지나는 세로 open_two가 생겨야 한다. (4,6)/(6,6)처럼 anchor 바로
+        // 옆(대각선)에 두면 anchor와 대각선 open_three를 이뤄 setup 도중 already-registered
+        // 체크에 걸리므로 한 칸 더 띄운다.
+        let mut game = Gomoku::new(19);
+        place(&mut game, Stone::Black, 3, 6);
+        place(&mut game, Stone::Black, 7, 6);
+        place(&mut game, Stone::Black, 5, 5);
+        place(&mut game, Stone::White, 5, 6);
+        place(&mut game, Stone::White, 5, 7);
+
+        let before = black_patterns(&game).clone();
+        place(&mut game, Stone::Black, 5, 8); // capture 발동, (5,6)/(5,7) 빈칸으로
+
+        assert!(before.open_two.is_empty(), "캡처 전에 이미 등록됨");
+        assert_eq!(game.board[5][6], Stone::Empty);
+
+        let vertical_expected = vec![(2, 6), (3, 6), (4, 6), (5, 6), (6, 6), (7, 6), (8, 6)];
+        assert!(
+            black_patterns(&game).open_two.contains(&vertical_expected),
+            "(5,6)을 지나는 세로 open_two가 있어야 함: {:?}",
             black_patterns(&game).open_two
         );
     }
