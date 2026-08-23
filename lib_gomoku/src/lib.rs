@@ -102,9 +102,9 @@ fn classify(
     let total = plus.total_my + minus.total_my + center_stone;
     let contig_total = plus.contig_my + minus.contig_my + center_stone;
     let empty = plus.empty_count + minus.empty_count + (1 - center_stone);    
-    if contig_total == 5 && center_stone {
+    if contig_total == 5 && center_stone != 0 {
         Some(PatternKind::FiveRow)
-    } else if contig_total == 4 && center_stone && plus.empty_count && minus.empty_count {
+    } else if contig_total == 4 && center_stone != 0 && plus.empty_count > 0 && minus.empty_count > 0 {
         // 기준 돌이 내 돌이고, 이어진 돌이 4개이며, 양쪽에 최소 한개의 빈칸이 있을 때 
         Some(PatternKind::OpenFour)
     } else if contig_total == 4 && (plus.end_open || minus.end_open) {
