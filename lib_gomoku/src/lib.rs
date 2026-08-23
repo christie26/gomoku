@@ -102,9 +102,10 @@ fn classify(
     let total = plus.total_my + minus.total_my + center_stone;
     let contig_total = plus.contig_my + minus.contig_my + center_stone;
     let empty = plus.empty_count + minus.empty_count + (1 - center_stone);    
-    if contig_total == 5 {
+    if contig_total == 5 && center_stone {
         Some(PatternKind::FiveRow)
-    } else if contig_total == 4 && plus.end_open && minus.end_open {
+    } else if contig_total == 4 && center_stone && plus.empty_count && minus.empty_count {
+        // 기준 돌이 내 돌이고, 이어진 돌이 4개이며, 양쪽에 최소 한개의 빈칸이 있을 때 
         Some(PatternKind::OpenFour)
     } else if contig_total == 4 && (plus.end_open || minus.end_open) {
         // 한쪽 끝만 넓게 열려 있으면 total==4 && empty==1 조건을 못 맞추므로 별도로 잡는다.
@@ -911,12 +912,15 @@ mod tests {
         game.patterns.get(&Stone::Black).unwrap()
     }
 
-    // 테스트 보드 생성 헬퍼. row 가로줄에 pattern을 왼쪽부터 순서대로 새긴다.
-    // '0'=Black, 나머지 문자는 그대로 빈칸으로 둔다. wall_left/wall_right가 true면
-    // 윈도우 바로 바깥에 White 벽을 놓아서 "그쪽은 완전히 막힘(empty 기여 0)"을 강제한다.
-    // 착수 순서 자체가 결과에 영향을 주는 케이스(캡처, 가운데를 마지막/먼저 두는 것 등)는
-    // 이 헬퍼로 표현할 수 없어서 그런 테스트는 따로 수동으로 놓는다.
-    fn setup_window(row: i32, base: i32, pattern: &str, wall_left: bool, wall_right: bool) -> Gomoku {
+    // 테스트 보드 생성 헬퍼. '0'=Black, 나머지 문자는 빈칸.
+    // add_patterns_for_move는 항상 "방금 둔 돌" 위치에서만 스캔하므로, pattern 안에서 어느
+    // '0'이 마지막으로 놓이는 돌인지가 결과에 영향을 줄 수 있다. 그래서 이미 놓여있던 돌
+    // (new_index를 제외한 나머지 '0')을 먼저 깔고, new_index 위치의 돌을 맨 마지막에 둬서
+    // 그게 실제로 classify()를 트리거하는 "새 수"가 되게 한다.
+    // wall_left/wall_right가 true면 윈도우 바로 바깥에 White 벽을 놓아서
+    // "그쪽은 완전히 막힘(empty 기여 0)"을 강제한다 (벽은 이미 놓여있던 것으로 취급, 먼저 둔다).
+    // 캡처처럼 "감싸는 쪽/감싸이는 쪽" 순서 자체가 다른 케이스는 이 헬퍼로 표현 안 되니 수동으로 놓는다.
+    fn setup_window(row: i32, base: i32, pattern: &str, wall_left: bool, wall_right: bool, new_index: usize) -> Gomoku {
         let mut game = Gomoku::new(19);
         if wall_left {
             place(&mut game, Stone::White, row, base - 1);
@@ -925,10 +929,11 @@ mod tests {
             place(&mut game, Stone::White, row, base + pattern.len() as i32);
         }
         for (i, ch) in pattern.chars().enumerate() {
-            if ch == '0' {
+            if ch == '0' && i != new_index {
                 place(&mut game, Stone::Black, row, base + i as i32);
             }
         }
+        place(&mut game, Stone::Black, row, base + new_index as i32);
         game
     }
 
@@ -938,7 +943,7 @@ mod tests {
     #[test]
     fn open_two_registers_when_both_ends_open() {
         // ..XX..  (양쪽 다 2칸 이상 열림) -> open_two 1개 등록
-        let game = setup_window(5, 5, "00", false, false);
+        let game = setup_window(5, 5, "00", false, false, 1);
 
         let expected = vec![(5, 3), (5, 4), (5, 5), (5, 6), (5, 7), (5, 8)];
         assert_eq!(black_patterns(&game).open_two, vec![expected]);
@@ -949,7 +954,7 @@ mod tests {
         // ..XX.. 상태에서 White가 바로 옆(5,4)을 막음.
         // 이 엔진은 "한쪽만 막힌 두 개"는 애초에 추적하지 않으므로(open_two 정의상 양쪽 다 열려야 함)
         // 완전히 사라져야 한다.
-        let mut game = setup_window(5, 5, "00", false, false);
+        let mut game = setup_window(5, 5, "00", false, false, 1);
         place(&mut game, Stone::White, 5, 4);
 
         assert!(black_patterns(&game).open_two.is_empty());
@@ -959,7 +964,7 @@ mod tests {
     fn open_three_registers_with_one_side_dead_and_other_open() {
         // O.XXX.. : 왼쪽은 White로 완전히 막히고(empty=0), 오른쪽은 넓게 열림(empty=2)
         // total==3 && empty==2 -> classify()의 OpenThree 분기가 잡아야 한다.
-        let game = setup_window(5, 5, "000", true, false);
+        let game = setup_window(5, 5, "000", true, false, 2);
 
         let expected = vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)];
         assert_eq!(black_patterns(&game).open_three, vec![expected]);
@@ -969,7 +974,7 @@ mod tests {
     fn open_three_disappears_when_open_side_also_blocked() {
         // 위 상태에서 White가 열린 쪽 바로 옆(5,8)까지 막으면 O-XXX-O 형태.
         // 양쪽 다 죽었으니 open_three는 완전히 사라져야 한다 (block_three 같은 건 없음).
-        let mut game = setup_window(5, 5, "000", true, false);
+        let mut game = setup_window(5, 5, "000", true, false, 2);
         place(&mut game, Stone::White, 5, 8);
 
         assert!(black_patterns(&game).open_three.is_empty());
@@ -980,7 +985,7 @@ mod tests {
         // ...XXX... 양쪽 다 넓게 열림 -> free_three_for_move 경로로 free_three 등록.
         // 이 모양은 classify() 기준으론 empty==4라 OpenThree(empty==2)/FreeThree(empty==3) 어느
         // 분기에도 안 걸린다 (free_three_for_move가 별도로 잡는 경우). open_three는 비어 있어야 한다.
-        let game = setup_window(5, 5, "000", false, false);
+        let game = setup_window(5, 5, "000", false, false, 2);
 
         let expected = vec![(5, 3), (5, 4), (5, 5), (5, 6), (5, 7), (5, 8), (5, 9)];
         assert_eq!(black_patterns(&game).free_three, vec![expected]);
@@ -992,7 +997,7 @@ mod tests {
         // O.XXXX.. : 이번에 고친 classify() 버그의 회귀 테스트.
         // contig_total==4에 한쪽만 end_open이라 total==4&&empty==1 조건을 못 맞춰서
         // 예전엔 None(패턴 없음)이었던 케이스.
-        let game = setup_window(5, 5, "0000", true, false);
+        let game = setup_window(5, 5, "0000", true, false, 3);
 
         let expected = vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)];
         assert_eq!(black_patterns(&game).block_four, vec![expected]);
@@ -1007,7 +1012,7 @@ mod tests {
         // 끝났다 (block_four로 안 내려가고 위협 자체가 소리소문없이 사라짐 - 이번에 찾은 버그).
         // 지금은 rescan_pattern이 남은 돌(5,5)을 anchor 삼아 다시 스캔해서 block_four로 정확히
         // 강등시켜야 한다.
-        let mut game = setup_window(5, 5, "0000", false, false);
+        let mut game = setup_window(5, 5, "0000", false, false, 3);
 
         let open_four_expected = vec![
             (5, 3), (5, 4), (5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10),
@@ -1025,7 +1030,7 @@ mod tests {
     fn five_row_registers_on_five_in_a_row() {
         // XXXXX 완성 -> five_row 등록되고, 직전까지 있던 open_four는 완전히 없어져야 한다
         // (완성된 오목이 예전 open_four로 이중 집계되면 안 됨).
-        let game = setup_window(5, 5, "00000", false, false);
+        let game = setup_window(5, 5, "00000", false, false, 4);
 
         let expected = vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)];
         assert_eq!(black_patterns(&game).five_row, vec![expected]);
@@ -1089,28 +1094,28 @@ mod tests {
     #[test]
     fn open_two_registers_gapped_shape_both_ends_open() {
         // .0.0. (양쪽 다 넓게 열림, 돌 사이 1칸 gap) -> open_two
-        let game = setup_window(0, 6, "0.0", false, false);
+        let game = setup_window(0, 6, "0.0", false, false, 2);
         assert_eq!(black_patterns(&game).open_two.len(), 1);
     }
 
     #[test]
     fn open_three_registers_single_gap_edge_and_internal_dot() {
         // .0.00 : 왼쪽 끝 1칸 막고 바로 벽, 안쪽에 gap 1칸 -> open_three
-        let game = setup_window(1, 6, ".0.00", true, true);
+        let game = setup_window(1, 6, ".0.00", true, true, 4);
         assert_eq!(black_patterns(&game).open_three.len(), 1);
     }
 
     #[test]
     fn open_three_registers_internal_dot_then_edge_wall() {
         // .00.0 : 위와 좌우 대칭 (gap이 반대쪽) -> open_three
-        let game = setup_window(2, 6, ".00.0", true, true);
+        let game = setup_window(2, 6, ".00.0", true, true, 4);
         assert_eq!(black_patterns(&game).open_three.len(), 1);
     }
 
     #[test]
     fn open_three_registers_one_gap_each_edge() {
         // .000. : 양쪽 다 딱 1칸씩만 열리고 그 다음은 바로 벽 (총 empty=2) -> open_three
-        let game = setup_window(3, 6, ".000.", true, true);
+        let game = setup_window(3, 6, ".000.", true, true, 3);
         assert_eq!(black_patterns(&game).open_three.len(), 1);
     }
 
@@ -1122,7 +1127,7 @@ mod tests {
         // 그래서 pair(9,10)쪽에서 왼쪽으로 스캔하면 gap 2칸까지만 보고 멈춰서,
         // 그 너머의 외톨이 돌(col6)은 아예 안 보인다 -> total=2로 계산돼서 OpenThree(total==3)
         // 조건 자체를 못 맞춘다. 표와 실제 동작이 다른 케이스라 일부러 남겨둔다.
-        let game = setup_window(4, 6, "0..00", true, true);
+        let game = setup_window(4, 6, "0..00", true, true, 4);
         assert!(
             black_patterns(&game).open_three.is_empty(),
             "0..00 은 현재 엔진에서 open_three로 안 잡힘 (외톨이 돌이 무시됨): {:?}",
@@ -1132,42 +1137,32 @@ mod tests {
 
     #[test]
     fn open_three_registers_alternating_single_gaps() {
-        // 0.0.0 : gap이 전부 1칸씩이라 "2칸 연속 gap" 문제는 없지만, 중간 돌(col8)이
-        // *마지막에* 놓여야 한다. 그래야 col8을 중심으로 스캔할 때 양쪽 다 "빈칸 1개 -> 이미
-        // 놓인 돌"만 만나서 total=3이 잡힌다 (가운데 stone을 기준으로 스캔해야 양쪽 외톨이
-        // 돌이 각각 1칸 거리 안에서 바로 보임).
-        let mut game = Gomoku::new(19);
-        place(&mut game, Stone::White, 5, 5); // 왼쪽 벽
-        place(&mut game, Stone::White, 5, 11); // 오른쪽 벽
-        place(&mut game, Stone::Black, 5, 6);
-        place(&mut game, Stone::Black, 5, 10);
-        place(&mut game, Stone::Black, 5, 8); // 가운데를 마지막에 둔다
+        // 0.0.0 : gap이 전부 1칸씩이라 "2칸 연속 gap" 문제는 없지만, 중간 돌(index2, col8)이
+        // *마지막에 새로 놓이는 돌*이어야 한다. 그래야 col8을 중심으로 스캔할 때 양쪽 다
+        // "빈칸 1개 -> 이미 놓인 돌"만 만나서 total=3이 잡힌다 (가운데서 스캔해야 양쪽
+        // 외톨이 돌이 각각 1칸 거리 안에서 바로 보임). 나머지 두 돌(col6,col10)은
+        // "이미 놓여있던 돌"로 취급된다.
+        let game = setup_window(5, 6, "0.0.0", true, true, 2);
         assert_eq!(black_patterns(&game).open_three.len(), 1);
     }
 
     #[test]
     fn shape_detection_can_depend_on_placement_order_not_just_final_board() {
-        // 위 테스트와 최종 board 상태는 완전히 동일한 0.0.0 인데, 가운데(col8)를
-        // *먼저*(두 번째로) 두면 open_three가 아예 잡히지 않는다.
+        // 위 테스트와 최종 board 상태는 완전히 동일한 0.0.0 인데, "새로 놓이는 돌"만
+        // 가운데(index2)에서 바깥쪽(index4, col10)으로 바꾸면 open_three가 아예 안 잡힌다.
         //
         // 이유: add_patterns_for_move는 항상 "방금 둔 돌" 위치에서만 스캔한다.
-        // col8을 둘 때는 아직 col10이 없어서 스캔이 부실하고, col10을 마지막에 둘 때는
-        // col10에서 왼쪽으로 스캔하다가 (col9 빈칸, col8 돌, col7 빈칸) 누적 empty_count가
-        // 2에 도달하는 순간 "이미 열렸다" 판정하고 멈춰버려서 그 너머의 col6 돌을 못 본다
-        // (gap_of_two_between_stones_makes_far_stone_invisible_to_classify 테스트와 같은
-        // 매커니즘, 여기선 gap이 떨어져 있어도 누적으로 2가 되면 똑같이 발생).
-        // 결과적으로 "가운데 돌을 마지막에 둔다" 같은, 실제 게임에서는 플레이어가 통제할 수
-        // 없는 조건에 따라 같은 모양이 잡히기도, 안 잡히기도 한다.
-        let mut game = Gomoku::new(19);
-        place(&mut game, Stone::White, 5, 5);
-        place(&mut game, Stone::White, 5, 11);
-        place(&mut game, Stone::Black, 5, 6);
-        place(&mut game, Stone::Black, 5, 8); // 가운데를 먼저 둔다
-        place(&mut game, Stone::Black, 5, 10); // 마지막이 바깥쪽 돌
+        // col10에서 왼쪽으로 스캔하면 (col9 빈칸, col8 이미 있던 돌, col7 빈칸) 누적
+        // empty_count가 2에 도달하는 순간 "이미 열렸다" 판정하고 멈춰버려서 그 너머의 col6
+        // 돌을 못 본다 (gap_of_two_between_stones_makes_far_stone_invisible_to_classify
+        // 테스트와 같은 매커니즘, 여기선 gap이 떨어져 있어도 누적으로 2가 되면 똑같이 발생).
+        // 결과적으로 "어느 돌이 방금 놓였는지" 같은, 최종 board만 봐서는 알 수 없는 조건에
+        // 따라 같은 모양이 잡히기도, 안 잡히기도 한다.
+        let game = setup_window(5, 6, "0.0.0", true, true, 4);
 
         assert!(
             black_patterns(&game).open_three.is_empty(),
-            "최종 board는 위 테스트와 동일한데, 착수 순서 때문에 open_three가 안 잡힘: {:?}",
+            "최종 board는 위 테스트와 동일한데, '새로 놓인 돌'이 달라서 open_three가 안 잡힘: {:?}",
             black_patterns(&game).open_three
         );
     }
@@ -1177,35 +1172,35 @@ mod tests {
         // ..000. : 왼쪽은 넓게 열림(2칸), 오른쪽은 딱 1칸 열리고 벽.
         // free_three_for_move는 양쪽 다 end_open이어야 하는데 오른쪽이 아니라서 그 경로는 안 탄다.
         // 대신 classify()의 total==3&&empty==3 분기로 free_three가 잡혀야 한다.
-        let game = setup_window(6, 8, "000.", false, true);
+        let game = setup_window(6, 8, "000.", false, true, 2);
         assert_eq!(black_patterns(&game).free_three.len(), 1);
     }
 
     #[test]
     fn free_three_registers_pair_gap_single_with_edges_pinned() {
         // .00.0. : 양쪽 다 딱 1칸씩 + 안쪽 gap 1칸 (총 empty=3) -> classify() free_three 분기
-        let game = setup_window(7, 6, ".00.0.", true, true);
+        let game = setup_window(7, 6, ".00.0.", true, true, 4);
         assert_eq!(black_patterns(&game).free_three.len(), 1);
     }
 
     #[test]
     fn block_four_registers_gap_at_left_edge() {
         // .0000 : 왼쪽 끝 1칸만 열리고 바로 벽, 오른쪽은 바로 벽 -> block_four
-        let game = setup_window(8, 6, ".0000", true, true);
+        let game = setup_window(8, 6, ".0000", true, true, 4);
         assert_eq!(black_patterns(&game).block_four.len(), 1);
     }
 
     #[test]
     fn block_four_registers_hole_near_left() {
         // 0.000 : 돌 하나 - gap 1칸 - 돌 셋. hole=true 경로(총 4개, 구멍만 채우면 5줄) -> block_four
-        let game = setup_window(9, 6, "0.000", true, true);
+        let game = setup_window(9, 6, "0.000", true, true, 4);
         assert_eq!(black_patterns(&game).block_four.len(), 1);
     }
 
     #[test]
     fn block_four_registers_hole_in_middle() {
         // 00.00 : 돌 둘 - gap 1칸 - 돌 둘. 중간 hole -> block_four
-        let game = setup_window(10, 6, "00.00", true, true);
+        let game = setup_window(10, 6, "00.00", true, true, 4);
         assert_eq!(black_patterns(&game).block_four.len(), 1);
     }
 
@@ -1214,7 +1209,7 @@ mod tests {
         // .0000. (양쪽 다 넓게 열림) -> open_four
         // (open_four_downgrades_to_block_four_when_blocked 테스트에도 등록 확인이 있지만,
         // 표에 있는 모양 그대로 독립적으로도 하나 남겨둔다)
-        let game = setup_window(11, 6, "0000", false, false);
+        let game = setup_window(11, 6, "0000", false, false, 3);
         assert_eq!(black_patterns(&game).open_four.len(), 1);
     }
 }
