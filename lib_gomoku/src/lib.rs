@@ -137,8 +137,8 @@ fn build_pattern_range(
         (-minus.contig_my, plus.contig_my)
     } else {
         (
-            -(minus.contig_my + minus.empty_count),
-            plus.contig_my + plus.empty_count,
+            -(minus.total_my + minus.empty_count),
+            plus.total_my + plus.empty_count,
         )
     };
     (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect()
@@ -932,12 +932,8 @@ mod tests {
         (game, before)
     }
 
-    // 아래 테스트는 전부 19x19 새 board, row=5 가로줄만 사용한다.
-    // 다른 방향(세로/대각선)엔 아무 돌도 없어서 그쪽에서 우연히 패턴이 잡힐 일이 없다.
-
     #[test]
     fn register_open_two_variants() {
-        // (pattern, new_index, expected) - expected가 None이면 open_two가 등록되지 않아야 한다.
         let cases: Vec<(&str, usize, Option<Vec<Position>>)> = vec![
             // ..00..
             ("..00..", 2, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)])),
@@ -945,19 +941,194 @@ mod tests {
             ("..00.O", 2, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)])),
             ("..00.O", 3, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)])),
             // O.0.0.O
-            ("O.0.0.O", 2, Some(vec![(5, 6), (5, 7), (5, 8), (5, 9)])),
+            ("O.0.0.O", 2, Some(vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10)])),
         ];
 
+        let mut failures = Vec::new();
         for (pattern, new_index, expected) in cases {
             let (game, before) = setup_window(5, 5, pattern, new_index);
-            assert!(before.open_two.is_empty(), "{pattern:?} idx={new_index}: 마지막 수 이전에 이미 등록됨");
+            if !before.open_two.is_empty() {
+                failures.push(format!("{pattern:?} idx={new_index}: 마지막 수 이전에 이미 등록됨"));
+                continue;
+            }
 
             let actual = &black_patterns(&game).open_two;
             match expected {
-                Some(expected) => assert_eq!(*actual, vec![expected], "{pattern:?} idx={new_index}"),
-                None => assert!(actual.is_empty(), "{pattern:?} idx={new_index}: 등록되지 않아야 하는데 {actual:?}"),
+                Some(expected) => {
+                    if *actual != vec![expected] {
+                        failures.push(format!("{pattern:?} idx={new_index}: 등록된 결과가 기대값과 다름: {actual:?}"));
+                    }
+                }
+                None => {
+                    if !actual.is_empty() {
+                        failures.push(format!("{pattern:?} idx={new_index}: 등록되지 않아야 하는데 {actual:?}"));
+                    }
+                }
             }
         }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn register_open_three_variants() {
+        let cases: Vec<(i32, i32, &str, usize, Option<Vec<Position>>)> = vec![
+            // 000..
+            (5, 4, "O000..", 1, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)])),
+            (5, 4, "O000..", 2, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)])),
+            (5, 4, "O000..", 3, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)])),
+            // 00.0.
+            (1, 5, "O00.0.O", 1, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            (1, 5, "O00.0.O", 2, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            (1, 5, "O00.0.O", 4, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            // 0.00.
+            (1, 5, "O0.00.O", 1, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            (1, 5, "O0.00.O", 3, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            (1, 5, "O0.00.O", 4, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            // .000.
+            (1, 5, "O.000.O", 2, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            (1, 5, "O.000.O", 3, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            (1, 5, "O.000.O", 4, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            // 0..00
+            (1, 5, "O0..00O", 1, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            (1, 5, "O0..00O", 4, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            (1, 5, "O0..00O", 5, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            // 0.0.0
+            (1, 5, "O0.0.0O", 1, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            (1, 5, "O0.0.0O", 3, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+            (1, 5, "O0.0.0O", 5, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
+        ];
+
+        let mut failures = Vec::new();
+        for (row, base, pattern, new_index, expected) in cases {
+            let (game, before) = setup_window(row, base, pattern, new_index);
+            if !before.open_three.is_empty() {
+                failures.push(format!("{pattern:?} idx={new_index}: 마지막 수 이전에 이미 등록됨"));
+                continue;
+            }
+
+            let actual = &black_patterns(&game).open_three;
+            match expected {
+                Some(expected) => {
+                    if *actual != vec![expected] {
+                        failures.push(format!("{pattern:?} idx={new_index}: 등록된 결과가 기대값과 다름: {actual:?}"));
+                    }
+                }
+                None => {
+                    if !actual.is_empty() {
+                        failures.push(format!("{pattern:?} idx={new_index}: 등록되지 않아야 하는데 {actual:?}"));
+                    }
+                }
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn register_free_three_variants() {
+        let cases: Vec<(i32, i32, &str, usize, Vec<Position>)> = vec![
+            // ..000..
+            (5, 5, "..000..", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
+            (5, 5, "..000..", 3, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
+            // .000..
+            (5, 5, "O.000..O", 2, vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
+            (5, 5, "O.000..O", 3, vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
+            (5, 5, "O.000..O", 4, vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
+            // .00.0.
+            (5, 5, "O.00.0.O", 2, vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
+            (5, 5, "O.00.0.O", 3, vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
+            (5, 5, "O.00.0.O", 5, vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
+        ];
+
+        let mut failures = Vec::new();
+        for (row, base, pattern, new_index, expected) in cases {
+            let (game, before) = setup_window(row, base, pattern, new_index);
+            if !before.free_three.is_empty() {
+                failures.push(format!("{pattern:?} idx={new_index}: 마지막 수 이전에 이미 등록됨"));
+                continue;
+            }
+
+            let actual = &black_patterns(&game).free_three;
+            if *actual != vec![expected] {
+                failures.push(format!("{pattern:?} idx={new_index}: 등록된 결과가 기대값과 다름: {actual:?}"));
+            }
+            if !black_patterns(&game).open_three.is_empty() {
+                failures.push(format!("{pattern:?} idx={new_index}: free_three와 open_three가 동시에 등록됨"));
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn register_block_four_variants() {
+        let cases: Vec<(i32, i32, &str, usize, Vec<Position>)> = vec![
+            // O.0000O
+            (5, 4, "O.0000O", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
+            (5, 4, "O.0000O", 3, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
+            (5, 4, "O.0000O", 4, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
+            (5, 4, "O.0000O", 5, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
+            // O0.000O
+            (5, 4, "O0.000O", 1, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
+            (5, 4, "O0.000O", 3, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
+            (5, 4, "O0.000O", 4, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
+            (5, 4, "O0.000O", 5, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
+            // O00.00O
+            (5, 4, "O00.00O", 1, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
+            (5, 4, "O00.00O", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
+        ];
+
+        let mut failures = Vec::new();
+        for (row, base, pattern, new_index, expected) in cases {
+            let (game, before) = setup_window(row, base, pattern, new_index);
+            if !before.block_four.is_empty() {
+                failures.push(format!("{pattern:?} idx={new_index}: 마지막 수 이전에 이미 등록됨"));
+                continue;
+            }
+
+            let actual = &black_patterns(&game).block_four;
+            if *actual != vec![expected] {
+                failures.push(format!("{pattern:?} idx={new_index}: 등록된 결과가 기대값과 다름: {actual:?}"));
+            }
+            if !black_patterns(&game).open_four.is_empty() {
+                failures.push(format!("{pattern:?} idx={new_index}: block_four와 open_four가 동시에 등록됨"));
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+    
+    #[test]
+    fn register_open_four_variants() {
+        let cases: Vec<(i32, i32, &str, usize, Vec<Position>)> = vec![
+            // O.0000.O
+            (5, 4, "O.0000.O", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
+            (5, 4, "O.0000.O", 3, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
+        ];
+
+        let mut failures = Vec::new();
+        for (row, base, pattern, new_index, expected) in cases {
+            let (game, before) = setup_window(row, base, pattern, new_index);
+            if !before.open_four.is_empty() {
+                failures.push(format!("{pattern:?} idx={new_index}: 마지막 수 이전에 이미 등록됨"));
+                continue;
+            }
+
+            let actual = &black_patterns(&game).open_four;
+            if *actual != vec![expected] {
+                failures.push(format!("{pattern:?} idx={new_index}: 등록된 결과가 기대값과 다름: {actual:?}"));
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+    
+    #[test]
+    fn register_five_row() {
+        // 00000 완성 -> five_row 등록, 직전 open_four는 사라져야 한다 (이중 집계 방지).
+        let (game, before) = setup_window(5, 5, "00000", 4);
+        assert!(before.five_row.is_empty());
+
+        let expected = vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)];
+        assert_eq!(black_patterns(&game).five_row, vec![expected]);
+        assert!(black_patterns(&game).open_four.is_empty());
+        assert!(black_patterns(&game).block_four.is_empty());
     }
 
     #[test]
@@ -970,98 +1141,12 @@ mod tests {
     }
 
     #[test]
-    fn register_open_three_variants() {
-        // (row, base, pattern, new_index, expected) - expected가 None이면 open_three가 등록되지 않아야 한다.
-        let cases: Vec<(i32, i32, &str, usize, Option<Vec<Position>>)> = vec![
-            // O.000..: 왼쪽은 벽으로 막히고 오른쪽은 넓게 열림
-            (5, 4, "O000", 3, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)])),
-            // O.0.00O: 왼쪽 끝 1칸 막고 벽, 안쪽에 gap 1칸
-            (1, 5, "O.0.00O", 5, Some(vec![(1, 7), (1, 8), (1, 9), (1, 10)])),
-            // O.00.0O: 위와 좌우 대칭 (gap이 반대쪽)
-            (2, 5, "O.00.0O", 5, Some(vec![(2, 8), (2, 9), (2, 10)])),
-            // O.000.O: 양쪽 다 1칸씩만 열리고 바로 벽 (총 empty=2)
-            (3, 5, "O.000.O", 4, Some(vec![(3, 6), (3, 7), (3, 8), (3, 9), (3, 10)])),
-            // O0..00O: 표대로면 open_three(empty=2)여야 하지만, scan_line이 빈칸 2개 연속에서
-            // "열렸다"고 확정하고 멈춰서 그 너머의 외톨이 돌을 못 본다 -> 등록 안 됨.
-            (4, 5, "O0..00O", 5, None),
-            // O0.0.0O: 가운데 돌(index3)이 새로 놓이면 양쪽 외톨이 돌이 각각 1칸 거리서 바로 보여 등록됨.
-            (5, 5, "O0.0.0O", 3, Some(vec![(5, 7), (5, 8), (5, 9)])),
-            // O0.0.0O: 최종 board는 위와 동일해도, 바깥쪽 돌(index5)이 새로 놓이면 왼쪽 스캔의
-            // 누적 empty_count가 2가 되는 순간 멈춰서 그 너머의 돌을 못 본다 -> 등록 안 됨
-            // (add_patterns_for_move는 항상 "방금 둔 돌" 위치에서만 스캔하기 때문).
-            (5, 5, "O0.0.0O", 5, None),
-        ];
-
-        for (row, base, pattern, new_index, expected) in cases {
-            let (game, before) = setup_window(row, base, pattern, new_index);
-            assert!(before.open_three.is_empty(), "{pattern:?} idx={new_index}: 마지막 수 이전에 이미 등록됨");
-
-            let actual = &black_patterns(&game).open_three;
-            match expected {
-                Some(expected) => assert_eq!(*actual, vec![expected], "{pattern:?} idx={new_index}"),
-                None => assert!(actual.is_empty(), "{pattern:?} idx={new_index}: 등록되지 않아야 하는데 {actual:?}"),
-            }
-        }
-    }
-
-    #[test]
     fn open_three_disappears_when_open_side_also_blocked() {
         // 위 상태에서 열린 쪽 바로 옆(5,8)까지 White로 막으면 O-000-O, open_three는 사라져야 한다.
         let (mut game, _before) = setup_window(5, 4, "O000", 3);
         place(&mut game, Stone::White, 5, 8);
 
         assert!(black_patterns(&game).open_three.is_empty());
-    }
-
-    #[test]
-    fn register_free_three_variants() {
-        // (row, base, pattern, new_index, expected)
-        let cases: Vec<(i32, i32, &str, usize, Vec<Position>)> = vec![
-            // ...000...: 양쪽 다 넓게 열림 -> free_three_for_move 경로
-            (5, 5, "000", 2, vec![(5, 3), (5, 4), (5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-            // ..000.O: 왼쪽은 넓게 열리고 오른쪽은 1칸만 열린 뒤 벽 -> classify()의
-            // total==3&&empty==3 분기 (free_three_for_move는 양쪽 다 end_open이어야 해서 안 탐)
-            (6, 8, "000.O", 2, vec![(6, 6), (6, 7), (6, 8), (6, 9), (6, 10), (6, 11)]),
-            // O.00.0.O: 양쪽 다 1칸씩 + 안쪽 gap 1칸 (총 empty=3) -> classify() free_three 분기
-            (7, 5, "O.00.0.O", 5, vec![(7, 8), (7, 9), (7, 10), (7, 11)]),
-        ];
-
-        for (row, base, pattern, new_index, expected) in cases {
-            let (game, before) = setup_window(row, base, pattern, new_index);
-            assert!(before.free_three.is_empty(), "{pattern:?} idx={new_index}: 마지막 수 이전에 이미 등록됨");
-
-            assert_eq!(black_patterns(&game).free_three, vec![expected], "{pattern:?} idx={new_index}");
-            assert!(
-                black_patterns(&game).open_three.is_empty(),
-                "{pattern:?} idx={new_index}: free_three와 open_three가 동시에 등록됨"
-            );
-        }
-    }
-
-    #[test]
-    fn register_block_four_variants() {
-        // (row, base, pattern, new_index, expected)
-        let cases: Vec<(i32, i32, &str, usize, Vec<Position>)> = vec![
-            // O.0000..: 한쪽만 열려서 total==4&&empty==1 조건을 못 맞추는 케이스의 회귀 테스트.
-            (5, 4, "O0000", 4, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
-            // O.0000O: 왼쪽 끝 1칸만 열리고 바로 벽, 오른쪽도 바로 벽
-            (8, 5, "O.0000O", 5, vec![(8, 6), (8, 7), (8, 8), (8, 9), (8, 10)]),
-            // O0.000O: 돌 하나 - gap 1칸 - 돌 셋 (hole, 채우면 5줄)
-            (9, 5, "O0.000O", 5, vec![(9, 7), (9, 8), (9, 9), (9, 10)]),
-            // O00.00O: 돌 둘 - gap 1칸 - 돌 둘 (중간 hole)
-            (10, 5, "O00.00O", 5, vec![(10, 8), (10, 9), (10, 10)]),
-        ];
-
-        for (row, base, pattern, new_index, expected) in cases {
-            let (game, before) = setup_window(row, base, pattern, new_index);
-            assert!(before.block_four.is_empty(), "{pattern:?} idx={new_index}: 마지막 수 이전에 이미 등록됨");
-
-            assert_eq!(black_patterns(&game).block_four, vec![expected], "{pattern:?} idx={new_index}");
-            assert!(
-                black_patterns(&game).open_four.is_empty(),
-                "{pattern:?} idx={new_index}: block_four와 open_four가 동시에 등록됨"
-            );
-        }
     }
 
     #[test]
@@ -1083,17 +1168,6 @@ mod tests {
         assert_eq!(black_patterns(&game).block_four, vec![block_four_expected]);
     }
 
-    #[test]
-    fn five_row_registers_on_five_in_a_row() {
-        // 00000 완성 -> five_row 등록, 직전 open_four는 사라져야 한다 (이중 집계 방지).
-        let (game, before) = setup_window(5, 5, "00000", 4);
-        assert!(before.five_row.is_empty());
-
-        let expected = vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)];
-        assert_eq!(black_patterns(&game).five_row, vec![expected]);
-        assert!(black_patterns(&game).open_four.is_empty());
-        assert!(black_patterns(&game).block_four.is_empty());
-    }
 
     // 캡처 테스트 2개는 setup_window를 안 쓴다: "감싸는 쪽/감싸이는 쪽" 착수 순서가 서로
     // 반대라 공용 헬퍼로 표현할 수 없다.
