@@ -1323,19 +1323,6 @@ mod tests {
     }
 
     #[test]
-    fn register_from_capture_axis_block_four() {
-        // 0..0 + 000O => 0..0000O
-        let (game, before) = setup_capture_axis(5, 8, "", "000O");
-        assert!(before.block_four.is_empty(), "캡처 전에 이미 등록됨");
-
-        let expected = vec![
-            (5, 11), (5, 10), (5, 9), (5, 8), (5, 7), (5, 6), (5, 5), (5, 4), (5, 3),
-        ];
-        assert_eq!(black_patterns(&game).block_four, vec![expected]);
-        assert!(black_patterns(&game).open_four.is_empty());
-    }
-
-    #[test]
     fn register_from_capture_axis_free_three() {
         let cases: Vec<(&str, &str, Vec<Position>)> = vec![
             // 0..0 + .0 -> 0..0.0
@@ -1362,6 +1349,20 @@ mod tests {
         }
         assert!(failures.is_empty(), "\n{}", failures.join("\n"));
     }
+
+    #[test]
+    fn register_from_capture_axis_block_four() {
+        // 0..0 + 000O => 0..0000O
+        let (game, before) = setup_capture_axis(5, 8, "", "000O");
+        assert!(before.block_four.is_empty(), "캡처 전에 이미 등록됨");
+
+        let expected = vec![
+            (5, 11), (5, 10), (5, 9), (5, 8), (5, 7), (5, 6), (5, 5), (5, 4), (5, 3),
+        ];
+        assert_eq!(black_patterns(&game).block_four, vec![expected]);
+        assert!(black_patterns(&game).open_four.is_empty());
+    }
+
 
     // 캡처 축이 아닌 방향(off-axis)은 캡처로 빈 칸이 된 두 셀에서 각각 독립적으로 스캔한다.
     // 두 셀(mover에 붙은 쪽/anchor에 붙은 쪽) 모두에서 실제로 동작하는지 각각 확인한다.
