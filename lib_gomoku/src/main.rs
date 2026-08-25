@@ -11,8 +11,11 @@ use std::sync::{
 };
 use std::thread;
 use std::time::{Duration, Instant};
+use pyo3::Python;
 
 fn main() {
+    pyo3::prepare_freethreaded_python();
+
     let mut game = Gomoku::new(BOARD_SIZE);
 
     let mut durations = vec![];
@@ -41,7 +44,8 @@ fn main() {
         let start = Instant::now();
 
         let game_clone = game.clone();
-        let handle = thread::spawn(move || minimax::get_ai_move(&game_clone));
+        let handle =
+            thread::spawn(move || Python::with_gil(|py| minimax::get_ai_move(py, &game_clone)));
 
         let mut res = None;
         let mut moves = vec![];
