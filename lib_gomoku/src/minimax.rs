@@ -602,10 +602,10 @@ impl SearchBoard {
         for r in 0..19usize {
             for c in 0..19usize {
                 if self.cells[r][c] != Cell::Empty {
-                    let r_start = r.saturating_sub(1);
-                    let r_end = (r + 2).min(19);
-                    let c_start = c.saturating_sub(1);
-                    let c_end = (c + 2).min(19);
+                    let r_start = r.saturating_sub(RADIUS);
+                    let r_end = (r + RADIUS + 1).min(19);
+                    let c_start = c.saturating_sub(RADIUS);
+                    let c_end = (c + RADIUS + 1).min(19);
                     for rr in r_start..r_end {
                         for cc in c_start..c_end {
                             seen[rr * 19 + cc] = true;
