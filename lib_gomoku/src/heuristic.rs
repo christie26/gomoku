@@ -2,12 +2,12 @@ use crate::{Gomoku, Stone};
 use pyo3::prelude::*;
 
 const CAPTURE_WEIGHT: i32 = 20_000;
-const OPEN_TWO_WEIGHT: i32 = 1;
-const FREE_THREE_WEIGHT: i32 = 1_000;
+
+const OPEN_TWO_WEIGHT: i32 = 10;
 const OPEN_THREE_WEIGHT: i32 = 100;
-const BLOCK_FOUR_WEIGHT: i32 = 1;
-const OPEN_FOUR_WEIGHT: i32 = 40_000;
-const FIVE_ROW_WEIGHT: i32 = 80_001;
+const FREE_THREE_WEIGHT: i32 = 1_000;
+const BLOCK_FOUR_WEIGHT: i32 = 10_000;
+const OPEN_FOUR_WEIGHT: i32 = 100_000;
 
 fn evaluate_player(state: &Gomoku, player: &Stone) -> i32 {
   
@@ -24,12 +24,6 @@ fn evaluate_player(state: &Gomoku, player: &Stone) -> i32 {
     let block_four_score = p.map_or(0, |p| p.block_four.len() as i32) * BLOCK_FOUR_WEIGHT;
 
     let open_four_score = p.map_or(0, |p| p.open_four.len() as i32) * OPEN_FOUR_WEIGHT;
-    let five_row_score = p.map_or(0, |p| p.five_row.len() as i32) * FIVE_ROW_WEIGHT;
-
-    // println!("[Player {}] Capture: {}, Open 2: {}, Open 3: {}, \
-    // Block 4: {}, Open 4: {}, Free 3: {}, 5: {}",
-    // player, capture_score, open_two_score, open_three_score,
-    // block_four_score, open_four_score,free_three_score, five_row_score);
 
     capture_score
         + open_two_score
@@ -37,7 +31,6 @@ fn evaluate_player(state: &Gomoku, player: &Stone) -> i32 {
         + block_four_score
         + open_four_score
         + free_three_score
-        + five_row_score
 }
 
 #[pyfunction]
