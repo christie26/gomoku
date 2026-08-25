@@ -24,7 +24,7 @@ nix develop
 again to be in the same ven
 - Run gomoku with 
 ```
-python -m cProfile -o profile.prof gomoku_gui.py --black Etienne --white Yoonseo
+python -m cProfile -o profile.prof src/gomoku_gui.py --black Etienne --white Yoonseo
 ```
 - The profile.prof file generated can be opened with snakeviz, by running
 ```
@@ -48,3 +48,8 @@ cargo run --release
 cargo run --release
 ```
 (more compile time, but faster exec) to run it
+
+#### How to run test 
+```
+PYO3_PYTHON=/Users/yoonseo/project/gomoku/.venv/bin/python cargo test --lib open_four_downgrades_to_block_four_when_blocked
+```

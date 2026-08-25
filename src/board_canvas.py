@@ -1,14 +1,6 @@
 import tkinter as tk
 from lib_gomoku import Gomoku, MoveResult, get_ai_move
-from constants import (
-    CELL_SIZE,
-    LABEL_PADDING,
-    BOARD_SIZE,
-    PADDING,
-    BORDER_COLOR,
-    NAME_FONT,
-)
-
+from src.screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, LIGHT_BACKGROUND, SELECT_BACKGROUND, BORDER_COLOR, LABEL_FONT, NAME_FONT
 
 class BoardCanvas:
     def __init__(self, parent, canvas_size, on_click):
@@ -141,19 +133,10 @@ class BoardCanvas:
     def remove_last_move(self):
         self.canvas.delete("last-move")
 
-    # ==== DEBUG ====
-    def draw_debug(self, moves, best_move=None):
-        for m in moves:
-            x1, y1, score1 = m
+    def delete_debug(self):
+        self.canvas.delete("debug")
 
-            selected = False
-            if best_move:
-                bx, by, _ = best_move
-                selected = bx == x1 and by == y1
-
-            self.draw_debug_stone(y1, x1, "O", score1, selected)
-
-    def draw_debug_stone(self, x, y, player, number, selected):
+    def draw_possible_stone(self, x, y, player, number, selected):
         color = "black" if player == "X" else "white"
         cx = PADDING + x * CELL_SIZE
         cy = PADDING + y * CELL_SIZE
@@ -172,7 +155,7 @@ class BoardCanvas:
             tags="debug",
         )
         # Calculate appropriate font size based on stone size and number length
-        number_str = str(number)
+        number_str = str(number) if number is not None else ""
         # Base font size proportional to stone radius
         base_font_size = max(6, r // 2)
 

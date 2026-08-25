@@ -9,14 +9,7 @@ from constants import (
 
 class SettingsPanel:
     def __init__(
-        self,
-        right_frame,
-        on_start_game,
-        on_undo,
-        on_redo,
-        on_debug,
-        on_play_mode,
-        on_hint,
+        self, right_frame, on_start_game, on_undo, on_redo, on_debug, on_play_mode, on_hint
     ):
         self.on_start_game = on_start_game
         self.on_undo = on_undo
@@ -26,7 +19,7 @@ class SettingsPanel:
         self.switch_play_mode = on_play_mode
 
         self.setting_frame = tk.Frame(right_frame, padx=10, pady=10)
-        self.setting_frame.pack(fill="x")
+        self.setting_frame.pack(fill="both")
         self.setting_ratios = []
 
         self.build_ui()
@@ -176,7 +169,7 @@ class SettingsPanel:
         button_frame = tk.Frame(
             self.setting_frame, pady=15, background=LIGHT_BACKGROUND
         )
-        button_frame.pack(fill="x")
+        button_frame.pack(fill="both")
 
         self.start_button = tk.Button(
             button_frame,
@@ -208,6 +201,16 @@ class SettingsPanel:
         )
         self.redo_button.pack(pady=3, padx=5, anchor="w")
 
+        self.hint_button = tk.Button(
+            button_frame,
+            text="Hint",
+            command=self.on_hint,
+            state=tk.DISABLED,
+            font=NAME_FONT,
+            highlightbackground=LIGHT_BACKGROUND,
+        )
+        self.hint_button.pack(pady=5, padx=5, anchor="w")
+
     def _on_debug_changed(self):
         value = self.debug_enabled.get()
         self.on_debug(value)
@@ -224,7 +227,9 @@ class SettingsPanel:
             for rb in self.setting_ratios:
                 rb.config(state="disabled")
             self.start_button.config(state="disabled")
+            self.hint_button.config(state="normal")
         else:
             for rb in self.setting_ratios:
                 rb.config(state="normal")
             self.start_button.config(state="normal")
+            self.hint_button.config(state="disabled")

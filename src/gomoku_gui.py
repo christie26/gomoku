@@ -4,16 +4,10 @@ from lib_gomoku import Gomoku, MoveResult, get_ai_move, get_move_pv, get_hint
 import argparse
 import time
 import threading
-from setting_panel import SettingsPanel
-from player_panel import Player, PlayerPanel
-from board_canvas import BoardCanvas
-from constants import (
-    CELL_SIZE,
-    BOARD_SIZE,
-    PADDING,
-    LIGHT_BACKGROUND,
-    BORDER_COLOR,
-)
+from src.setting_panel import SettingsPanel
+from src.player_panel import Player, PlayerPanel
+from src.board_canvas import BoardCanvas
+from src.screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, LIGHT_BACKGROUND, SELECT_BACKGROUND, BORDER_COLOR, LABEL_FONT, NAME_FONT, SETTING_PANEL_WIDTH
 
 
 class GomokuGUI:
@@ -38,7 +32,7 @@ class GomokuGUI:
 
         self.right_frame = tk.Frame(
             self.main_frame,
-            width=250,
+            width=SETTING_PANEL_WIDTH,
             background=LIGHT_BACKGROUND,
             highlightbackground=BORDER_COLOR,
             highlightthickness=2,
@@ -48,7 +42,6 @@ class GomokuGUI:
         self.right_frame.pack(side="right", fill="y")
         self.right_frame.pack_propagate(False)
         self.right_frame.bind("<Enter>", self.canvas.remove_hover)
-
         # ===== UNDO/REDO =====
         self.game = Gomoku(size=BOARD_SIZE)
         self.state_history = [self.game.clone_gomoku()]
@@ -92,6 +85,7 @@ class GomokuGUI:
             on_debug=self.switch_debug,
             on_hint=self.show_hint,
             on_play_mode=self.switch_play_mode,
+            on_hint=self.show_hint
         )
 
         # ===== HISTORY =====
@@ -108,18 +102,41 @@ class GomokuGUI:
         if self.is_playing:
             x = round((event.x - PADDING) / CELL_SIZE)
             y = round((event.y - PADDING) / CELL_SIZE)
-            # Ctrl+click: print the PV for this position instead of playing
-            if event.state & 0x4:  # Ctrl key modifier
-                row, col = y, x  # board coords: row=y, col=x
-                if 0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE:
-                    print(f"\n--- PV analysis for {chr(ord('A') + col)}{row + 1} ---")
-                    pv, score = get_move_pv(self.game, row, col)
-                    pv_str = " -> ".join(f"{chr(ord('A') + c)}{r + 1}" for r, c in pv)
-                    print(f"  Score: {score}")
-                    print(f"  PV: {pv_str}")
-                    print(f"  Depth: {len(pv)} moves")
-                return
-            self.play_one_turn(y, x)  # note: board is row (y), col (x)
+            self.play_one_turn(y, x)
+        else:
+            return
+
+    # ===== GAME FLOW =====
+    def play_one_turn(self, x, y):
+        if self.players[self.game.current_player].is_human or not self.debug:
+            self.canvas.delete_debug()
+        result = self.game.is_valid_move(x, y)
+
+        if result == MoveResult.VALID:
+            result, capture_count, captured = self.game.handle_move(x, y)
+            if captured:
+                self.canvas.show_capture(captured)
+            self.player_frames[self.game.current_player].update_capture(
+                self.game.capture_count[self.game.current_player]
+            )
+
+            self.canvas.draw_stones(self.game.board)
+
+            winner = self.game.get_winner()
+            self.canvas.draw_last_move(y, x)
+            if winner:
+                self.finish_game(winner)
+            else:
+                self.change_turn()
+                if not self.players[self.game.current_player].is_human:
+                    self.ai_play()
+
+            # Record state for undo/redo
+            self.state_history = self.state_history[: self.history_index + 1]
+            self.state_history.append(self.game.clone_gomoku())
+            self.history_index += 1
+            self.update_undo_redo_buttons()
+            self.game.print_state()
 
     # ===== START/END ======
     def start_game(self):
@@ -192,9 +209,17 @@ class GomokuGUI:
     def ai_play(self):
 
         def run_ai():
-            best_move, moves = get_ai_move(self.game)
-            x, y, _ = best_move
-            self.root.after(0, lambda: self.play_one_turn(x, y))
+            mv, moves = get_ai_move(self.game)
+            if mv:
+                if self.debug:
+                    self.canvas.delete_debug()
+                x, y, _ = mv
+                for m in moves:
+                    x1, y1, score1 = m
+                    selected = x == x1 and y == y1
+                    if self.debug:
+                        self.canvas.draw_possible_stone(y1, x1, "O", score1, selected)
+                self.root.after(0, lambda: self.play_one_turn(x, y))
 
         threading.Thread(target=run_ai, daemon=True).start()
 
@@ -207,6 +232,11 @@ class GomokuGUI:
     def show_debug(self):
         best_move, moves = get_ai_move(self.game)
         self.canvas.draw_debug(moves, best_move)
+
+    def show_hint(self):
+        mv, _ = get_ai_move(self.game)
+        x, y, _ = mv
+        self.canvas.draw_possible_stone(y, x, self.game.current_player, None, True)
 
     # ===== PLAYER PANEL =====
     def highlight_active_player(self):
@@ -282,10 +312,8 @@ class GomokuGUI:
     # ===== SETTING =====
     def switch_debug(self, debug: bool):
         self.debug = debug
-        if debug:
-            self.show_debug()
-        else:
-            self.canvas.remove_debug()
+        if not debug:
+            self.canvas.delete_debug()
 
     def switch_play_mode(self, play_mode):
         if play_mode == "pvp":

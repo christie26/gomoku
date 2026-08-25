@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use rayon::prelude::*;
 
 use std::cmp::{max, min};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 // =====================================================================
@@ -778,6 +778,7 @@ impl SearchStats {
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
 const MAX_DEPTH: usize = 5;
+const RADIUS : usize = 2;
 
 pub const BOARD_SIZE: usize = 19;
 const DIRECTIONS: &[(i32, i32)] = &[(1, 0), (0, 1), (1, 1), (1, -1)];
@@ -884,15 +885,17 @@ fn get_critical_moves(
     mut critical_moves: LinkedHashSet<(usize, usize)>,
     state: &Gomoku,
 ) -> LinkedHashSet<(usize, usize)> {
+  // TODO - add order of best move sort
     for player in [&state.opponent_player, &state.current_player] {
+        let p = state.patterns.get(player).unwrap();
         for (pattern_type, patterns) in [
-            ("block_four", &state.block_four),
-            ("open_four", &state.open_four),
-            ("open_three", &state.open_three),
-            ("open_two", &state.open_two),
-            ("free_three", &state.free_three),
+            ("block_four", &p.block_four),
+            ("open_four", &p.open_four),
+            ("open_three", &p.open_three),
+            ("open_two", &p.open_two),
+            ("free_three", &p.free_three),
         ] {
-            for pattern in patterns.get(player).unwrap() {
+            for pattern in patterns {
                 let points: Vec<(i32, i32)> = if pattern_type == "free_three" {
                     pattern.clone()
                 } else {
@@ -937,14 +940,11 @@ fn get_radius_moves(
 }
 
 #[pyfunction]
-pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
+pub fn get_candidate_moves(state: &Gomoku, radius: usize) -> Vec<(usize, usize)> {
     if state.count_empty_spots() as usize == state.size * state.size {
         return vec![(state.size / 2, state.size / 2)];
     }
 
-    let _radius = radius as usize;
-
-    let radius = 2 as usize;
     let move_set = LinkedHashSet::new();
     let move_set = get_critical_moves(move_set, state);
     let move_set = get_radius_moves(move_set, state, radius);
@@ -992,6 +992,13 @@ fn sb_state_value(board: &SearchBoard, depth: usize) -> i32 {
         Some(Cell::White) => MIN_VALUE + depth as i32,
         _ => 0, // draw
     }
+}
+
+fn make_next_state(state: &Gomoku, move_x: usize, move_y: usize) -> Gomoku {
+    let mut new_state = state.clone_gomoku();
+    new_state.handle_move(move_x.try_into().unwrap(), move_y.try_into().unwrap());
+    new_state.switch_player();
+    new_state
 }
 
 // Strict sequential PVS inside the search. Parallelism is applied only at the
