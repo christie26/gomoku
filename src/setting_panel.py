@@ -35,14 +35,14 @@ class SettingsPanel:
             highlightthickness=1,
             relief="solid",
         )
-        self.hint_button = tk.Button(
-            self.setting_frame,
-            text="Hint",
-            command=self.on_hint,
-            font=NAME_FONT,
-            highlightbackground=LIGHT_BACKGROUND,
-        )
-        self.hint_button.pack(pady=0, padx=0, anchor="w")
+        # self.hint_button = tk.Button(
+        #     self.setting_frame,
+        #     text="Hint",
+        #     command=self.on_hint,
+        #     font=NAME_FONT,
+        #     highlightbackground=LIGHT_BACKGROUND,
+        # )
+        # self.hint_button.pack(pady=0, padx=0, anchor="w")
 
         # -------------------
         # 1. Play Mode
