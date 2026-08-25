@@ -777,7 +777,7 @@ impl SearchStats {
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
-const MAX_DEPTH: usize = 8;
+const MAX_DEPTH: usize = 5;
 
 pub const BOARD_SIZE: usize = 19;
 const DIRECTIONS: &[(i32, i32)] = &[(1, 0), (0, 1), (1, 1), (1, -1)];
@@ -944,7 +944,7 @@ pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
 
     let _radius = radius as usize;
 
-    let radius = 1 as usize;
+    let radius = 2 as usize;
     let move_set = LinkedHashSet::new();
     let move_set = get_critical_moves(move_set, state);
     let move_set = get_radius_moves(move_set, state, radius);
