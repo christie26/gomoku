@@ -1,16 +1,15 @@
 import tkinter as tk
 
-from constants import (
-    LIGHT_BACKGROUND,
-    BORDER_COLOR,
-    NAME_FONT,
-)
+NAME_FONT = "Rockwell"
+LIGHT_BACKGROUND = "#FAEBD7"
+BORDER_COLOR = "#6f5c43"
 
 
 class SettingsPanel:
     def __init__(
         self, right_frame, on_start_game, on_undo, on_redo, on_debug, on_play_mode, on_hint
     ):
+        self.is_playing = False
         self.on_start_game = on_start_game
         self.on_undo = on_undo
         self.on_redo = on_redo
@@ -35,14 +34,6 @@ class SettingsPanel:
             highlightthickness=1,
             relief="solid",
         )
-        # self.hint_button = tk.Button(
-        #     self.setting_frame,
-        #     text="Hint",
-        #     command=self.on_hint,
-        #     font=NAME_FONT,
-        #     highlightbackground=LIGHT_BACKGROUND,
-        # )
-        # self.hint_button.pack(pady=0, padx=0, anchor="w")
 
         # -------------------
         # 1. Play Mode
@@ -145,7 +136,7 @@ class SettingsPanel:
         )
         debug_frame.pack(pady=(15, 0), anchor="w")
 
-        self.debug_enabled = tk.BooleanVar(value=False)
+        self.debug_enabled = tk.BooleanVar(value=True)
 
         self.debug_checkbox = tk.Checkbutton(
             self.setting_frame,
@@ -209,7 +200,7 @@ class SettingsPanel:
             font=NAME_FONT,
             highlightbackground=LIGHT_BACKGROUND,
         )
-        self.start_button.pack(pady=3, padx=5, anchor="w")
+        self.start_button.pack(pady=5, padx=5, anchor="w")
 
         self.undo_button = tk.Button(
             right_frame,
@@ -219,7 +210,7 @@ class SettingsPanel:
             font=NAME_FONT,
             highlightbackground=LIGHT_BACKGROUND,
         )
-        self.undo_button.pack(pady=3, padx=5, anchor="w")
+        self.undo_button.pack(pady=5, padx=5, anchor="w")
 
         self.redo_button = tk.Button(
             right_frame,
@@ -229,7 +220,7 @@ class SettingsPanel:
             font=NAME_FONT,
             highlightbackground=LIGHT_BACKGROUND,
         )
-        self.redo_button.pack(pady=3, padx=5, anchor="w")
+        self.redo_button.pack(pady=5, padx=5, anchor="w")
 
 
     def update_score(self, score):
@@ -244,6 +235,7 @@ class SettingsPanel:
         self.switch_play_mode(value)
 
     def start_game(self):
+        self.is_playing = True
         self.on_start_game()
 
     def reset_panel(self, is_playing: bool):

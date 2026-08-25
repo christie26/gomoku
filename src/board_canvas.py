@@ -120,11 +120,10 @@ class BoardCanvas:
             cx - r, cy - r, cx + r, cy + r, fill=color, tags="stone"
         )
 
-    # ==== LAST MOVE ====
     def draw_last_move(self, x, y):
         cx = PADDING + x * CELL_SIZE
         cy = PADDING + y * CELL_SIZE
-        r = CELL_SIZE // 6
+        r = CELL_SIZE // 2 - 12
 
         self.canvas.delete("last-move")
         self.canvas.create_oval(
@@ -178,30 +177,6 @@ class BoardCanvas:
             font=("Arial", font_size, "bold"),
             tags="debug",
         )
-
-    def remove_debug(self):
-        self.canvas.delete("debug")
-
-    # ===== HINT =====
-    def draw_hint(self, best_move):
-        x, y, _ = best_move
-        cx = PADDING + x * CELL_SIZE
-        cy = PADDING + y * CELL_SIZE
-        r = CELL_SIZE // 2 - 2
-
-        self.canvas.create_oval(
-            cx - r,
-            cy - r,
-            cx + r,
-            cy + r,
-            fill="",
-            stipple="gray50",
-            outline="red",
-            tags="hint",
-        )
-
-    def remove_hint(self):
-        self.canvas.delete("hint")
 
     # ===== HOVER =====
     def handle_hover(self, event):

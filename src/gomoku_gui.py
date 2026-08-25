@@ -10,7 +10,7 @@ from src.screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, L
 
 
 class GomokuGUI:
-    def __init__(self, root, player1_name, player2_name, history=None):
+    def __init__(self, root, player1, player2, history=None):
         self.root = root
         self.root.title("Gomoku")
 
@@ -47,35 +47,19 @@ class GomokuGUI:
         self.state_history = [self.game.clone_gomoku()]
         self.history_index = 0
 
+        self.player1_name = player1
+        self.player2_name = player2
         self.players = {
-            "X": Player(
-                True,
-                player1_name,
-                True,
-                PlayerPanel(
-                    self.root,
-                    self.right_frame,
-                    player1_name,
-                    True,
-                    True,
-                ),
-            ),
-            "O": Player(
-                False,
-                player2_name,
-                True,
-                PlayerPanel(
-                    self.root,
-                    self.right_frame,
-                    player2_name,
-                    False,
-                    True,
-                ),
-            ),
+            "X": Player(True, player1, True),
+            "O": Player(False, player2, True),
         }
         self.canvas.set_players(self.players)
 
         # ===== PLAYER BOXES =====
+        self.player_frames = {
+            "X": PlayerPanel(self.root, self.right_frame, self.players["X"]),
+            "O": PlayerPanel(self.root, self.right_frame, self.players["O"]),
+        }
 
         # ===== SETTINGS =====
         self.setting_panel = SettingsPanel(
@@ -83,15 +67,14 @@ class GomokuGUI:
             on_start_game=self.start_game,
             on_undo=self.undo,
             on_redo=self.redo,
-            on_debug=self.switch_debug,
-            on_hint=self.show_hint,
+            on_debug=self.debug_onoff,
             on_play_mode=self.switch_play_mode,
+            on_hint=self.show_hint
         )
 
         # ===== HISTORY =====
         if history:
             for x, y in history:
-
                 self.play_one_turn(x, y)
 
         self.root.bind("<Left>", self.undo)
@@ -99,7 +82,7 @@ class GomokuGUI:
 
     # ===== HANDLE INPUT ====
     def handle_click(self, event):
-        if self.is_playing:
+        if self.players[self.game.current_player].is_human and self.is_playing:
             x = round((event.x - PADDING) / CELL_SIZE)
             y = round((event.y - PADDING) / CELL_SIZE)
             self.play_one_turn(y, x)
@@ -139,9 +122,8 @@ class GomokuGUI:
             self.update_undo_redo_buttons()
             self.game.print_state()
 
-    # ===== START/END ======
     def start_game(self):
-        self.set_new_game(Gomoku(size=BOARD_SIZE))
+        self.set_game(Gomoku(size=BOARD_SIZE))
         self.canvas.set_game(self.game)
 
         ruleset = self.setting_panel.ruleset.get()
@@ -154,49 +136,8 @@ class GomokuGUI:
         self.is_playing = True
         self.canvas.reset_board(self.is_playing)
         self.setting_panel.reset_panel(self.is_playing)
-        self.players["X"].panel.reset_panel()
-        self.players["O"].panel.reset_panel()
-
-    def finish_game(self, winner):
-        self.end_turn_timer(self.game.current_player)
-        self.canvas.show_winner(f"{self.players[winner].name} wins")
-        self.is_playing = False
-        self.setting_panel.reset_panel(False)
-
-    # ===== TURN ======
-    def play_one_turn(self, x, y):
-        self.canvas.remove_debug()
-        self.canvas.remove_hint()
-
-        result = self.game.is_valid_move(x, y)
-
-        if result == MoveResult.VALID:
-            result, capture_count, captured = self.game.handle_move(x, y)
-            if captured:
-                self.canvas.show_capture(captured)
-            self.players[self.game.current_player].panel.update_capture(
-                self.game.capture_count[self.game.current_player]
-            )
-
-            self.canvas.draw_stones(self.game.board)
-
-            winner = self.game.get_winner()
-            self.canvas.draw_last_move(y, x)
-            if winner:
-                self.finish_game(winner)
-            else:
-                self.change_turn()
-                p = self.game.current_player
-                if self.debug:
-                    self.show_debug()
-                if not self.players[p].is_human:
-                    self.ai_play()
-
-            # Record state for undo/redo
-            self.state_history = self.state_history[: self.history_index + 1]
-            self.state_history.append(self.game.clone_gomoku())
-            self.history_index += 1
-            self.update_undo_redo_buttons()
+        self.player_frames["X"].reset_panel()
+        self.player_frames["O"].reset_panel()
 
     def change_turn(self):
         self.end_turn_timer(self.game.current_player)
@@ -249,15 +190,15 @@ class GomokuGUI:
     def highlight_active_player(self):
         for p in ["X", "O"]:
             if p == self.game.current_player:
-                self.players[p].panel.hightlight_player()
+                self.player_frames[p].hightlight_player()
             else:
-                self.players[p].panel.unhightlight_player()
+                self.player_frames[p].unhightlight_player()
 
     def start_turn_timer(self, p: Player):
-        self.players[p].panel.start_timer()
+        self.player_frames[p].start_timer()
 
     def end_turn_timer(self, p: Player):
-        self.players[p].panel.stop_timer()
+        self.player_frames[p].stop_timer()
 
     # ===== UNDO/REDO =====
     def undo(self, event=None):
@@ -281,16 +222,13 @@ class GomokuGUI:
             self.canvas.draw_last_move(current_move[1], current_move[0])
 
         for p in ["X", "O"]:
-            self.players[p].panel.update_capture(self.game.capture_count[p])
+            self.player_frames[p].update_capture(self.game.capture_count[p])
 
         self.update_undo_redo_buttons()
 
         self.highlight_active_player()
         self.end_turn_timer("X")
         self.end_turn_timer("O")
-        if self.debug:
-            self.canvas.remove_debug()
-            # self.show_debug()
 
     def redo(self, event=None):
         if self.ai_thinking:
@@ -314,14 +252,11 @@ class GomokuGUI:
             self.canvas.remove_last_move()
             self.canvas.draw_last_move(current_move[1], current_move[0])
         for p in ["X", "O"]:
-            self.players[p].panel.update_capture(self.game.capture_count[p])
+            self.player_frames[p].update_capture(self.game.capture_count[p])
 
         self.update_undo_redo_buttons()
 
         self.highlight_active_player()
-        if self.debug:
-            self.canvas.remove_debug()
-            # self.show_debug()
 
     def update_undo_redo_buttons(self):
         if self.ai_thinking:
@@ -341,29 +276,23 @@ class GomokuGUI:
         )
 
     # ===== SETTING =====
-    def switch_debug(self, debug: bool):
+    def debug_onoff(self, debug: bool):
         self.debug = debug
         if not debug:
             self.canvas.delete_debug()
 
     def switch_play_mode(self, play_mode):
         if play_mode == "pvp":
-            self.players["X"].panel.update_player_type(True)
-            self.players["O"].panel.update_player_type(True)
-            self.players["X"].panel.set_hint_available(True)
-            self.players["O"].panel.set_hint_available(True)
+            self.player_frames["X"].update_player_type(True)
+            self.player_frames["O"].update_player_type(True)
         elif play_mode == "pvsa":
-            self.players["X"].panel.update_player_type(True)
-            self.players["O"].panel.update_player_type(False)
-            self.players["X"].panel.set_hint_available(False)
-            self.players["O"].panel.set_hint_available(False)
+            self.player_frames["X"].update_player_type(True)
+            self.player_frames["O"].update_player_type(False)
         elif play_mode == "avsp":
-            self.players["X"].panel.update_player_type(False)
-            self.players["O"].panel.update_player_type(True)
-            self.players["X"].panel.set_hint_available(False)
-            self.players["O"].panel.set_hint_available(False)
+            self.player_frames["X"].update_player_type(False)
+            self.player_frames["O"].update_player_type(True)
 
-    def set_new_game(self, game):
+    def set_game(self, game):
         self.game = game
         self.canvas.set_game(game)
 
@@ -374,28 +303,13 @@ def load_board_str(filepath):
         return content
 
 
-def chess_to_xy(coord: str):
-    """Convert chess coordinate (e.g. 'a1', 's19') to (y, x) 0-indexed."""
-    col = ord(coord[0].lower()) - ord("a")
-    row = int(coord[1:]) - 1
-    if not (0 <= col < 19 and 0 <= row < 19):
-        raise ValueError(f"Coordinate {coord} out of bounds for 19x19 board")
-    return row, col
-
-
 def load_history(filepath):
     with open(filepath, "r") as f:
         content = f.read()
-        lines = content.splitlines()
-        for line in lines:
-            if line.strip() != "":
-                content = line
-                break
         historys = content.removeprefix("move history:").strip()
         history_array = historys.split("->")
         history_tuples = [
-            # (int(array.strip("()").split(",")[0]), int(array.strip("()").split(",")[1]))
-            chess_to_xy(array)
+            (int(array.strip("()").split(",")[0]), int(array.strip("()").split(",")[1]))
             for array in history_array
         ]
 
