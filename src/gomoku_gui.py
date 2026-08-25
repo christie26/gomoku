@@ -86,7 +86,6 @@ class GomokuGUI:
             on_debug=self.switch_debug,
             on_hint=self.show_hint,
             on_play_mode=self.switch_play_mode,
-            on_hint=self.show_hint
         )
 
         # ===== HISTORY =====
