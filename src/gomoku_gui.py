@@ -179,7 +179,7 @@ class GomokuGUI:
         self.end_turn_timer(self.game.current_player)
         self.canvas.show_winner(f"{self.players[winner].name} wins")
         self.is_playing = False
-        self.setting_panel.reset_panel(False)
+        self.setting_panel.reset_panel(self.is_playing)
 
     def show_hint(self):
         mv, _ = get_ai_move(self.game)

@@ -240,6 +240,7 @@ class SettingsPanel:
 
     def reset_panel(self, is_playing: bool):
         if is_playing:
+            self.update_score(0)
             for rb in self.setting_ratios:
                 rb.config(state="disabled")
             self.start_button.config(state="disabled")
