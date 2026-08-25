@@ -17,6 +17,7 @@ class GomokuGUI:
         self.sizeeee = CELL_SIZE * (BOARD_SIZE - 1) + PADDING * 2
         self.is_playing = False
         self.debug = True
+        self.ai_thinking = False
 
         # ===== MAIN LAYOUT =====
         self.main_frame = tk.Frame(
@@ -150,18 +151,27 @@ class GomokuGUI:
             self.canvas.remove_hover()
 
     def ai_play(self):
+        self.ai_thinking = True
+        self.update_undo_redo_buttons()
+
         def run_ai():
             mv, moves = get_ai_move(self.game)
-            if mv:
-                if self.debug:
-                    self.canvas.delete_debug()
-                x, y, _ = mv
-                for m in moves:
-                    x1, y1, score1 = m
-                    selected = x == x1 and y == y1
+
+            def apply_move():
+                self.ai_thinking = False
+                if mv:
                     if self.debug:
-                        self.canvas.draw_possible_stone(y1, x1, "O", score1, selected)
-                self.root.after(0, lambda: self.play_one_turn(x, y))
+                        self.canvas.delete_debug()
+                    x, y, _ = mv
+                    for m in moves:
+                        x1, y1, score1 = m
+                        selected = x == x1 and y == y1
+                        if self.debug:
+                            self.canvas.draw_possible_stone(y1, x1, "O", score1, selected)
+                    self.play_one_turn(x, y)
+                self.update_undo_redo_buttons()
+
+            self.root.after(0, apply_move)
 
         threading.Thread(target=run_ai, daemon=True).start()
 
@@ -192,10 +202,18 @@ class GomokuGUI:
 
     # ===== UNDO/REDO =====
     def undo(self, event=None):
+        if self.ai_thinking:
+            return
         self.canvas.remove_last_move()
+        self.canvas.delete_debug()
         if self.history_index <= 0:
             return
         self.history_index -= 1
+        # Skip over AI moves so undo always lands back on a human turn.
+        while self.history_index > 0 and not self.players[
+            self.state_history[self.history_index].current_player
+        ].is_human:
+            self.history_index -= 1
         self.set_game(self.state_history[self.history_index].clone_gomoku())
 
         self.canvas.draw_stones(self.game.board)
@@ -213,10 +231,21 @@ class GomokuGUI:
         self.end_turn_timer("O")
 
     def redo(self, event=None):
+        if self.ai_thinking:
+            return
         if self.history_index >= len(self.state_history) - 1:
             return
         self.history_index += 1
+        # Skip over AI moves so redo always lands back on a human turn (or the end).
+        while (
+            self.history_index < len(self.state_history) - 1
+            and not self.players[
+                self.state_history[self.history_index].current_player
+            ].is_human
+        ):
+            self.history_index += 1
         self.set_game(self.state_history[self.history_index].clone_gomoku())
+        self.canvas.delete_debug()
         self.canvas.draw_stones(self.game.board)
         current_move = self.game.current_move
         if current_move:
@@ -230,6 +259,11 @@ class GomokuGUI:
         self.highlight_active_player()
 
     def update_undo_redo_buttons(self):
+        if self.ai_thinking:
+            self.setting_panel.undo_button.config(state=tk.DISABLED)
+            self.setting_panel.redo_button.config(state=tk.DISABLED)
+            return
+
         self.setting_panel.undo_button.config(
             state=tk.NORMAL if self.history_index > 0 else tk.DISABLED
         )
