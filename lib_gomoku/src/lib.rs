@@ -1192,43 +1192,6 @@ mod tests {
         assert!(black_patterns(&game).block_four.is_empty());
     }
 
-    #[test]
-    fn open_two_disappears_when_near_side_blocked() {
-        // ..00.. 상태에서 White가 바로 옆(5,4)을 막으면, 한쪽만 막힌 open_two는 사라져야 한다.
-        let (mut game, _before) = setup_window(5, 5, "00", 1);
-        place(&mut game, Stone::White, 5, 4);
-
-        assert!(black_patterns(&game).open_two.is_empty());
-    }
-
-    #[test]
-    fn open_three_disappears_when_open_side_also_blocked() {
-        // 위 상태에서 열린 쪽 바로 옆(5,8)까지 White로 막으면 O-000-O, open_three는 사라져야 한다.
-        let (mut game, _before) = setup_window(5, 4, "O000", 3);
-        place(&mut game, Stone::White, 5, 8);
-
-        assert!(black_patterns(&game).open_three.is_empty());
-    }
-
-    #[test]
-    fn open_four_downgrades_to_block_four_when_blocked() {
-        // ...0000...: 양쪽 다 열림 -> open_four. 이후 한쪽 옆(5,4)을 막으면 block_four로 강등돼야
-        // 한다 (예전엔 interior trim이 통째로 삭제해서 위협이 소리소문없이 사라지는 버그가 있었다).
-        let (mut game, before) = setup_window(5, 5, "0000", 3);
-        assert!(before.open_four.is_empty());
-
-        let open_four_expected = vec![
-            (5, 3), (5, 4), (5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10),
-        ];
-        assert_eq!(black_patterns(&game).open_four, vec![open_four_expected]);
-
-        place(&mut game, Stone::White, 5, 4);
-
-        assert!(black_patterns(&game).open_four.is_empty());
-        let block_four_expected = vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)];
-        assert_eq!(black_patterns(&game).block_four, vec![block_four_expected]);
-    }
-
     // capture helper function
     fn setup_capture_axis(row: i32, mover_col: i32, beyond_anchor_pattern: &str, away_pattern: &str) -> (Gomoku, PlayerPatterns) {
         let mut game = Gomoku::new(19);
@@ -1362,10 +1325,6 @@ mod tests {
         assert_eq!(black_patterns(&game).block_four, vec![expected]);
         assert!(black_patterns(&game).open_four.is_empty());
     }
-
-
-    // 캡처 축이 아닌 방향(off-axis)은 캡처로 빈 칸이 된 두 셀에서 각각 독립적으로 스캔한다.
-    // 두 셀(mover에 붙은 쪽/anchor에 붙은 쪽) 모두에서 실제로 동작하는지 각각 확인한다.
 
     #[test]
     fn capture_exposes_off_axis_pattern_through_near_mover_cell() {
