@@ -12,6 +12,7 @@ use std::thread;
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
 const MAX_DEPTH: usize = 5;
+const RADIUS : usize = 2;
 
 pub const BOARD_SIZE: usize = 19;
 const DIRECTIONS: &[(i32, i32)] = &[(1, 0), (0, 1), (1, 1), (1, -1)];
@@ -118,6 +119,7 @@ fn get_critical_moves(
     mut critical_moves: LinkedHashSet<(usize, usize)>,
     state: &Gomoku,
 ) -> LinkedHashSet<(usize, usize)> {
+  // TODO - add order of best move sort
     for player in [&state.opponent_player, &state.current_player] {
         let p = state.patterns.get(player).unwrap();
         for (pattern_type, patterns) in [
@@ -172,14 +174,11 @@ fn get_radius_moves(
 }
 
 #[pyfunction]
-pub fn get_candidate_moves(state: &Gomoku, radius: i32) -> Vec<(usize, usize)> {
+pub fn get_candidate_moves(state: &Gomoku, radius: usize) -> Vec<(usize, usize)> {
     if state.count_empty_spots() as usize == state.size * state.size {
         return vec![(state.size / 2, state.size / 2)];
     }
 
-    let _radius = radius as usize;
-
-    let radius = 2 as usize;
     let move_set = LinkedHashSet::new();
     let move_set = get_critical_moves(move_set, state);
     let move_set = get_radius_moves(move_set, state, radius);
@@ -254,7 +253,7 @@ pub fn get_ai_move(
     // let mut alpha = MIN_VALUE;
     // let mut beta = MAX_VALUE;
 
-    let all_moves: Vec<(usize, usize, Option<i32>)> = get_candidate_moves(state, 3)
+    let all_moves: Vec<(usize, usize, Option<i32>)> = get_candidate_moves(state, RADIUS)
         .into_iter()
         .map(|(x, y)| (x, y, None))
         .collect();
@@ -380,7 +379,7 @@ fn alphabeta(
         (MAX_VALUE + 1, max_depth)
     };
 
-    for (move_x, move_y) in get_candidate_moves(state, 3) {
+    for (move_x, move_y) in get_candidate_moves(state, RADIUS) {
         let next_state = make_next_state(state, move_x, move_y);
 
         if is_max_player {
