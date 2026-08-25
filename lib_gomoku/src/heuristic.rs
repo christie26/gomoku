@@ -1,73 +1,153 @@
 use crate::{Gomoku, Stone};
 use pyo3::prelude::*;
 
-const CAPTURE_WEIGHT: f32 = 50_000.;
-
-const OPEN_TWO_WEIGHT: f32 = 100.;
-const OPEN_THREE_WEIGHT: f32 = 1_000.;
-const FREE_THREE_WEIGHT: f32 = 70_000.;
-const BLOCK_FOUR_WEIGHT: f32 = 50_000.;
-const OPEN_FOUR_WEIGHT: f32 = 900_000.;
-
-fn multiplier(rank: usize) -> f32 {
-  match rank {
-    0 => 0.0,
-    1 => 0.1,
-    2 => 1.0,
-    3 => 2.,
-    _ => 2.,
-  }
-}
-
-fn capture_multiplier(rank: &i32) -> f32 {
-  match rank {
-    0 => 0.0,
-    1 => 0.1,
-    2 => 0.3,
-    3 => 0.5,
-    4 => 0.9,
-    _ => 1.,
-  }
-}
-
-fn evaluate_player(state: &Gomoku, player: &Stone) -> f32 {
-  
-    let capture_count = state.capture_count.get(player).unwrap_or(&0);
-    let capture_score = capture_multiplier(capture_count) * CAPTURE_WEIGHT;
-
+// <<<<<<< HEAD
+fn evaluate_player(state: &Gomoku, player: &Stone, is_active: bool) -> i32 {
     let p = state.patterns.get(player);
+    let captures = *state.capture_count.get(player).unwrap_or(&0);
+    let open_twos = p.map_or(0, |p| p.open_two.len() as i32);
+    let free_threes = p.map_or(0, |p| p.free_three.len() as i32);
+    let open_threes = p.map_or(0, |p| p.open_three.len() as i32);
+    let block_fours = p.map_or(0, |p| p.block_four.len() as i32);
+    let open_fours = p.map_or(0, |p| p.open_four.len() as i32);
+    let five_rows = p.map_or(0, |p| p.five_row.len() as i32);
 
-    let open_two_count = p.map_or(0, |p| p.open_two.len());
-    let open_two_score = multiplier(open_two_count) * OPEN_TWO_WEIGHT;
+    let mut score = 0i32;
 
-    let free_three_count = p.map_or(0, |p| p.free_three.len());
-    let free_three_score = multiplier(free_three_count) * FREE_THREE_WEIGHT;
-    
-    let open_three_count = p.map_or(0, |p| p.open_three.len());
-    let open_three_score = multiplier(open_three_count) * OPEN_THREE_WEIGHT;
+    // --- Base pattern scores ---
+    score += five_rows * 80_001;
+    score += open_fours * 35_000;
+    score += block_fours * 7_000;
+    score += free_threes * 5_000;
+    score += open_threes * 100;
+    score += open_twos * 50;
 
-    let block_four_count = p.map_or(0, |p| p.block_four.len());
-    let block_four_score = multiplier(block_four_count) * BLOCK_FOUR_WEIGHT;
+    // --- Non-linear capture scaling ---
+    // Each capture pair gets progressively more dangerous as you approach 5 (win)
+    score += match captures {
+        0 => 0,
+        1 => 5_000,
+        2 => 12_000,
+        3 => 25_000,
+        4 => 50_000,
+        _ => 50_000,
+    };
 
-    let open_four_count = p.map_or(0, |p| p.open_four.len());
-    let open_four_score = multiplier(open_four_count) * OPEN_FOUR_WEIGHT;
+    // --- Double-threat detection ---
+    // Combinations that can't all be blocked in one move
+    let total_threes = open_threes + free_threes;
 
-    capture_score
-        + open_two_score
-        + open_three_score
-        + block_four_score
-        + open_four_score
-        + free_three_score
+    if open_fours >= 2 {
+        score += 40_000; // Two open fours = unstoppable
+    }
+    if open_fours >= 1 && block_fours >= 1 {
+        score += 35_000; // Open four + block four = can't address both
+    }
+    if block_fours >= 2 {
+        score += 30_000; // Two block fours = opponent can only block one
+    }
+    if open_fours >= 1 && total_threes >= 1 {
+        score += 30_000; // Open four + three = overwhelming
+    }
+    if block_fours >= 1 && total_threes >= 1 {
+        score += 20_000; // Block four + three = force block, then threaten with three
+    }
+    if total_threes >= 2 {
+        score += 15_000; // Double three = likely winning
+    }
+    // Capture threats compound with pattern threats
+    if captures >= 4 && (block_fours >= 1 || open_fours >= 1) {
+        score += 25_000; // One capture from win + four threat = two winning paths
+    }
+
+    // --- Tempo / turn awareness ---
+    // Active player's threats are immediate; opponent must respond
+    if is_active {
+        if open_fours >= 1 {
+            score += 5_000;
+        }
+        if block_fours >= 1 {
+            score += 3_000;
+        }
+        if captures >= 4 {
+            score += 8_000;
+        }
+    }
+
+    score
+// =======
+// const CAPTURE_WEIGHT: f32 = 50_000.;
+//
+// const OPEN_TWO_WEIGHT: f32 = 100.;
+// const OPEN_THREE_WEIGHT: f32 = 1_000.;
+// const FREE_THREE_WEIGHT: f32 = 70_000.;
+// const BLOCK_FOUR_WEIGHT: f32 = 50_000.;
+// const OPEN_FOUR_WEIGHT: f32 = 900_000.;
+//
+// fn multiplier(rank: usize) -> f32 {
+//   match rank {
+//     0 => 0.0,
+//     1 => 0.1,
+//     2 => 1.0,
+//     3 => 2.,
+//     _ => 2.,
+//   }
+// }
+//
+// fn capture_multiplier(rank: &i32) -> f32 {
+//   match rank {
+//     0 => 0.0,
+//     1 => 0.1,
+//     2 => 0.3,
+//     3 => 0.5,
+//     4 => 0.9,
+//     _ => 1.,
+//   }
+// }
+//
+// fn evaluate_player(state: &Gomoku, player: &Stone) -> f32 {
+//   
+//     let capture_count = state.capture_count.get(player).unwrap_or(&0);
+//     let capture_score = capture_multiplier(capture_count) * CAPTURE_WEIGHT;
+//
+//     let p = state.patterns.get(player);
+//
+//     let open_two_count = p.map_or(0, |p| p.open_two.len());
+//     let open_two_score = multiplier(open_two_count) * OPEN_TWO_WEIGHT;
+//
+//     let free_three_count = p.map_or(0, |p| p.free_three.len());
+//     let free_three_score = multiplier(free_three_count) * FREE_THREE_WEIGHT;
+//     
+//     let open_three_count = p.map_or(0, |p| p.open_three.len());
+//     let open_three_score = multiplier(open_three_count) * OPEN_THREE_WEIGHT;
+//
+//     let block_four_count = p.map_or(0, |p| p.block_four.len());
+//     let block_four_score = multiplier(block_four_count) * BLOCK_FOUR_WEIGHT;
+//
+//     let open_four_count = p.map_or(0, |p| p.open_four.len());
+//     let open_four_score = multiplier(open_four_count) * OPEN_FOUR_WEIGHT;
+//
+//     capture_score
+//         + open_two_score
+//         + open_three_score
+//         + block_four_score
+//         + open_four_score
+//         + free_three_score
+// >>>>>>> origin/main
 }
 
 #[pyfunction]
 pub fn heuristic_evaluation(state: &Gomoku) -> i32 {
-    let black_score = evaluate_player(state, &Stone::Black);
-    let white_score = evaluate_player(state, &Stone::White);
-    let heuristic = black_score - white_score;
-
-    // println!("Current: {:?}, Move: ({}), heuristic: {}\n",state.current_player, state.current_move.map(|x|
-    //   format!("{}, {}", x.0, x.1))
-    //   .unwrap_or("null".to_string()) ,heuristic);
-    (heuristic as i32).clamp(-99_999, 99_999)
+    let black_score = evaluate_player(
+        state,
+        &Stone::Black,
+        state.current_player == Stone::Black,
+    );
+    let white_score = evaluate_player(
+        state,
+        &Stone::White,
+        state.current_player == Stone::White,
+    );
+    // Clamp to stay within alpha-beta bounds (±99_999 leaves room for depth adjustment)
+    (black_score - white_score).clamp(-99_999, 99_999)
 }

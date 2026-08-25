@@ -1,5 +1,6 @@
 use lib_gomoku::{
-    minimax::{self, BOARD_SIZE}, position_name, Gomoku
+    minimax::{self, SearchStats, BOARD_SIZE},
+    position_name, Gomoku,
 };
 use signal_hook::{
     consts::{SIGINT, SIGTERM},
@@ -45,10 +46,11 @@ fn main() {
 
         let game_clone = game.clone();
         let handle =
-            thread::spawn(move || Python::with_gil(|py| minimax::get_ai_move(py, &game_clone)));
+            thread::spawn(move || Python::with_gil(|py| minimax::get_ai_move_with_stats(&game_clone)));
 
         let mut res = None;
         let mut moves = vec![];
+        let mut stats = SearchStats::new();
 
         loop {
             if !running.load(Ordering::SeqCst) {
@@ -58,7 +60,7 @@ fn main() {
 
             // Check if task completed
             if handle.is_finished() {
-                (res, moves) = handle.join().unwrap();
+                (res, moves, stats) = handle.join().unwrap();
                 break;
             }
 
@@ -79,6 +81,7 @@ fn main() {
             elapsed,
             moves.len()
         );
+        print_search_stats(&stats);
         durations.push(elapsed);
         game.handle_move(x as i32, y as i32);
         game.print_board(vec![(x, y)]);
@@ -110,7 +113,7 @@ fn main() {
         "move history: {}",
         move_history
             .iter()
-            .map(|u| format!("{u:?}"))
+            .map(|u| format!("{}", position_name(&(u.0 as i32, u.1 as i32))))
             .collect::<Vec<String>>()
             .join("->")
     );
@@ -159,5 +162,62 @@ fn plot_bar_chart(values: &[f64]) {
         }
 
         println!("{:3}: {:6.2}s {}", i + 1, value, bar);
+    }
+}
+
+fn print_search_stats(stats: &SearchStats) {
+    // Iterative deepening progression
+    if !stats.depth_times.is_empty() {
+        print!("  ID: ");
+        for (i, &(d, secs, nodes)) in stats.depth_times.iter().enumerate() {
+            if i > 0 {
+                print!(" -> ");
+            }
+            print!("d{}={:.3}s/{}n", d, secs, nodes);
+        }
+        println!();
+    }
+
+    println!(
+        "  Depth {} | Nodes: {} | Cutoffs: {} | TT hits: {} | Avg branch: {:.1} | Pruned: ~{:.1}%",
+        stats.max_depth,
+        stats.nodes_visited,
+        stats.cutoffs,
+        stats.tt_hits,
+        stats.avg_branching_factor(),
+        stats.pruning_percent(),
+    );
+
+    if !stats.pv.is_empty() {
+        println!(
+            "  PV: {}",
+            stats.pv
+                .iter()
+                .map(|&(x, y)| position_name(&(x as i32, y as i32)))
+                .collect::<Vec<_>>()
+                .join(" -> ")
+        );
+    }
+
+    if stats.branch_times.is_empty() {
+        return;
+    }
+
+    let max_show = 10;
+    let total = stats.branch_times.len();
+    println!("  Branch timings:");
+
+    for (i, &(x, y, score, secs)) in stats.branch_times.iter().enumerate() {
+        if i >= max_show {
+            let others_count = total - max_show;
+            let others_time: f64 = stats.branch_times[max_show..].iter().map(|b| b.3).sum();
+            println!("    + {} others {:>26.3}s", others_count, others_time);
+            break;
+        }
+        let score_str = match score {
+            Some(s) => format!("{:>7}pts", s),
+            None => "       N/A".to_string(),
+        };
+        println!("    {:>4} = {} {:>8.3}s", position_name(&(x as i32, y as i32)), score_str, secs);
     }
 }
