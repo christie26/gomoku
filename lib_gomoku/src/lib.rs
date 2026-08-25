@@ -1,9 +1,50 @@
 use pyo3::prelude::*;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use colored::*;
 
 pub mod heuristic;
 pub mod minimax;
+
+// --- Zobrist hashing ---
+
+struct XorShift64 {
+    state: u64,
+}
+
+impl XorShift64 {
+    fn next(&mut self) -> u64 {
+        let mut x = self.state;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.state = x;
+        x
+    }
+}
+
+pub struct ZobristSeeds {
+    pub board: [[u64; 2]; 19 * 19], // [cell_index][0=Black, 1=White]
+    pub player: u64,                  // XOR when switching player
+}
+
+static ZOBRIST: OnceLock<ZobristSeeds> = OnceLock::new();
+
+pub fn zobrist() -> &'static ZobristSeeds {
+    ZOBRIST.get_or_init(|| {
+        let mut rng = XorShift64 { state: 0x12345678DEADBEEF };
+        let mut seeds = ZobristSeeds {
+            board: [[0u64; 2]; 19 * 19],
+            player: 0,
+        };
+        for cell in seeds.board.iter_mut() {
+            cell[0] = rng.next();
+            cell[1] = rng.next();
+        }
+        seeds.player = rng.next();
+        seeds
+    })
+}
 
 #[pyclass]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -359,6 +400,7 @@ pub struct Gomoku {
     win_capture_count: i32,
     current_move: Option<Position>,
     move_count: usize,
+    pub hash: u64,
 }
 
 #[pymethods]
@@ -385,6 +427,7 @@ impl Gomoku {
             win_capture_count: 5,
             current_move: None,
             move_count: 0,
+            hash: 0, // empty board, Black to play
         }
     }
 
@@ -514,13 +557,15 @@ impl Gomoku {
     }
 
     fn apply_capture(&mut self, x0: i32, y0: i32, dx: i32, dy: i32) -> Vec<(i32, i32)> {
+        let z = zobrist();
+        let opp_idx = if self.opponent_player == Stone::Black { 0 } else { 1 };
         let mut removed = Vec::new();
-
         for i in 1..3 {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
-
+            // XOR out removed opponent stone
             removed.push((x, y));
+            self.hash ^= z.board[x as usize * 19 + y as usize][opp_idx];
             self.board[x as usize][y as usize] = Stone::Empty;
 
             self.remove_patterns_at(x, y);
@@ -699,6 +744,30 @@ impl Gomoku {
         MoveResult::Valid
     }
 
+    // pub fn handle_move_simple_ruleset(&mut self, x: i32, y: i32) -> (MoveResult, i32) {
+    //     let result = self.is_valid_move_simple_ruleset(x, y);
+    //     let capture_count = 0;
+    //
+    //     if result == MoveResult::Valid {
+    //         self.current_move = Some((x, y));
+    //         self.move_count += 1;
+    //         self.board[x as usize][y as usize] = self.current_player.clone();
+    //
+    //         // self.remove_free_three(x, y, &self.opponent_player.clone());
+    //         self.remove_opens(x, y);
+    //
+    //         // self.add_free_threes(
+    //         //     self.get_free_threes_from_move(x, y),
+    //         //     &self.current_player.clone(),
+    //         // );
+    //         self.add_opens_from_move(x, y);
+    //
+    //         // capture_count = self.capture_center(x, y);
+    //     }
+    //
+    //     (result, capture_count)
+    // }
+
     pub fn handle_move(&mut self, x: i32, y: i32)
         -> (MoveResult, i32, Vec<(i32, i32)>)
     {
@@ -711,6 +780,10 @@ impl Gomoku {
             self.move_count += 1;
             self.board[x as usize][y as usize] = self.current_player.clone();
 
+            // Update Zobrist hash for placed stone
+            let z = zobrist();
+            let color_idx = if self.current_player == Stone::Black { 0 } else { 1 };
+            self.hash ^= z.board[x as usize * 19 + y as usize][color_idx];
             self.update_patterns_for_move(x, y);
 
             let (count, positions) = self.capture_center(x, y);
@@ -825,6 +898,7 @@ impl Gomoku {
     }
 
     pub fn switch_player(&mut self) {
+        self.hash ^= zobrist().player;
         match self.current_player {
             Stone::Black => {
                 self.current_player = Stone::White;
@@ -943,6 +1017,8 @@ fn lib_gomoku(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Gomoku>()?;
     m.add_function(wrap_pyfunction!(heuristic::heuristic_evaluation, m)?)?;
     m.add_function(wrap_pyfunction!(minimax::get_ai_move, m)?)?;
+    m.add_function(wrap_pyfunction!(minimax::get_hint, m)?)?;
+    m.add_function(wrap_pyfunction!(minimax::get_move_pv, m)?)?;
 
     let gomoku_class = m.getattr("Gomoku")?;
     gomoku_class.setattr("__module__", "lib_gomoku")?;
