@@ -7,7 +7,7 @@ use pyo3::prelude::*;
 
 use std::cmp::{max, min};
 use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
+use std::thread;
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
@@ -244,18 +244,17 @@ pub fn get_ai_move(
     py.allow_threads(|| {
     let is_max_player = state.current_player == Stone::Black;
 
-    let mut best_value = if is_max_player {
+    let best_value = if is_max_player {
         MIN_VALUE - 1
     } else {
         MAX_VALUE + 1
     };
-    let mut alpha: Arc<Mutex<i32>> = Arc::new(Mutex::new(MIN_VALUE));
-    let mut beta: Arc<Mutex<i32>> = Arc::new(Mutex::new(MAX_VALUE));
+    let alpha: Arc<Mutex<i32>> = Arc::new(Mutex::new(MIN_VALUE));
+    let beta: Arc<Mutex<i32>> = Arc::new(Mutex::new(MAX_VALUE));
     // let mut alpha = MIN_VALUE;
     // let mut beta = MAX_VALUE;
 
-    let mut best_move: Option<(usize, usize, i32)> = None;
-    let mut all_moves: Vec<(usize, usize, Option<i32>)> = get_candidate_moves(state, 3)
+    let all_moves: Vec<(usize, usize, Option<i32>)> = get_candidate_moves(state, 3)
         .into_iter()
         .map(|(x, y)| (x, y, None))
         .collect();
@@ -272,8 +271,6 @@ pub fn get_ai_move(
             let alpha = alpha.clone();
             let beta = beta.clone();
             thread::spawn(move || {
-                let alpha_val = *alpha.lock().unwrap();
-                let beta_val = *beta.lock().unwrap();
                 let (value, depth) = alphabeta(
                     &next_state,
                     // alpha_val,
