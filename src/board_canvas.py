@@ -7,6 +7,7 @@ class BoardCanvas:
         self.canvas_size = canvas_size
         self.game = None
         self.is_playing = False
+        self.players = None
 
         self.canvas = tk.Canvas(
             parent,
@@ -179,7 +180,9 @@ class BoardCanvas:
 
     # ===== HOVER =====
     def handle_hover(self, event):
-        if self.is_playing:
+        if self.is_playing and (
+            not self.players or self.players[self.game.current_player].is_human
+        ):
             x = round((event.x - PADDING) / CELL_SIZE)
             y = round((event.y - PADDING) / CELL_SIZE)
 
@@ -261,6 +264,9 @@ class BoardCanvas:
 
     def set_game(self, game):
         self.game = game
+
+    def set_players(self, players):
+        self.players = players
 
     def show_capture(self, positions):
         """

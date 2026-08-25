@@ -52,6 +52,7 @@ class GomokuGUI:
             "X": Player(True, player1, True),
             "O": Player(False, player2, True),
         }
+        self.canvas.set_players(self.players)
 
         # ===== PLAYER BOXES =====
         self.player_frames = {
@@ -144,6 +145,8 @@ class GomokuGUI:
 
         self.highlight_active_player()
         self.start_turn_timer(p)
+        if not self.players[p].is_human:
+            self.canvas.remove_hover()
 
     def ai_play(self):
         def run_ai():
