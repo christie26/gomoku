@@ -148,14 +148,53 @@ class SettingsPanel:
         )
         self.debug_checkbox.pack(anchor="w")
 
-        # 4. Start Button
-        button_frame = tk.Frame(
+        # -------------------
+        # 4. Bottom area: Score/Hint (left) and Start/Undo/Redo (right)
+        # -------------------
+        bottom_frame = tk.Frame(
             self.setting_frame, pady=20, background=LIGHT_BACKGROUND
         )
-        button_frame.pack(fill="both")
+        bottom_frame.pack(fill="both", side="bottom")
+
+        left_frame = tk.Frame(bottom_frame, background=LIGHT_BACKGROUND)
+        left_frame.pack(side="left", fill="both", expand=True, anchor="n")
+
+        right_frame = tk.Frame(bottom_frame, background=LIGHT_BACKGROUND)
+        right_frame.pack(side="right", fill="both", expand=True, anchor="n")
+
+        score_frame = tk.Label(
+            left_frame,
+            text="Score",
+            padx=5,
+            pady=0,
+            font=(NAME_FONT, 16),
+            background=LIGHT_BACKGROUND,
+        )
+        score_frame.pack(anchor="w")
+
+        self.score_value = tk.StringVar(value="0")
+
+        self.score_label = tk.Label(
+            left_frame,
+            textvariable=self.score_value,
+            padx=5,
+            font=NAME_FONT,
+            background=LIGHT_BACKGROUND,
+        )
+        self.score_label.pack(anchor="w")
+
+        self.hint_button = tk.Button(
+            left_frame,
+            text="Hint",
+            command=self.on_hint,
+            state=tk.DISABLED,
+            font=NAME_FONT,
+            highlightbackground=LIGHT_BACKGROUND,
+        )
+        self.hint_button.pack(pady=5, padx=5, anchor="w")
 
         self.start_button = tk.Button(
-            button_frame,
+            right_frame,
             text="Start Game",
             command=self.start_game,
             font=NAME_FONT,
@@ -163,9 +202,8 @@ class SettingsPanel:
         )
         self.start_button.pack(pady=5, padx=5, anchor="w")
 
-        # 5. Undo / Redo
         self.undo_button = tk.Button(
-            button_frame,
+            right_frame,
             text="Undo",
             command=self.on_undo,
             state=tk.DISABLED,
@@ -175,7 +213,7 @@ class SettingsPanel:
         self.undo_button.pack(pady=5, padx=5, anchor="w")
 
         self.redo_button = tk.Button(
-            button_frame,
+            right_frame,
             text="Redo",
             command=self.on_redo,
             state=tk.DISABLED,
@@ -184,15 +222,9 @@ class SettingsPanel:
         )
         self.redo_button.pack(pady=5, padx=5, anchor="w")
 
-        self.hint_button = tk.Button(
-            button_frame,
-            text="Hint",
-            command=self.on_hint,
-            state=tk.DISABLED,
-            font=NAME_FONT,
-            highlightbackground=LIGHT_BACKGROUND,
-        )
-        self.hint_button.pack(pady=5, padx=5, anchor="w")
+
+    def update_score(self, score):
+        self.score_value.set(str(score))
 
     def _on_debug_changed(self):
         value = self.debug_enabled.get()

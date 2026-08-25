@@ -1,5 +1,5 @@
 import tkinter as tk
-from lib_gomoku import Gomoku, MoveResult, get_ai_move
+from lib_gomoku import Gomoku, MoveResult, get_ai_move, heuristic_evaluation
 import argparse
 import time
 import threading
@@ -96,6 +96,7 @@ class GomokuGUI:
 
         if result == MoveResult.VALID:
             result, capture_count, captured = self.game.handle_move(x, y)
+            self.setting_panel.update_score(heuristic_evaluation(self.game))
             if captured:
                 self.canvas.show_capture(captured)
             self.player_frames[self.game.current_player].update_capture(
