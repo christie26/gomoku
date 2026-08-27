@@ -48,6 +48,54 @@ struct SearchBoard {
     total_stones: usize,
 }
 
+#[derive(Default)]
+struct PatternCounts {
+    five_rows: i32,
+    open_fours: i32,
+    block_fours: i32,
+    open_threes: i32,
+    open_twos: i32,
+    free_threes: i32,
+}
+
+impl PatternCounts {
+    fn score(&self, captures: i32, is_active: bool) -> i32 {
+        let mut score = 0i32;
+        score += self.five_rows * 80_001;
+        score += self.open_fours * 35_000;
+        score += self.block_fours * 7_000;
+        score += self.free_threes * 5_000;
+        score += self.open_threes * 100;
+        score += self.open_twos * 50;
+
+        score += match captures {
+            0 => 0,
+            1 => 5_000,
+            2 => 12_000,
+            3 => 25_000,
+            4 => 50_000,
+            _ => 50_000,
+        };
+
+        let total_threes = self.open_threes + self.free_threes;
+        if self.open_fours >= 2 { score += 40_000; }
+        if self.open_fours >= 1 && self.block_fours >= 1 { score += 35_000; }
+        if self.block_fours >= 2 { score += 30_000; }
+        if self.open_fours >= 1 && total_threes >= 1 { score += 30_000; }
+        if self.block_fours >= 1 && total_threes >= 1 { score += 20_000; }
+        if total_threes >= 2 { score += 15_000; }
+        if captures >= 4 && (self.block_fours >= 1 || self.open_fours >= 1) { score += 25_000; }
+
+        if is_active {
+            if self.open_fours >= 1 { score += 5_000; }
+            if self.block_fours >= 1 { score += 3_000; }
+            if captures >= 4 { score += 8_000; }
+        }
+
+        score
+    }
+}
+
 struct UndoInfo {
     placed: (usize, usize),
     _placed_player: Cell,
@@ -448,63 +496,61 @@ impl SearchBoard {
 
     // ---- Heuristic evaluation ----
 
-    fn sb_evaluate_player(&self, player: Cell, is_active: bool) -> i32 {
+    /// Scan the board once and tally Black's and White's pattern counts
+    /// together, instead of scanning per color, to halve the number of
+    /// full-board passes needed for evaluation.
+    fn sb_scan_patterns(&self) -> (PatternCounts, PatternCounts) {
         let dirs: [(i32,i32); 4] = [(1,0),(0,1),(1,1),(1,-1)];
 
-        let mut five_rows = 0i32;
-        let mut open_fours = 0i32;
-        let mut block_fours = 0i32;
-        let mut open_threes = 0i32;
-        let mut open_twos = 0i32;
-        let mut free_threes = 0i32;
+        let mut black = PatternCounts::default();
+        let mut white = PatternCounts::default();
 
-        // Scan runs: for each cell of `player`, scan 4 positive directions.
-        // Only count from the start of a run (predecessor != player).
+        // Scan runs: for each occupied cell, scan 4 positive directions.
+        // Only count from the start of a run (predecessor != same color).
         for r in 0..19i32 {
             for c in 0..19i32 {
-                if self.get(r, c) != player { continue; }
+                let cell = self.get(r, c);
+                if cell == Cell::Empty { continue; }
+                let stats = if cell == Cell::Black { &mut black } else { &mut white };
 
                 for &(dr, dc) in &dirs {
-                    // Skip if predecessor is same color (not start of run)
                     let pr = r - dr;
                     let pc = c - dc;
-                    if Self::in_bounds(pr, pc) && self.get(pr, pc) == player { continue; }
+                    if Self::in_bounds(pr, pc) && self.get(pr, pc) == cell { continue; }
 
-                    // Count consecutive
                     let mut count = 1i32;
                     let mut nr = r + dr;
                     let mut nc = c + dc;
-                    while Self::in_bounds(nr, nc) && self.get(nr, nc) == player {
+                    while Self::in_bounds(nr, nc) && self.get(nr, nc) == cell {
                         count += 1;
                         nr += dr;
                         nc += dc;
                     }
 
                     if count >= 5 {
-                        five_rows += 1;
+                        stats.five_rows += 1;
                         continue;
                     }
 
-                    // Check openness: before the run and after the run
                     let open_before = Self::in_bounds(pr, pc) && self.get(pr, pc) == Cell::Empty;
                     let open_after = Self::in_bounds(nr, nc) && self.get(nr, nc) == Cell::Empty;
 
                     match count {
                         4 => {
                             if open_before && open_after {
-                                open_fours += 1;
+                                stats.open_fours += 1;
                             } else if open_before || open_after {
-                                block_fours += 1;
+                                stats.block_fours += 1;
                             }
                         }
                         3 => {
                             if open_before && open_after {
-                                open_threes += 1;
+                                stats.open_threes += 1;
                             }
                         }
                         2 => {
                             if open_before && open_after {
-                                open_twos += 1;
+                                stats.open_twos += 1;
                             }
                         }
                         _ => {}
@@ -513,77 +559,46 @@ impl SearchBoard {
             }
         }
 
-        // Free threes: detect gap patterns _X_XX_ and _XX_X_ via sliding 6-cell window
+        // Free threes: detect gap patterns _X_XX_ and _XX_X_ via sliding
+        // 6-cell window, checked for both colors against the same read.
         for r in 0..19i32 {
             for c in 0..19i32 {
                 for &(dr, dc) in &dirs {
-                    // Check 6-cell window starting at (r,c)
                     let r5 = r + 5*dr;
                     let c5 = c + 5*dc;
                     if !Self::in_bounds(r5, c5) { continue; }
-                    // Only check in positive directions from valid starts
-                    if r < 0 || c < 0 { continue; }
 
-                    let g = |i: i32| -> Cell {
-                        self.get(r + i*dr, c + i*dc)
-                    };
+                    let w = [
+                        self.get(r, c),
+                        self.get(r + dr, c + dc),
+                        self.get(r + 2*dr, c + 2*dc),
+                        self.get(r + 3*dr, c + 3*dc),
+                        self.get(r + 4*dr, c + 4*dc),
+                        self.get(r5, c5),
+                    ];
+                    if w[0] != Cell::Empty || w[5] != Cell::Empty { continue; }
 
-                    // Pattern _X_XX_: cells [empty, player, empty, player, player, empty]
-                    if g(0) == Cell::Empty && g(1) == player && g(2) == Cell::Empty
-                        && g(3) == player && g(4) == player && g(5) == Cell::Empty
-                    {
-                        free_threes += 1;
-                    }
-                    // Pattern _XX_X_: cells [empty, player, player, empty, player, empty]
-                    if g(0) == Cell::Empty && g(1) == player && g(2) == player
-                        && g(3) == Cell::Empty && g(4) == player && g(5) == Cell::Empty
-                    {
-                        free_threes += 1;
+                    for (color, stats) in [(Cell::Black, &mut black), (Cell::White, &mut white)] {
+                        // _X_XX_
+                        if w[1] == color && w[2] == Cell::Empty && w[3] == color && w[4] == color {
+                            stats.free_threes += 1;
+                        }
+                        // _XX_X_
+                        if w[1] == color && w[2] == color && w[3] == Cell::Empty && w[4] == color {
+                            stats.free_threes += 1;
+                        }
                     }
                 }
             }
         }
 
-        let captures = self.captures[player as usize];
-
-        let mut score = 0i32;
-        score += five_rows * 80_001;
-        score += open_fours * 35_000;
-        score += block_fours * 7_000;
-        score += free_threes * 5_000;
-        score += open_threes * 100;
-        score += open_twos * 50;
-
-        score += match captures {
-            0 => 0,
-            1 => 5_000,
-            2 => 12_000,
-            3 => 25_000,
-            4 => 50_000,
-            _ => 50_000,
-        };
-
-        let total_threes = open_threes + free_threes;
-        if open_fours >= 2 { score += 40_000; }
-        if open_fours >= 1 && block_fours >= 1 { score += 35_000; }
-        if block_fours >= 2 { score += 30_000; }
-        if open_fours >= 1 && total_threes >= 1 { score += 30_000; }
-        if block_fours >= 1 && total_threes >= 1 { score += 20_000; }
-        if total_threes >= 2 { score += 15_000; }
-        if captures >= 4 && (block_fours >= 1 || open_fours >= 1) { score += 25_000; }
-
-        if is_active {
-            if open_fours >= 1 { score += 5_000; }
-            if block_fours >= 1 { score += 3_000; }
-            if captures >= 4 { score += 8_000; }
-        }
-
-        score
+        (black, white)
     }
 
     fn sb_heuristic_evaluation(&self) -> i32 {
-        let black_score = self.sb_evaluate_player(Cell::Black, self.current == Cell::Black);
-        let white_score = self.sb_evaluate_player(Cell::White, self.current == Cell::White);
+        let (black_pat, white_pat) = self.sb_scan_patterns();
+        let black_score = black_pat.score(self.captures[Cell::Black as usize], self.current == Cell::Black);
+        let white_score = white_pat.score(self.captures[Cell::White as usize], self.current == Cell::White);
         (black_score - white_score).clamp(-99_991, 99_991)
     }
 
