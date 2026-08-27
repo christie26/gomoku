@@ -812,7 +812,7 @@ impl SearchStats {
 
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
-const MAX_DEPTH: usize = 5;
+const MAX_DEPTH: usize = 6;
 const SHALLOW_ORDER_DEPTH: usize = 1;
 const RADIUS : usize = 2;
 
