@@ -589,7 +589,7 @@ impl SearchBoard {
 
     // ---- Candidate move generation ----
 
-    fn get_candidate_moves(&self) -> Vec<(usize, usize)> {
+    fn get_candidate_moves(&mut self, depth: usize) -> Vec<(usize, usize)> {
         // Empty board → center
         if self.total_stones == 0 {
             return vec![(9, 9)];
@@ -624,10 +624,24 @@ impl SearchBoard {
             moves.push((r, c));
         }
 
-        // Sort by move ordering heuristic
-        moves.sort_by_cached_key(|&(r, c)| {
-            std::cmp::Reverse(self.evaluate_position(r, c, self.current))
-        });
+        // Move ordering: near the root (depth <= SHALLOW_ORDER_DEPTH), play each
+        // candidate and score the resulting board with the full-board heuristic
+        // used at leaf nodes for the best ordering quality. Deeper nodes fall
+        // back to the cheap local evaluate_position, since the full-board scan
+        // per candidate is too expensive to afford at every node.
+        if depth <= SHALLOW_ORDER_DEPTH {
+            let mover = self.current;
+            moves.sort_by_cached_key(|&(r, c)| {
+                let undo = self.make_move(r, c);
+                let score = self.sb_heuristic_evaluation();
+                self.undo_move(&undo);
+                if mover == Cell::Black { -score } else { score }
+            });
+        } else {
+            moves.sort_by_cached_key(|&(r, c)| {
+                std::cmp::Reverse(self.evaluate_position(r, c, self.current))
+            });
+        }
 
         moves
     }
@@ -784,6 +798,7 @@ impl SearchStats {
 const MAX_VALUE: i32 = 100_000;
 const MIN_VALUE: i32 = -100_000;
 const MAX_DEPTH: usize = 5;
+const SHALLOW_ORDER_DEPTH: usize = 1;
 const RADIUS : usize = 2;
 
 pub const BOARD_SIZE: usize = 19;
@@ -847,7 +862,7 @@ fn sb_alphabeta(
         }
     }
 
-    let mut candidates = board.get_candidate_moves();
+    let mut candidates = board.get_candidate_moves(depth);
     stats.internal_nodes += 1;
     stats.total_children += candidates.len() as u64;
 
@@ -1005,7 +1020,7 @@ pub fn get_ai_move_with_stats(
     let mut board = SearchBoard::from_gomoku(state);
     let is_max_player = board.current == Cell::Black;
 
-    let candidates = board.get_candidate_moves();
+    let candidates = board.get_candidate_moves(0);
     let mut all_moves: Vec<(usize, usize, Option<i32>)> = candidates
         .into_iter()
         .map(|(r, c)| (r, c, None))
