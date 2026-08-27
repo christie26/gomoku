@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use rayon::prelude::*;
 
 use std::cmp::{max, min};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 // =====================================================================
@@ -707,6 +707,14 @@ impl ShardedTT {
     }
 }
 
+// Kept alive for the process lifetime so entries survive across turns —
+// most sub-positions from one turn's search recur in the next turn's tree.
+static GLOBAL_TT: OnceLock<ShardedTT> = OnceLock::new();
+
+fn shared_tt() -> &'static ShardedTT {
+    GLOBAL_TT.get_or_init(|| ShardedTT::new(14))
+}
+
 pub struct SearchStats {
     pub nodes_visited: u64,
     pub cutoffs: u64,
@@ -1169,7 +1177,7 @@ pub fn get_move_pv(state: &Gomoku, x: usize, y: usize) -> (Vec<(usize, usize)>, 
     let mut board = SearchBoard::from_gomoku(state);
     let is_max_player = board.current == Cell::Black;
     let max_depth = if board.move_count < 4 { 3 } else { MAX_DEPTH };
-    let tt = ShardedTT::new(14);
+    let tt = shared_tt();
 
     let undo = board.make_move(x, y);
 
@@ -1180,7 +1188,7 @@ pub fn get_move_pv(state: &Gomoku, x: usize, y: usize) -> (Vec<(usize, usize)>, 
         stats.max_depth = depth;
         let (value, child_pv) = sb_alphabeta(
             &mut board, MIN_VALUE, MAX_VALUE, !is_max_player,
-            1, depth, &mut stats, &tt,
+            1, depth, &mut stats, tt,
         );
         final_value = value;
         final_pv = child_pv;
@@ -1214,7 +1222,7 @@ pub fn get_ai_move_with_stats(
     let mut best_move: Option<(usize, usize, i32)> = None;
     let mut final_stats = SearchStats::new();
     let mut depth_times: Vec<(usize, f64, u64)> = Vec::new();
-    let tt = ShardedTT::new(14);
+    let tt = shared_tt();
 
     for depth in 1..=max_depth {
         let depth_start = Instant::now();
@@ -1246,7 +1254,7 @@ pub fn get_ai_move_with_stats(
 
             let undo = board.make_move(move_r, move_c);
             let (value, child_pv) = sb_alphabeta(
-                &mut board, alpha, beta, !is_max_player, 1, depth, &mut stats, &tt,
+                &mut board, alpha, beta, !is_max_player, 1, depth, &mut stats, tt,
             );
             board.undo_move(&undo);
 
@@ -1307,7 +1315,7 @@ pub fn get_ai_move_with_stats(
                             1,
                             depth,
                             &mut child_stats,
-                            &tt,
+                            tt,
                         );
                         if v > parent_alpha && v < parent_beta {
                             let r2 = sb_alphabeta(
@@ -1318,7 +1326,7 @@ pub fn get_ai_move_with_stats(
                                 1,
                                 depth,
                                 &mut child_stats,
-                                &tt,
+                                tt,
                             );
                             v = r2.0;
                             pv = r2.1;
@@ -1333,7 +1341,7 @@ pub fn get_ai_move_with_stats(
                             1,
                             depth,
                             &mut child_stats,
-                            &tt,
+                            tt,
                         );
                         if v < parent_beta && v > parent_alpha {
                             let r2 = sb_alphabeta(
@@ -1344,7 +1352,7 @@ pub fn get_ai_move_with_stats(
                                 1,
                                 depth,
                                 &mut child_stats,
-                                &tt,
+                                tt,
                             );
                             v = r2.0;
                             pv = r2.1;
