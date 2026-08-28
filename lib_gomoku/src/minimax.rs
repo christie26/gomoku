@@ -1228,6 +1228,26 @@ pub fn get_ai_move(
     (best, moves)
 }
 
+/// Same search as `get_ai_move`, plus the wall-clock time, node count and
+/// pruning percentage of the last completed iterative-deepening depth —
+/// for surfacing search performance in the UI.
+#[pyfunction]
+pub fn get_ai_move_stats(
+    _py: Python,
+    state: &Gomoku,
+) -> (
+    Option<(usize, usize, i32)>,
+    Vec<(usize, usize, Option<i32>)>,
+    f64,
+    u64,
+    f64,
+) {
+    let start = Instant::now();
+    let (best, moves, stats) = get_ai_move_with_stats(state);
+    let elapsed = start.elapsed().as_secs_f64();
+    (best, moves, elapsed, stats.nodes_visited, stats.pruning_percent())
+}
+
 #[pyfunction]
 pub fn get_hint(
     _py: Python,

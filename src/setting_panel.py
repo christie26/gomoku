@@ -149,7 +149,32 @@ class SettingsPanel:
         self.debug_checkbox.pack(anchor="w")
 
         # -------------------
-        # 4. Bottom area: Score/Hint (left) and Start/Undo/Redo (right)
+        # 4. AI Stats
+        # -------------------
+        ai_stats_frame = tk.Label(
+            self.setting_frame,
+            text="AI Stats",
+            padx=5,
+            pady=0,
+            font=(NAME_FONT, 16),
+            background=LIGHT_BACKGROUND,
+        )
+        ai_stats_frame.pack(pady=(15, 0), anchor="w")
+
+        self.ai_stats_value = tk.StringVar(value=self._format_ai_stats(None))
+
+        self.ai_stats_label = tk.Label(
+            self.setting_frame,
+            textvariable=self.ai_stats_value,
+            padx=5,
+            justify="left",
+            font=(NAME_FONT, 10),
+            background=LIGHT_BACKGROUND,
+        )
+        self.ai_stats_label.pack(anchor="w")
+
+        # -------------------
+        # 5. Bottom area: Score/Hint (left) and Start/Undo/Redo (right)
         # -------------------
         bottom_frame = tk.Frame(
             self.setting_frame, pady=20, background=LIGHT_BACKGROUND
@@ -225,6 +250,30 @@ class SettingsPanel:
 
     def update_score(self, score):
         self.score_value.set(str(score))
+
+    def _format_ai_stats(self, ai_stats):
+        if not ai_stats:
+            return "Time (s):  -\nNodes:     -\nPruned %:  -"
+
+        times = [s[0] for s in ai_stats]
+        nodes = [s[1] for s in ai_stats]
+        prunings = [s[2] for s in ai_stats]
+
+        def line(label, values, fmt):
+            mean = sum(values) / len(values)
+            return f"{label} avg {fmt(mean)}  min {fmt(min(values))}  max {fmt(max(values))}"
+
+        return "\n".join([
+            line("Time (s): ", times, lambda v: f"{v:.2f}"),
+            line("Nodes:    ", nodes, lambda v: f"{round(v):,}"),
+            line("Pruned %: ", prunings, lambda v: f"{v:.1f}"),
+        ])
+
+    def update_ai_stats(self, ai_stats):
+        self.ai_stats_value.set(self._format_ai_stats(ai_stats))
+
+    def reset_ai_stats(self):
+        self.ai_stats_value.set(self._format_ai_stats(None))
 
     def _on_debug_changed(self):
         value = self.debug_enabled.get()

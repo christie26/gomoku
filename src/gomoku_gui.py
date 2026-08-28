@@ -1,5 +1,5 @@
 import tkinter as tk
-from lib_gomoku import Gomoku, MoveResult, get_ai_move, heuristic_evaluation
+from lib_gomoku import Gomoku, MoveResult, get_ai_move, get_ai_move_stats, heuristic_evaluation
 import argparse
 import time
 import threading
@@ -19,6 +19,7 @@ class GomokuGUI:
         self.is_playing = False
         self.debug = True
         self.ai_thinking = False
+        self.ai_stats = []  # list of (elapsed_secs, nodes_visited, pruning_percent)
 
         # ===== MAIN LAYOUT =====
         self.main_frame = tk.Frame(
@@ -140,7 +141,9 @@ class GomokuGUI:
 
         self.is_playing = True
         self.canvas.reset_board(self.is_playing)
+        self.ai_stats = []
         self.setting_panel.reset_panel(self.is_playing)
+        self.setting_panel.reset_ai_stats()
         self.score_bar.update_score(0)
         self.player_frames["X"].reset_panel()
         self.player_frames["O"].reset_panel()
@@ -161,7 +164,7 @@ class GomokuGUI:
         self.update_undo_redo_buttons()
 
         def run_ai():
-            mv, moves = get_ai_move(self.game)
+            mv, moves, elapsed, nodes, pruning = get_ai_move_stats(self.game)
 
             def apply_move():
                 self.ai_thinking = False
@@ -174,6 +177,8 @@ class GomokuGUI:
                         selected = x == x1 and y == y1
                         if self.debug:
                             self.canvas.draw_possible_stone(y1, x1, "O", score1, selected)
+                    self.ai_stats.append((elapsed, nodes, pruning))
+                    self.setting_panel.update_ai_stats(self.ai_stats)
                     self.play_one_turn(x, y)
                 self.update_undo_redo_buttons()
 
