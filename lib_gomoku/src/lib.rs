@@ -147,10 +147,8 @@ fn classify(
     if contig_total == 5 && center_stone != 0 {
         Some(PatternKind::FiveRow)
     } else if contig_total == 4 && center_stone != 0 && plus.empty_count > 0 && minus.empty_count > 0 {
-        // 기준 돌이 내 돌이고, 이어진 돌이 4개이며, 양쪽에 최소 한개의 빈칸이 있을 때 
         Some(PatternKind::OpenFour)
     } else if contig_total == 4 && (plus.end_open || minus.end_open) {
-        // 한쪽 끝만 넓게 열려 있으면 total==4 && empty==1 조건을 못 맞추므로 별도로 잡는다.
         Some(PatternKind::BlockFour)
     } else if total == 4 && empty == 1 {
         Some(PatternKind::BlockFour)
@@ -165,7 +163,6 @@ fn classify(
     }
 }
 
-// 패턴의 실제 좌표 범위: FiveRow는 이미 꽉 찼으니 contig만, 나머지는 열린 끝의 reach 칸까지 포함한다.
 fn build_pattern_range(
     kind: PatternKind,
     dx: i32,
@@ -177,7 +174,20 @@ fn build_pattern_range(
 ) -> Pattern {
     let (lower, upper) = if kind == PatternKind::FiveRow {
         (-minus.contig_my, plus.contig_my)
-    } else {
+    } else if kind == PatternKind::BlockFour {
+        if plus.end_open {
+            (
+                -(minus.total_my + minus.empty_count + 1),
+                plus.total_my + plus.empty_count,
+            )
+        } else {
+          (
+                -(minus.total_my + minus.empty_count),
+                plus.total_my + plus.empty_count + 1,
+            )
+        }
+    }
+    else {
         (
             -(minus.total_my + minus.empty_count),
             plus.total_my + plus.empty_count,
@@ -613,14 +623,6 @@ impl Gomoku {
             self.register(PatternKind::FreeThree, &player, pattern);
         }
 
-        // open_two(total==2)만 따로 처리한다: classify()의 plus.empty_count>0 체크에
-        // plus_toward_anchor를 그대로 넘기면, 캡처로 생긴 두 칸이 항상 empty_count에 +2로
-        // 얹혀 있어서 anchor 저편이 완전히 막혀 있어도 무조건 "열림"으로 통과해버린다.
-        // 그러면 벽을 anchor 쪽에 두느냐 mover 쪽에 두느냐에 따라(둘은 좌우 대칭인 같은 모양인데도)
-        // 결과가 달라지는 비대칭이 생긴다. 그래서 열림 판정만은 캡처 두 칸을 빼고 순수하게
-        // anchor 저편(beyond_anchor)/mover 저편(minus_away) 각각의 empty로 판단한다.
-        // range의 실제 폭 계산(build_pattern_range)에는 캡처 두 칸이 그대로 들어가야 하므로
-        // plus_toward_anchor는 그대로 쓴다.
         if beyond_anchor.total_my + minus_away.total_my + 1 == 2 {
             if beyond_anchor.empty_count > 0 && minus_away.empty_count > 0 {
                 let pattern = build_pattern_range(PatternKind::OpenTwo, dx, dy, mover_x, mover_y, &plus_toward_anchor, &minus_away);
@@ -745,29 +747,7 @@ impl Gomoku {
         MoveResult::Valid
     }
 
-    // pub fn handle_move_simple_ruleset(&mut self, x: i32, y: i32) -> (MoveResult, i32) {
-    //     let result = self.is_valid_move_simple_ruleset(x, y);
-    //     let capture_count = 0;
-    //
-    //     if result == MoveResult::Valid {
-    //         self.current_move = Some((x, y));
-    //         self.move_count += 1;
-    //         self.board[x as usize][y as usize] = self.current_player.clone();
-    //
-    //         // self.remove_free_three(x, y, &self.opponent_player.clone());
-    //         self.remove_opens(x, y);
-    //
-    //         // self.add_free_threes(
-    //         //     self.get_free_threes_from_move(x, y),
-    //         //     &self.current_player.clone(),
-    //         // );
-    //         self.add_opens_from_move(x, y);
-    //
-    //         // capture_count = self.capture_center(x, y);
-    //     }
-    //
-    //     (result, capture_count)
-    // }
+
 
     pub fn handle_move(&mut self, x: i32, y: i32)
         -> (MoveResult, i32, Vec<(i32, i32)>)
@@ -1454,6 +1434,64 @@ mod tests {
             black_patterns(&game).open_two.contains(&vertical_expected),
             "(5,6)을 지나는 세로 open_two가 있어야 함: {:?}",
             black_patterns(&game).open_two
+        );
+    }
+
+    #[test]
+    fn block_four_becomes_open_four_after_blocking_stone_is_captured() {
+        // (5,5)-(5,8)에 Black 4개가 이어져 있고, 한쪽 끝 (5,9)를 White가 막아 block_four로
+        // 등록된다. 그 White(5,9)는 (6,9) White와 세로 쌍을 이루고 있어서, 나중에 (4,9)
+        // Black 앵커를 기준으로 (7,9)에 착수하면 세로 캡처로 (5,9)/(6,9)가 모두 사라진다.
+        // (5,9)가 비면 가로 4개는 양끝이 열려야 하므로 block_four -> open_four로 바뀌어야
+        // 하는데, remove_patterns_at은 캡처로 지워진 칸이 "패턴 좌표 목록에 들어있을 때만"
+        // 재계산한다. block_four의 저장 범위는 막는 White 돌 칸(5,9)을 애초에 포함하지
+        // 않으므로 이 캡처는 그 패턴을 절대 못 찾고, block_four가 낡은 채로 남는다.
+        let mut game = Gomoku::new(19);
+        place(&mut game, Stone::White, 5, 9);
+        place(&mut game, Stone::White, 6, 9);
+        place(&mut game, Stone::Black, 4, 9);
+        place(&mut game, Stone::Black, 5, 5);
+        place(&mut game, Stone::Black, 5, 6);
+        place(&mut game, Stone::Black, 5, 7);
+        place(&mut game, Stone::Black, 5, 8);
+
+        let blocked = black_patterns(&game).clone();
+        assert!(
+            !blocked.block_four.is_empty(),
+            "(5,9) White가 막고 있으니 우선 block_four로 등록돼야 함: {:?}",
+            blocked
+        );
+        assert!(
+            blocked.open_four.is_empty(),
+            "이 시점엔 아직 열린 사가 아니어야 함: {:?}",
+            blocked.open_four
+        );
+
+        place(&mut game, Stone::Black, 7, 9); // (4,9)-(7,9) 세로 캡처, (5,9)/(6,9) 제거
+
+        assert_eq!(game.board[5][9], Stone::Empty, "캡처로 (5,9)가 비어야 함");
+        assert_eq!(game.board[6][9], Stone::Empty, "캡처로 (6,9)가 비어야 함");
+
+        let row5_four: Pattern = vec![(5, 5), (5, 6), (5, 7), (5, 8)];
+        let after = black_patterns(&game);
+        let stale_block_four = after
+            .block_four
+            .iter()
+            .any(|p| row5_four.iter().all(|cell| p.contains(cell)));
+        assert!(
+            !stale_block_four,
+            "(5,9)를 캡처로 열었으니 (5,5)-(5,8) 네 칸은 더 이상 block_four가 아니어야 함: {:?}",
+            after.block_four
+        );
+
+        let promoted_to_open_four = after
+            .open_four
+            .iter()
+            .any(|p| row5_four.iter().all(|cell| p.contains(cell)));
+        assert!(
+            promoted_to_open_four,
+            "양끝이 열렸으니 (5,5)-(5,8) 네 칸은 open_four로 등록돼야 함: {:?}",
+            after.open_four
         );
     }
 }
