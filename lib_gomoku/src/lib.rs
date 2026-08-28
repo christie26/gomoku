@@ -564,71 +564,31 @@ impl Gomoku {
     }
 
     fn apply_capture(&mut self, x0: i32, y0: i32, dx: i32, dy: i32) -> Vec<(i32, i32)> {
-        let z = zobrist();
-        let opp_idx = if self.opponent_player == Stone::Black { 0 } else { 1 };
         let mut removed = Vec::new();
         for i in 1..3 {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
-            // XOR out removed opponent stone
             removed.push((x, y));
-            self.hash ^= z.board[x as usize * 19 + y as usize][opp_idx];
-            self.board[x as usize][y as usize] = Stone::Empty;
-
-            self.remove_patterns_at(x, y);
-        }
-
-        self.add_patterns_for_capture_axis(x0, y0, dx, dy);
-
-        for i in 1..3 {
-            let x = x0 + dx * i;
-            let y = y0 + dy * i;
-
-            self.add_patterns_for_capture_off_axis(x, y, dx, dy);
+            self.remove_stone(x, y);
         }
 
         removed
     }
 
-    // 캡처 라인 위의 패턴을 mover 기준 하나의 계산으로 합친다. mover 쪽(반대편)은 그냥
-    // 평범하게 스캔하고, anchor 쪽은 "캡처로 빈 두 칸 + anchor부터 이어지는 스캔"을 합성해서
-    // scan_line의 2칸-cap 때문에 anchor 너머를 못 보는 문제를 피한다.
-    fn add_patterns_for_capture_axis(&mut self, mover_x: i32, mover_y: i32, dx: i32, dy: i32) {
-        let player = self.current_player;
-
-        let near_anchor_x = mover_x + dx * 2;
-        let near_anchor_y = mover_y + dy * 2;
-        // near_anchor에서 anchor 방향으로 스캔하면 i=1이 정확히 anchor 자신이라 hole 없이
-        // anchor부터 그 너머까지 정확하게 본다.
-        let beyond_anchor = self.scan_line(1, dx, dy, near_anchor_x, near_anchor_y);
-
-        let plus_toward_anchor = LineScan {
-            contig_my: 0,
-            end_open: beyond_anchor.end_open,
-            total_my: beyond_anchor.total_my,
-            empty_count: 2 + beyond_anchor.empty_count,
-            hole: true,
+    // 돌 하나를 제거하면서, 그로 인해 사라지는 패턴(remove_patterns_at)과
+    // 4방향 모두에서 새로 생기는 패턴(add_patterns_for_capture)을 함께 처리한다.
+    fn remove_stone(&mut self, x: i32, y: i32) {
+        let z = zobrist();
+        let color_idx = match self.board[x as usize][y as usize] {
+            Stone::Black => 0,
+            Stone::White => 1,
+            Stone::Empty => return,
         };
-        let minus_away = self.scan_line(-1, dx, dy, mover_x, mover_y);
+        self.hash ^= z.board[x as usize * 19 + y as usize][color_idx];
+        self.board[x as usize][y as usize] = Stone::Empty;
 
-        if let Some(pattern) = free_three_for_move(dx, dy, mover_x, mover_y, &plus_toward_anchor, &minus_away) {
-            self.register(PatternKind::FreeThree, &player, pattern);
-        }
-
-        if beyond_anchor.total_my + minus_away.total_my + 1 == 2 {
-            if beyond_anchor.empty_count > 0 && minus_away.empty_count > 0 {
-                let pattern = build_pattern_range(PatternKind::OpenTwo, dx, dy, mover_x, mover_y, &plus_toward_anchor, &minus_away);
-                self.register(PatternKind::OpenTwo, &player, pattern);
-            }
-            return;
-        }
-
-        let Some(kind) = classify(&plus_toward_anchor, &minus_away, 1) else {
-            return;
-        };
-
-        let pattern = build_pattern_range(kind, dx, dy, mover_x, mover_y, &plus_toward_anchor, &minus_away);
-        self.register(kind, &player, pattern);
+        self.remove_patterns_at(x, y);
+        self.add_patterns_for_capture(x, y);
     }
 
     fn update_patterns_for_move(&mut self, x: i32, y: i32) {
@@ -658,30 +618,30 @@ impl Gomoku {
         }
     }
 
-    fn add_patterns_for_capture_off_axis(&mut self, x0: i32, y0: i32, capture_dx: i32, capture_dy: i32) {
+    fn add_patterns_for_capture(&mut self, x0: i32, y0: i32) {
         let player = self.current_player;
         let directions = [(1, -1), (1, 0), (1, 1), (0, 1)];
 
         for (dx, dy) in directions {
-            if (dx, dy) == (capture_dx, capture_dy) || (dx, dy) == (-capture_dx, -capture_dy) {
-                continue;
-            }
-
             let plus = self.scan_line(1, dx, dy, x0, y0);
             let minus = self.scan_line(-1, dx, dy, x0, y0);
 
             for pattern in free_three_for_capture(dx, dy, x0, y0, &plus, &minus) {
                 self.register(PatternKind::FreeThree, &player, pattern);
             }
-
+            
             let Some(kind) = classify(&plus, &minus, 0)
             else {
-                continue;
+              continue;
             };
+            // println!("({},{})-direction:({},{})========",x0, y0, dx, dy);
+            // println!("plus: {:#?}",plus);
+            // println!("minus: {:#?}",minus);
 
             let pattern = build_pattern_range(kind, dx, dy, x0, y0, &plus, &minus);
             self.register(kind, &player, pattern);
         }
+        // println!("{},{} pattern after: {:#?}", x0, y0, self.patterns.get(&Stone::Black).unwrap());
     }
 
     fn remove_patterns_at(&mut self, x: i32, y: i32) {
