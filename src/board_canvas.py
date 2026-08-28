@@ -1,12 +1,13 @@
 import tkinter as tk
-from lib_gomoku import Gomoku, MoveResult, get_ai_move
-from screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, LIGHT_BACKGROUND, SELECT_BACKGROUND, BORDER_COLOR, LABEL_FONT, NAME_FONT
+from lib_gomoku import MoveResult
+from src.screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, LIGHT_BACKGROUND, SELECT_BACKGROUND, BORDER_COLOR, LABEL_FONT, NAME_FONT
 
 class BoardCanvas:
     def __init__(self, parent, canvas_size, on_click):
         self.canvas_size = canvas_size
         self.game = None
         self.is_playing = False
+        self.players = None
 
         self.canvas = tk.Canvas(
             parent,
@@ -179,7 +180,9 @@ class BoardCanvas:
 
     # ===== HOVER =====
     def handle_hover(self, event):
-        if self.is_playing:
+        if self.is_playing and (
+            not self.players or self.players[self.game.current_player].is_human
+        ):
             x = round((event.x - PADDING) / CELL_SIZE)
             y = round((event.y - PADDING) / CELL_SIZE)
 
@@ -261,6 +264,9 @@ class BoardCanvas:
 
     def set_game(self, game):
         self.game = game
+
+    def set_players(self, players):
+        self.players = players
 
     def show_capture(self, positions):
         """
