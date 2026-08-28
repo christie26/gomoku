@@ -108,6 +108,7 @@ impl MoveResult {
 type Position = (i32, i32);
 type Pattern = Vec<Position>;
 
+#[derive(Debug)]
 struct LineScan {
     contig_my: i32,
     end_open: bool,
@@ -247,9 +248,6 @@ impl Gomoku {
         self.scan_line_as(self.current_player, sign, dx, dy, x0, y0)
     }
 
-    // scan_line은 원래 self.current_player를 "나"로 취급했는데, 지금 수를 두는 사람과
-    // 재계산하려는 패턴 주인이 다를 수 있는 rescan_pattern에서는 그게 틀린 기준이 된다.
-    // 그래서 "나"를 명시적으로 받는 버전을 따로 두고, scan_line은 이걸 감싸기만 한다.
     fn scan_line_as(&self, me: Stone, sign: i32, dx: i32, dy: i32, x0: i32, y0: i32) -> LineScan {
         let opponent = match me {
             Stone::Black => Stone::White,
@@ -330,8 +328,6 @@ impl Gomoku {
         }
     }
 
-    // pos를 잃은 뒤에도 살아남은 돌 하나(anchor)를 기준으로 scan_line+classify를 다시 돌려
-    // 그 라인의 진짜 현재 모양을 재계산한다. 좌표 슬라이싱 추측이 아니라 board 실체를 읽는다.
     fn rescan_pattern(&self, pattern: &Pattern, pos: Position, player: &Stone) -> Option<(PatternKind, Pattern)> {
         if pattern.len() < 2 {
             return None;
@@ -540,7 +536,7 @@ impl Gomoku {
         for (dx, dy) in directions {
             if self.is_capture(x0, y0, dx, dy) {
                 let removed = self.apply_capture(x0, y0, dx, dy);
-                captured_positions.extend(removed); // 👈 핵심
+                captured_positions.extend(removed);
                 capture_count += 1;
             }
         }
@@ -582,12 +578,8 @@ impl Gomoku {
             self.remove_patterns_at(x, y);
         }
 
-        // 캡처 라인(dx,dy) 자체는 두 빈칸이 같은 라인 위에 있어서, 각 빈칸을 독립된 center로
-        // 스캔하면 서로 다른 range가 두 번 등록된다(register()의 dedup은 내용이 완전히 같을
-        // 때만 걸러줌). mover(x0,y0)를 새 돌처럼 취급해 이 라인만 한 번에 재구성한다.
         self.add_patterns_for_capture_axis(x0, y0, dx, dy);
 
-        // 캡처 라인이 아닌 나머지 방향은 두 빈칸에서 서로 다른 독립적인 라인이라 각자 스캔한다.
         for i in 1..3 {
             let x = x0 + dx * i;
             let y = y0 + dy * i;
@@ -666,8 +658,6 @@ impl Gomoku {
         }
     }
 
-    // 캡처로 빈 칸(x0,y0) 하나에서, 캡처가 일어난 축(capture_dx,capture_dy)을 제외한
-    // 나머지 3방향을 스캔한다. 캡처 축은 add_patterns_for_capture_axis가 따로 한 번에 처리한다.
     fn add_patterns_for_capture_off_axis(&mut self, x0: i32, y0: i32, capture_dx: i32, capture_dy: i32) {
         let player = self.current_player;
         let directions = [(1, -1), (1, 0), (1, 1), (0, 1)];
@@ -706,8 +696,6 @@ impl Gomoku {
         ];
         let mut pending: Vec<(Stone, PatternKind, Pattern)> = Vec::new();
 
-        // 1) READ: pos를 포함한 패턴마다, 살아남은 돌 기준으로 현재 모양을 다시 계산해둔다.
-        //    (self.patterns를 불변으로만 빌리므로 아래 retain의 가변 대여와 안 겹친다)
         for player in [Stone::Black, Stone::White] {
             for kind in KINDS {
                 for pattern in self.patterns_ref(kind, &player) {
@@ -721,14 +709,12 @@ impl Gomoku {
             }
         }
 
-        // 2) MUTATE: pos를 포함했던 패턴은 전부 제거한다 (대체본은 pending에 이미 있음).
         for player in [Stone::Black, Stone::White] {
             for kind in KINDS {
                 self.patterns_mut(kind, &player).retain(|pattern| !pattern.contains(&pos));
             }
         }
 
-        // 3) APPLY: 재계산된 패턴을 등록한다.
         for (player, kind, pattern) in pending {
             self.register(kind, &player, pattern);
         }
