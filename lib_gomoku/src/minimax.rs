@@ -799,10 +799,11 @@ impl SearchBoard {
         for r in 0..19usize {
             for c in 0..19usize {
                 if self.cells[r][c] != Cell::Empty {
-                    let r_start = r.saturating_sub(RADIUS);
-                    let r_end = (r + RADIUS + 1).min(19);
-                    let c_start = c.saturating_sub(RADIUS);
-                    let c_end = (c + RADIUS + 1).min(19);
+                    let radius = if depth >= DEEP_RADIUS_DEPTH { DEEP_RADIUS } else { RADIUS };
+                    let r_start = r.saturating_sub(radius);
+                    let r_end = (r + radius + 1).min(19);
+                    let c_start = c.saturating_sub(radius);
+                    let c_end = (c + radius + 1).min(19);
                     for rr in r_start..r_end {
                         for cc in c_start..c_end {
                             seen[rr * 19 + cc] = true;
@@ -999,6 +1000,9 @@ const MIN_VALUE: i32 = -100_000;
 const MAX_DEPTH: usize = 6;
 const SHALLOW_ORDER_DEPTH: usize = 1;
 const RADIUS : usize = 2;
+// From this ply (inclusive) onward, shrink candidate-move radius to DEEP_RADIUS.
+const DEEP_RADIUS_DEPTH: usize = 3;
+const DEEP_RADIUS: usize = 1;
 
 /// Wall-clock budget for the iterative-deepening search in
 /// `get_ai_move_with_stats`/`get_move_pv`. `Some(ms)` aborts an in-progress
