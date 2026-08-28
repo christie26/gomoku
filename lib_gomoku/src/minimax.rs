@@ -46,9 +46,12 @@ struct SearchBoard {
     move_count: usize,
     last_move: Option<(usize, usize)>,
     total_stones: usize,
+    // Incrementally maintained by make_move/undo_move — see sb_local_patterns.
+    black_patterns: PatternCounts,
+    white_patterns: PatternCounts,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy, Debug, PartialEq)]
 struct PatternCounts {
     five_rows: i32,
     open_fours: i32,
@@ -58,7 +61,51 @@ struct PatternCounts {
     free_threes: i32,
 }
 
+impl std::ops::Sub for PatternCounts {
+    type Output = PatternCounts;
+    fn sub(self, other: PatternCounts) -> PatternCounts {
+        PatternCounts {
+            five_rows: self.five_rows - other.five_rows,
+            open_fours: self.open_fours - other.open_fours,
+            block_fours: self.block_fours - other.block_fours,
+            open_threes: self.open_threes - other.open_threes,
+            open_twos: self.open_twos - other.open_twos,
+            free_threes: self.free_threes - other.free_threes,
+        }
+    }
+}
+
+/// Which PatternCounts bucket a run-start classifies into.
+#[derive(Clone, Copy)]
+enum RunField {
+    Five,
+    OpenFour,
+    BlockFour,
+    OpenThree,
+    OpenTwo,
+}
+
 impl PatternCounts {
+    /// Add `delta` scaled by `sign` (1 to apply a move, -1 to undo it).
+    fn apply_delta(&mut self, delta: &PatternCounts, sign: i32) {
+        self.five_rows += delta.five_rows * sign;
+        self.open_fours += delta.open_fours * sign;
+        self.block_fours += delta.block_fours * sign;
+        self.open_threes += delta.open_threes * sign;
+        self.open_twos += delta.open_twos * sign;
+        self.free_threes += delta.free_threes * sign;
+    }
+
+    fn bump(&mut self, field: RunField, amount: i32) {
+        match field {
+            RunField::Five => self.five_rows += amount,
+            RunField::OpenFour => self.open_fours += amount,
+            RunField::BlockFour => self.block_fours += amount,
+            RunField::OpenThree => self.open_threes += amount,
+            RunField::OpenTwo => self.open_twos += amount,
+        }
+    }
+
     fn score(&self, captures: i32, is_active: bool) -> i32 {
         let mut score = 0i32;
         score += self.five_rows * 80_001;
@@ -106,6 +153,8 @@ struct UndoInfo {
     old_move_count: usize,
     old_last_move: Option<(usize, usize)>,
     old_total_stones: usize,
+    delta_black: PatternCounts,
+    delta_white: PatternCounts,
 }
 
 const ALL_DIRS: [(i32, i32); 8] = [
@@ -134,7 +183,7 @@ impl SearchBoard {
         let cap_b = *g.capture_count.get(&Stone::Black).unwrap_or(&0);
         let cap_w = *g.capture_count.get(&Stone::White).unwrap_or(&0);
         let last_move = g.current_move.map(|(x, y)| (x as usize, y as usize));
-        SearchBoard {
+        let mut board = SearchBoard {
             cells,
             current,
             opponent: current.opponent(),
@@ -143,7 +192,13 @@ impl SearchBoard {
             move_count: g.move_count,
             last_move,
             total_stones,
-        }
+            black_patterns: PatternCounts::default(),
+            white_patterns: PatternCounts::default(),
+        };
+        let (black_patterns, white_patterns) = board.sb_scan_patterns();
+        board.black_patterns = black_patterns;
+        board.white_patterns = white_patterns;
+        board
     }
 
     #[inline]
@@ -163,6 +218,10 @@ impl SearchBoard {
         let old_move_count = self.move_count;
         let old_last_move = self.last_move;
         let old_total_stones = self.total_stones;
+
+        // Snapshot local pattern contributions around (r,c) before any mutation.
+        // Used by the fast incremental path below when this move captures nothing.
+        let (before_b, before_w) = self.sb_local_patterns(r as i32, c as i32);
 
         // Place stone
         self.cells[r][c] = self.current;
@@ -212,6 +271,21 @@ impl SearchBoard {
         self.current = self.opponent;
         self.opponent = tmp;
 
+        // Update incrementally maintained pattern counts. A non-capturing move
+        // only ever changes patterns in the placed stone's own neighborhood, so
+        // diffing a local rescan before/after is enough. Captures can reopen
+        // lines far from (r,c) (each removed stone affects its own neighborhood),
+        // so that rarer path falls back to a full rescan instead.
+        let (delta_black, delta_white) = if num_captured == 0 {
+            let (after_b, after_w) = self.sb_local_patterns(r as i32, c as i32);
+            (after_b - before_b, after_w - before_w)
+        } else {
+            let (new_black, new_white) = self.sb_scan_patterns();
+            (new_black - self.black_patterns, new_white - self.white_patterns)
+        };
+        self.black_patterns.apply_delta(&delta_black, 1);
+        self.white_patterns.apply_delta(&delta_white, 1);
+
         UndoInfo {
             placed: (r, c),
             _placed_player: tmp, // the player who made the move
@@ -222,6 +296,8 @@ impl SearchBoard {
             old_move_count,
             old_last_move,
             old_total_stones,
+            delta_black,
+            delta_white,
         }
     }
 
@@ -230,6 +306,9 @@ impl SearchBoard {
         let tmp = self.current;
         self.current = self.opponent;
         self.opponent = tmp;
+
+        self.black_patterns.apply_delta(&info.delta_black, -1);
+        self.white_patterns.apply_delta(&info.delta_white, -1);
 
         // Remove placed stone
         let (r, c) = info.placed;
@@ -496,6 +575,112 @@ impl SearchBoard {
 
     // ---- Heuristic evaluation ----
 
+    /// Classify the run starting at (r,c) along (dr,dc), if (r,c) is a run
+    /// start (its predecessor along -dir isn't the same color). Mirrors the
+    /// run-scan branch of sb_scan_patterns for a single position.
+    fn sb_classify_run(&self, r: i32, c: i32, dr: i32, dc: i32) -> Option<(Cell, RunField)> {
+        if !Self::in_bounds(r, c) { return None; }
+        let cell = self.get(r, c);
+        if cell == Cell::Empty { return None; }
+
+        let pr = r - dr;
+        let pc = c - dc;
+        if Self::in_bounds(pr, pc) && self.get(pr, pc) == cell { return None; }
+
+        let mut count = 1i32;
+        let mut nr = r + dr;
+        let mut nc = c + dc;
+        while Self::in_bounds(nr, nc) && self.get(nr, nc) == cell {
+            count += 1;
+            nr += dr;
+            nc += dc;
+        }
+
+        if count >= 5 {
+            return Some((cell, RunField::Five));
+        }
+
+        let open_before = Self::in_bounds(pr, pc) && self.get(pr, pc) == Cell::Empty;
+        let open_after = Self::in_bounds(nr, nc) && self.get(nr, nc) == Cell::Empty;
+
+        let field = match count {
+            4 if open_before && open_after => RunField::OpenFour,
+            4 if open_before || open_after => RunField::BlockFour,
+            3 if open_before && open_after => RunField::OpenThree,
+            2 if open_before && open_after => RunField::OpenTwo,
+            _ => return None,
+        };
+        Some((cell, field))
+    }
+
+    /// Classify the free-three gap window starting at (r,c) along (dr,dc), if any.
+    /// Mirrors the free-three-scan branch of sb_scan_patterns for a single window.
+    fn sb_classify_window(&self, r: i32, c: i32, dr: i32, dc: i32) -> Option<Cell> {
+        if !Self::in_bounds(r, c) { return None; }
+        let r5 = r + 5 * dr;
+        let c5 = c + 5 * dc;
+        if !Self::in_bounds(r5, c5) { return None; }
+
+        let w = [
+            self.get(r, c),
+            self.get(r + dr, c + dc),
+            self.get(r + 2 * dr, c + 2 * dc),
+            self.get(r + 3 * dr, c + 3 * dc),
+            self.get(r + 4 * dr, c + 4 * dc),
+            self.get(r5, c5),
+        ];
+        if w[0] != Cell::Empty || w[5] != Cell::Empty { return None; }
+
+        for color in [Cell::Black, Cell::White] {
+            if w[1] == color && w[2] == Cell::Empty && w[3] == color && w[4] == color {
+                return Some(color);
+            }
+            if w[1] == color && w[2] == color && w[3] == Cell::Empty && w[4] == color {
+                return Some(color);
+            }
+        }
+        None
+    }
+
+    /// Sum of pattern contributions from every run-start and free-three window
+    /// that could possibly involve board position (ar,ac), given the current
+    /// board contents. Used to diff before/after a single-cell change (a plain
+    /// move, with no captures) instead of rescanning the whole board.
+    ///
+    /// Bounds: a same-color run through (ar,ac) can only extend up to 4 cells
+    /// either side before hitting a run of length >=5 — which can't pre-exist
+    /// for the color being placed, since make_move is never called on a board
+    /// where the mover already has a five-in-a-row (that's caught by
+    /// is_terminal() first). So k in -1..=4 covers every run-start whose
+    /// classification could change; k in 0..=5 covers every 6-cell window
+    /// that could contain (ar,ac).
+    fn sb_local_patterns(&self, ar: i32, ac: i32) -> (PatternCounts, PatternCounts) {
+        let dirs: [(i32, i32); 4] = [(1, 0), (0, 1), (1, 1), (1, -1)];
+        let mut black = PatternCounts::default();
+        let mut white = PatternCounts::default();
+
+        for &(dr, dc) in &dirs {
+            for k in -1..=4i32 {
+                let r = ar - k * dr;
+                let c = ac - k * dc;
+                if let Some((cell, field)) = self.sb_classify_run(r, c, dr, dc) {
+                    let stats = if cell == Cell::Black { &mut black } else { &mut white };
+                    stats.bump(field, 1);
+                }
+            }
+            for k in 0..=5i32 {
+                let r = ar - k * dr;
+                let c = ac - k * dc;
+                if let Some(color) = self.sb_classify_window(r, c, dr, dc) {
+                    let stats = if color == Cell::Black { &mut black } else { &mut white };
+                    stats.free_threes += 1;
+                }
+            }
+        }
+
+        (black, white)
+    }
+
     /// Scan the board once and tally Black's and White's pattern counts
     /// together, instead of scanning per color, to halve the number of
     /// full-board passes needed for evaluation.
@@ -596,9 +781,8 @@ impl SearchBoard {
     }
 
     fn sb_heuristic_evaluation(&self) -> i32 {
-        let (black_pat, white_pat) = self.sb_scan_patterns();
-        let black_score = black_pat.score(self.captures[Cell::Black as usize], self.current == Cell::Black);
-        let white_score = white_pat.score(self.captures[Cell::White as usize], self.current == Cell::White);
+        let black_score = self.black_patterns.score(self.captures[Cell::Black as usize], self.current == Cell::Black);
+        let white_score = self.white_patterns.score(self.captures[Cell::White as usize], self.current == Cell::White);
         (black_score - white_score).clamp(-99_991, 99_991)
     }
 
@@ -1243,4 +1427,89 @@ pub fn get_ai_move_with_stats(
 
     final_stats.depth_times = depth_times;
     (best_move, all_moves, final_stats)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Small self-contained PRNG so the test doesn't need the `rand` crate.
+    struct TestRng(u64);
+    impl TestRng {
+        fn next_u64(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            self.0 = x;
+            x
+        }
+        fn next_usize(&mut self, bound: usize) -> usize {
+            (self.next_u64() % bound as u64) as usize
+        }
+    }
+
+    fn empty_board() -> SearchBoard {
+        SearchBoard {
+            cells: [[Cell::Empty; 19]; 19],
+            current: Cell::Black,
+            opponent: Cell::White,
+            captures: [0, 0, 0],
+            hash: 0,
+            move_count: 0,
+            last_move: None,
+            total_stones: 0,
+            black_patterns: PatternCounts::default(),
+            white_patterns: PatternCounts::default(),
+        }
+    }
+
+    fn assert_patterns_match(board: &SearchBoard, ctx: &str) {
+        let (black, white) = board.sb_scan_patterns();
+        assert_eq!(board.black_patterns, black, "black patterns mismatch: {ctx}");
+        assert_eq!(board.white_patterns, white, "white patterns mismatch: {ctx}");
+    }
+
+    /// Incrementally maintained black_patterns/white_patterns must always equal
+    /// a from-scratch sb_scan_patterns() — this is the invariant the fast path in
+    /// make_move relies on. Random-play both colors, including whatever captures
+    /// happen to occur, and check after every move and after undoing every move.
+    #[test]
+    fn incremental_patterns_match_full_rescan_over_random_games() {
+        let mut rng = TestRng(0xC0FFEE_u64);
+        for game in 0..30usize {
+            let mut board = empty_board();
+            let mut undos = Vec::new();
+
+            loop {
+                let empties: Vec<(usize, usize)> = (0..19usize)
+                    .flat_map(|r| (0..19usize).map(move |c| (r, c)))
+                    .filter(|&(r, c)| board.cells[r][c] == Cell::Empty)
+                    .collect();
+                if empties.is_empty() {
+                    break;
+                }
+                let (r, c) = empties[rng.next_usize(empties.len())];
+
+                let undo = board.make_move(r, c);
+                assert_patterns_match(&board, &format!("game {game} move {} at ({r},{c})", undos.len()));
+                undos.push(undo);
+
+                // Real search never calls make_move again once a side has won —
+                // is_terminal() is always checked first. Mirror that here since
+                // the incremental path assumes the mover never already owns a
+                // pre-existing five-in-a-row of their own color.
+                if board.get_winner().is_some() {
+                    break;
+                }
+            }
+
+            while let Some(undo) = undos.pop() {
+                board.undo_move(&undo);
+                assert_patterns_match(&board, &format!("game {game} after undoing move {}", undos.len()));
+            }
+            assert_eq!(board.black_patterns, PatternCounts::default());
+            assert_eq!(board.white_patterns, PatternCounts::default());
+        }
+    }
 }
