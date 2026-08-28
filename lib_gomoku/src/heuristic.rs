@@ -1,3 +1,11 @@
+use crate::constants::{
+    CAPTURE_BONUS_1, CAPTURE_BONUS_2, CAPTURE_BONUS_3, CAPTURE_BONUS_4_PLUS,
+    COMBO_BLOCK_FOUR_AND_THREE, COMBO_CAPTURE_AND_FOUR, COMBO_DOUBLE_BLOCK_FOUR,
+    COMBO_DOUBLE_OPEN_FOUR, COMBO_DOUBLE_THREE, COMBO_OPEN_AND_BLOCK_FOUR,
+    COMBO_OPEN_FOUR_AND_THREE, HEURISTIC_EVAL_CLAMP, TEMPO_BLOCK_FOUR, TEMPO_CAPTURE,
+    TEMPO_OPEN_FOUR, WEIGHT_BLOCK_FOUR, WEIGHT_FIVE, WEIGHT_FREE_THREE, WEIGHT_OPEN_FOUR,
+    WEIGHT_OPEN_THREE, WEIGHT_OPEN_TWO,
+};
 use crate::{Gomoku, Stone};
 use pyo3::prelude::*;
 
@@ -15,22 +23,22 @@ fn evaluate_player(state: &Gomoku, player: &Stone, is_active: bool) -> i32 {
     let mut score = 0i32;
 
     // --- Base pattern scores ---
-    score += five_rows * 80_001;
-    score += open_fours * 35_000;
-    score += block_fours * 7_000;
-    score += free_threes * 5_000;
-    score += open_threes * 100;
-    score += open_twos * 50;
+    score += five_rows * WEIGHT_FIVE;
+    score += open_fours * WEIGHT_OPEN_FOUR;
+    score += block_fours * WEIGHT_BLOCK_FOUR;
+    score += free_threes * WEIGHT_FREE_THREE;
+    score += open_threes * WEIGHT_OPEN_THREE;
+    score += open_twos * WEIGHT_OPEN_TWO;
 
     // --- Non-linear capture scaling ---
     // Each capture pair gets progressively more dangerous as you approach 5 (win)
     score += match captures {
         0 => 0,
-        1 => 5_000,
-        2 => 12_000,
-        3 => 25_000,
-        4 => 50_000,
-        _ => 50_000,
+        1 => CAPTURE_BONUS_1,
+        2 => CAPTURE_BONUS_2,
+        3 => CAPTURE_BONUS_3,
+        4 => CAPTURE_BONUS_4_PLUS,
+        _ => CAPTURE_BONUS_4_PLUS,
     };
 
     // --- Double-threat detection ---
@@ -38,39 +46,39 @@ fn evaluate_player(state: &Gomoku, player: &Stone, is_active: bool) -> i32 {
     let total_threes = open_threes + free_threes;
 
     if open_fours >= 2 {
-        score += 40_000; // Two open fours = unstoppable
+        score += COMBO_DOUBLE_OPEN_FOUR; // Two open fours = unstoppable
     }
     if open_fours >= 1 && block_fours >= 1 {
-        score += 35_000; // Open four + block four = can't address both
+        score += COMBO_OPEN_AND_BLOCK_FOUR; // Open four + block four = can't address both
     }
     if block_fours >= 2 {
-        score += 30_000; // Two block fours = opponent can only block one
+        score += COMBO_DOUBLE_BLOCK_FOUR; // Two block fours = opponent can only block one
     }
     if open_fours >= 1 && total_threes >= 1 {
-        score += 30_000; // Open four + three = overwhelming
+        score += COMBO_OPEN_FOUR_AND_THREE; // Open four + three = overwhelming
     }
     if block_fours >= 1 && total_threes >= 1 {
-        score += 20_000; // Block four + three = force block, then threaten with three
+        score += COMBO_BLOCK_FOUR_AND_THREE; // Block four + three = force block, then threaten with three
     }
     if total_threes >= 2 {
-        score += 15_000; // Double three = likely winning
+        score += COMBO_DOUBLE_THREE; // Double three = likely winning
     }
     // Capture threats compound with pattern threats
     if captures >= 4 && (block_fours >= 1 || open_fours >= 1) {
-        score += 25_000; // One capture from win + four threat = two winning paths
+        score += COMBO_CAPTURE_AND_FOUR; // One capture from win + four threat = two winning paths
     }
 
     // --- Tempo / turn awareness ---
     // Active player's threats are immediate; opponent must respond
     if is_active {
         if open_fours >= 1 {
-            score += 5_000;
+            score += TEMPO_OPEN_FOUR;
         }
         if block_fours >= 1 {
-            score += 3_000;
+            score += TEMPO_BLOCK_FOUR;
         }
         if captures >= 4 {
-            score += 8_000;
+            score += TEMPO_CAPTURE;
         }
     }
 
@@ -148,6 +156,6 @@ pub fn heuristic_evaluation(state: &Gomoku) -> i32 {
         &Stone::White,
         state.current_player == Stone::White,
     );
-    // Clamp to stay within alpha-beta bounds (±99_999 leaves room for depth adjustment)
-    (black_score - white_score).clamp(-99_999, 99_999)
+    // Clamp to stay within alpha-beta bounds (leaves room for depth adjustment)
+    (black_score - white_score).clamp(-HEURISTIC_EVAL_CLAMP, HEURISTIC_EVAL_CLAMP)
 }

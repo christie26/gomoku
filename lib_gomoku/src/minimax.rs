@@ -1,3 +1,13 @@
+use crate::constants::{
+    CAPTURE_BONUS_1, CAPTURE_BONUS_2, CAPTURE_BONUS_3, CAPTURE_BONUS_4_PLUS,
+    COMBO_BLOCK_FOUR_AND_THREE, COMBO_CAPTURE_AND_FOUR, COMBO_DOUBLE_BLOCK_FOUR,
+    COMBO_DOUBLE_OPEN_FOUR, COMBO_DOUBLE_THREE, COMBO_OPEN_AND_BLOCK_FOUR,
+    COMBO_OPEN_FOUR_AND_THREE, DEEP_RADIUS, DEEP_RADIUS_DEPTH, MAX_DEPTH, MAX_VALUE, MIN_VALUE,
+    RADIUS, RANDOMIZE_TIED_MOVES, SB_EVAL_CLAMP, SHALLOW_ORDER_DEPTH, TEMPO_BLOCK_FOUR,
+    TEMPO_CAPTURE, TEMPO_OPEN_FOUR, TIME_LIMIT_MS, TT_SHARDS, TT_SHARD_MASK, TT_SIZE_BITS,
+    WEIGHT_BLOCK_FOUR, WEIGHT_FIVE, WEIGHT_FREE_THREE, WEIGHT_OPEN_FOUR, WEIGHT_OPEN_THREE,
+    WEIGHT_OPEN_TWO,
+};
 use crate::{zobrist, Gomoku, Stone};
 
 use pyo3::prelude::*;
@@ -108,35 +118,35 @@ impl PatternCounts {
 
     fn score(&self, captures: i32, is_active: bool) -> i32 {
         let mut score = 0i32;
-        score += self.five_rows * 80_001;
-        score += self.open_fours * 35_000;
-        score += self.block_fours * 7_000;
-        score += self.free_threes * 5_000;
-        score += self.open_threes * 100;
-        score += self.open_twos * 50;
+        score += self.five_rows * WEIGHT_FIVE;
+        score += self.open_fours * WEIGHT_OPEN_FOUR;
+        score += self.block_fours * WEIGHT_BLOCK_FOUR;
+        score += self.free_threes * WEIGHT_FREE_THREE;
+        score += self.open_threes * WEIGHT_OPEN_THREE;
+        score += self.open_twos * WEIGHT_OPEN_TWO;
 
         score += match captures {
             0 => 0,
-            1 => 5_000,
-            2 => 12_000,
-            3 => 25_000,
-            4 => 50_000,
-            _ => 50_000,
+            1 => CAPTURE_BONUS_1,
+            2 => CAPTURE_BONUS_2,
+            3 => CAPTURE_BONUS_3,
+            4 => CAPTURE_BONUS_4_PLUS,
+            _ => CAPTURE_BONUS_4_PLUS,
         };
 
         let total_threes = self.open_threes + self.free_threes;
-        if self.open_fours >= 2 { score += 40_000; }
-        if self.open_fours >= 1 && self.block_fours >= 1 { score += 35_000; }
-        if self.block_fours >= 2 { score += 30_000; }
-        if self.open_fours >= 1 && total_threes >= 1 { score += 30_000; }
-        if self.block_fours >= 1 && total_threes >= 1 { score += 20_000; }
-        if total_threes >= 2 { score += 15_000; }
-        if captures >= 4 && (self.block_fours >= 1 || self.open_fours >= 1) { score += 25_000; }
+        if self.open_fours >= 2 { score += COMBO_DOUBLE_OPEN_FOUR; }
+        if self.open_fours >= 1 && self.block_fours >= 1 { score += COMBO_OPEN_AND_BLOCK_FOUR; }
+        if self.block_fours >= 2 { score += COMBO_DOUBLE_BLOCK_FOUR; }
+        if self.open_fours >= 1 && total_threes >= 1 { score += COMBO_OPEN_FOUR_AND_THREE; }
+        if self.block_fours >= 1 && total_threes >= 1 { score += COMBO_BLOCK_FOUR_AND_THREE; }
+        if total_threes >= 2 { score += COMBO_DOUBLE_THREE; }
+        if captures >= 4 && (self.block_fours >= 1 || self.open_fours >= 1) { score += COMBO_CAPTURE_AND_FOUR; }
 
         if is_active {
-            if self.open_fours >= 1 { score += 5_000; }
-            if self.block_fours >= 1 { score += 3_000; }
-            if captures >= 4 { score += 8_000; }
+            if self.open_fours >= 1 { score += TEMPO_OPEN_FOUR; }
+            if self.block_fours >= 1 { score += TEMPO_BLOCK_FOUR; }
+            if captures >= 4 { score += TEMPO_CAPTURE; }
         }
 
         score
@@ -783,7 +793,7 @@ impl SearchBoard {
     fn sb_heuristic_evaluation(&self) -> i32 {
         let black_score = self.black_patterns.score(self.captures[Cell::Black as usize], self.current == Cell::Black);
         let white_score = self.white_patterns.score(self.captures[Cell::White as usize], self.current == Cell::White);
-        (black_score - white_score).clamp(-99_991, 99_991)
+        (black_score - white_score).clamp(-SB_EVAL_CLAMP, SB_EVAL_CLAMP)
     }
 
     // ---- Candidate move generation ----
@@ -892,9 +902,6 @@ impl TranspositionTable {
 
 // --- Sharded Transposition Table for parallel access ---
 
-const TT_SHARDS: usize = 64;
-const TT_SHARD_MASK: u64 = (TT_SHARDS as u64) - 1;
-
 pub struct ShardedTT {
     shards: Vec<Mutex<TranspositionTable>>,
 }
@@ -924,7 +931,7 @@ impl ShardedTT {
 static GLOBAL_TT: OnceLock<ShardedTT> = OnceLock::new();
 
 fn shared_tt() -> &'static ShardedTT {
-    GLOBAL_TT.get_or_init(|| ShardedTT::new(14))
+    GLOBAL_TT.get_or_init(|| ShardedTT::new(TT_SIZE_BITS))
 }
 
 pub struct SearchStats {
@@ -995,34 +1002,12 @@ impl SearchStats {
     }
 }
 
-const MAX_VALUE: i32 = 100_000;
-const MIN_VALUE: i32 = -100_000;
-const MAX_DEPTH: usize = 6;
-const SHALLOW_ORDER_DEPTH: usize = 1;
-const RADIUS : usize = 2;
-// From this ply (inclusive) onward, shrink candidate-move radius to DEEP_RADIUS.
-const DEEP_RADIUS_DEPTH: usize = 3;
-const DEEP_RADIUS: usize = 1;
-
-/// Wall-clock budget for the iterative-deepening search in
-/// `get_ai_move_with_stats`/`get_move_pv`. `Some(ms)` aborts an in-progress
-/// depth once exceeded, falling back to the last fully-completed depth.
-/// `None` disables the timer entirely (search always runs to MAX_DEPTH) —
-/// flip this to compare timed vs. untimed behavior.
-// const TIME_LIMIT_MS: Option<u64> = Some(500);
-const TIME_LIMIT_MS: Option<u64> = None;
-
 fn search_deadline() -> Instant {
     match TIME_LIMIT_MS {
         Some(ms) => Instant::now() + Duration::from_millis(ms),
         None => Instant::now() + Duration::from_secs(365 * 24 * 60 * 60),
     }
 }
-
-/// When multiple root moves end up tied for the best score, pick randomly
-/// among them instead of always keeping the first (scan-order) one. Flip to
-/// `false` to restore fully deterministic move selection.
-const RANDOMIZE_TIED_MOVES: bool = true;
 
 /// Small dependency-free xorshift64 PRNG, seeded from OS randomness via
 /// `RandomState` (the stdlib already draws that entropy for HashMap keys, so
@@ -1047,8 +1032,6 @@ impl Rng {
         (self.next_u64() % bound as u64) as usize
     }
 }
-
-pub const BOARD_SIZE: usize = 19;
 
 // =====================================================================
 // SearchBoard-based search functions

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 use colored::*;
 
+pub mod constants;
 pub mod heuristic;
 pub mod minimax;
 
