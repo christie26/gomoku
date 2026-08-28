@@ -38,6 +38,15 @@ impl RunLogger {
     }
 }
 
+/// Random 6-digit run id, used to make each run's tag unique even when the
+/// search-tuning constants are unchanged from the previous run.
+fn random_6_digit() -> u32 {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let r = RandomState::new().build_hasher().finish();
+    100_000 + (r % 900_000) as u32
+}
+
 /// Encodes the search-tuning constants for this build into a short tag, so
 /// runs with different constants.rs settings are distinguishable in the
 /// logs directory and in runs.csv.
@@ -47,8 +56,7 @@ fn build_tag() -> String {
         None => "none".to_string(),
     };
     format!(
-        "b{}_d{}_sod{}_r{}_drd{}_dr{}_tl{}_rnd{}_tt{}",
-        BOARD_SIZE,
+        "d{}_sod{}_r{}_drd{}_dr{}_tl{}_rnd{}_tt{}_{}",
         MAX_DEPTH,
         SHALLOW_ORDER_DEPTH,
         RADIUS,
@@ -57,6 +65,7 @@ fn build_tag() -> String {
         time_limit,
         RANDOMIZE_TIED_MOVES as u8,
         TT_SIZE_BITS,
+        random_6_digit(),
     )
 }
 
@@ -76,7 +85,7 @@ fn append_csv_row(
     move_count: usize,
 ) {
     let csv_path = logs_dir().join("runs.csv");
-    let header = "timestamp,tag,board_size,max_depth,shallow_order_depth,radius,deep_radius_depth,deep_radius,time_limit_ms,randomize_tied_moves,tt_size_bits,iterations,mean_duration_s,min_duration_s,max_duration_s,stddev_duration_s,winner,move_count,log_file\n";
+    let header = "timestamp,tag,max_depth,shallow_order_depth,radius,deep_radius_depth,deep_radius,time_limit_ms,randomize_tied_moves,tt_size_bits,iterations,mean_duration_s,min_duration_s,max_duration_s,stddev_duration_s,winner,move_count,log_file\n";
     let file_exists = csv_path.exists();
     let mut file = OpenOptions::new()
         .create(true)
@@ -95,10 +104,9 @@ fn append_csv_row(
         .unwrap()
         .as_secs();
     let row = format!(
-        "{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{:.3},{:.3},{:.3},{},{},{}\n",
+        "{},{},{},{},{},{},{},{},{},{},{},{:.3},{:.3},{:.3},{:.3},{},{},{}\n",
         ts,
         tag,
-        BOARD_SIZE,
         MAX_DEPTH,
         SHALLOW_ORDER_DEPTH,
         RADIUS,
@@ -129,11 +137,7 @@ fn main() {
     let tag = build_tag();
     let dir = logs_dir();
     fs::create_dir_all(&dir).expect("failed to create logs dir");
-    let unix_ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    let log_file_name = format!("{tag}__{unix_ts}.log");
+    let log_file_name = format!("{tag}.log");
     let log_path = dir.join(&log_file_name);
     let mut logger = RunLogger::new(&log_path).expect("failed to create log file");
 
