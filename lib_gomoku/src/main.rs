@@ -1,18 +1,114 @@
 use lib_gomoku::{
-    minimax::{self, SearchStats, BOARD_SIZE},
+    constants::{
+        BOARD_SIZE, DEEP_RADIUS, DEEP_RADIUS_DEPTH, MAX_DEPTH, RADIUS, RANDOMIZE_TIED_MOVES,
+        SHALLOW_ORDER_DEPTH, TIME_LIMIT_MS, TT_SIZE_BITS,
+    },
+    minimax::{self, SearchStats},
     position_name, Gomoku,
 };
 use signal_hook::{
     consts::{SIGINT, SIGTERM},
     iterator::Signals,
 };
+use std::fs::{self, File, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use pyo3::Python;
+
+/// Writes every logged line to stdout and to a per-run log file, so the
+/// live terminal output stays intact while also being persisted to disk.
+struct RunLogger {
+    file: File,
+}
+
+impl RunLogger {
+    fn new(path: &Path) -> std::io::Result<Self> {
+        Ok(RunLogger { file: File::create(path)? })
+    }
+
+    fn log(&mut self, line: &str) {
+        println!("{line}");
+        writeln!(self.file, "{line}").ok();
+    }
+}
+
+/// Random 6-digit run id. Doubles as the run's tag — the constants
+/// themselves are already recorded as separate columns in runs.csv, so the
+/// tag just needs to be a short, unique handle for this run.
+fn random_6_digit() -> u32 {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let r = RandomState::new().build_hasher().finish();
+    100_000 + (r % 900_000) as u32
+}
+
+fn build_tag() -> String {
+    random_6_digit().to_string()
+}
+
+fn logs_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("logs")
+}
+
+fn append_csv_row(
+    tag: &str,
+    log_file_name: &str,
+    count: usize,
+    mean: f64,
+    min: f64,
+    max: f64,
+    stddev: f64,
+    winner: &str,
+    move_count: usize,
+) {
+    let csv_path = logs_dir().join("runs.csv");
+    let header = "timestamp,tag,max_depth,shallow_order_depth,radius,deep_radius_depth,deep_radius,time_limit_ms,randomize_tied_moves,tt_size_bits,iterations,mean_duration_s,min_duration_s,max_duration_s,stddev_duration_s,winner,move_count,log_file\n";
+    let file_exists = csv_path.exists();
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&csv_path)
+        .expect("failed to open runs.csv");
+    if !file_exists {
+        file.write_all(header.as_bytes()).ok();
+    }
+    let time_limit = match TIME_LIMIT_MS {
+        Some(ms) => ms.to_string(),
+        None => "none".to_string(),
+    };
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let row = format!(
+        "{},{},{},{},{},{},{},{},{},{},{},{:.3},{:.3},{:.3},{:.3},{},{},{}\n",
+        ts,
+        tag,
+        MAX_DEPTH,
+        SHALLOW_ORDER_DEPTH,
+        RADIUS,
+        DEEP_RADIUS_DEPTH,
+        DEEP_RADIUS,
+        time_limit,
+        RANDOMIZE_TIED_MOVES,
+        TT_SIZE_BITS,
+        count,
+        mean,
+        min,
+        max,
+        stddev,
+        winner,
+        move_count,
+        log_file_name,
+    );
+    file.write_all(row.as_bytes()).ok();
+}
 
 fn main() {
     pyo3::prepare_freethreaded_python();
@@ -20,7 +116,15 @@ fn main() {
     let mut game = Gomoku::new(BOARD_SIZE);
 
     let mut durations = vec![];
-    println!("Game start!");
+
+    let tag = build_tag();
+    let dir = logs_dir();
+    fs::create_dir_all(&dir).expect("failed to create logs dir");
+    let log_file_name = format!("{tag}.log");
+    let log_path = dir.join(&log_file_name);
+    let mut logger = RunLogger::new(&log_path).expect("failed to create log file");
+
+    logger.log(&format!("Game start! [tag={tag}]"));
 
     let running = Arc::new(AtomicBool::new(true));
 
@@ -41,6 +145,7 @@ fn main() {
     // .expect("Error setting Ctrl-C handler");
 
     let mut move_history = vec![];
+    let mut winner: Option<String> = None;
     loop {
         let start = Instant::now();
 
@@ -54,7 +159,7 @@ fn main() {
 
         loop {
             if !running.load(Ordering::SeqCst) {
-                println!("Abandoning current task...");
+                logger.log("Abandoning current task...");
                 break;
             }
 
@@ -68,11 +173,11 @@ fn main() {
         }
 
         let Some((x, y, score)) = res else {
-            println!("Played all possible valid moves or canceled");
+            logger.log("Played all possible valid moves or canceled");
             break;
         };
         let elapsed = start.elapsed().as_secs_f64();
-        println!(
+        logger.log(&format!(
             "Turn {}: {} playing {} - {}pts (took {:.2}s and tested {} moves)",
             durations.len() + 1,
             game.current_player,
@@ -80,15 +185,16 @@ fn main() {
             score,
             elapsed,
             moves.len()
-        );
-        print_search_stats(&stats);
+        ));
+        print_search_stats(&stats, &mut logger);
         durations.push(elapsed);
         game.handle_move(x as i32, y as i32);
         game.print_board(vec![(x, y)]);
         move_history.push((x, y, score));
         game.switch_player();
-        if let Some(winner) = game.get_winner() {
-            println!("{winner} won");
+        if let Some(w) = game.get_winner() {
+            logger.log(&format!("{w} won"));
+            winner = Some(w);
             break;
         }
     }
@@ -102,26 +208,38 @@ fn main() {
     let max = durations.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let stddev = (durations.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / count as f64).sqrt();
 
-    println!("Iterations: {}", count);
-    plot_bar_chart(&durations);
-    println!("Mean duration: {:.3} s", mean);
-    println!("Min duration: {:.3} s", min);
-    println!("Max duration: {:.3} s", max);
-    println!("Standard deviation: {:.3} s", stddev);
+    logger.log(&format!("Iterations: {}", count));
+    plot_bar_chart(&durations, &mut logger);
+    logger.log(&format!("Mean duration: {:.3} s", mean));
+    logger.log(&format!("Min duration: {:.3} s", min));
+    logger.log(&format!("Max duration: {:.3} s", max));
+    logger.log(&format!("Standard deviation: {:.3} s", stddev));
 
-    println!(
+    logger.log(&format!(
         "move history: {}",
         move_history
             .iter()
             .map(|u| format!("{}", position_name(&(u.0 as i32, u.1 as i32))))
             .collect::<Vec<String>>()
             .join("->")
+    ));
+
+    append_csv_row(
+        &tag,
+        &log_file_name,
+        count,
+        mean,
+        min,
+        max,
+        stddev,
+        winner.as_deref().unwrap_or("none"),
+        move_history.len(),
     );
 }
 
-fn plot_bar_chart(values: &[f64]) {
+fn plot_bar_chart(values: &[f64], logger: &mut RunLogger) {
     if values.is_empty() {
-        println!("No data to plot");
+        logger.log("No data to plot");
         return;
     }
 
@@ -130,7 +248,7 @@ fn plot_bar_chart(values: &[f64]) {
 
     // Handle edge case where all values are 0 or negative
     if max_value <= 0.0 {
-        println!("All values are zero or negative");
+        logger.log("All values are zero or negative");
         return;
     }
 
@@ -143,7 +261,7 @@ fn plot_bar_chart(values: &[f64]) {
     // Plot each value
     for (i, &value) in values.iter().enumerate() {
         if value <= 0.0 {
-            println!("{:3}: {:6.2} ", i, value);
+            logger.log(&format!("{:3}: {:6.2} ", i, value));
             continue;
         }
 
@@ -161,24 +279,24 @@ fn plot_bar_chart(values: &[f64]) {
             bar.push_str(blocks[partial_index]);
         }
 
-        println!("{:3}: {:6.2}s {}", i + 1, value, bar);
+        logger.log(&format!("{:3}: {:6.2}s {}", i + 1, value, bar));
     }
 }
 
-fn print_search_stats(stats: &SearchStats) {
+fn print_search_stats(stats: &SearchStats, logger: &mut RunLogger) {
     // Iterative deepening progression
     if !stats.depth_times.is_empty() {
-        print!("  ID: ");
+        let mut line = String::from("  ID: ");
         for (i, &(d, secs, nodes)) in stats.depth_times.iter().enumerate() {
             if i > 0 {
-                print!(" -> ");
+                line.push_str(" -> ");
             }
-            print!("d{}={:.3}s/{}n", d, secs, nodes);
+            line.push_str(&format!("d{}={:.3}s/{}n", d, secs, nodes));
         }
-        println!();
+        logger.log(&line);
     }
 
-    println!(
+    logger.log(&format!(
         "  Depth {} | Nodes: {} | Cutoffs: {} | TT hits: {} | Avg branch: {:.1} | Pruned: ~{:.1}%",
         stats.max_depth,
         stats.nodes_visited,
@@ -186,17 +304,17 @@ fn print_search_stats(stats: &SearchStats) {
         stats.tt_hits,
         stats.avg_branching_factor(),
         stats.pruning_percent(),
-    );
+    ));
 
     if !stats.pv.is_empty() {
-        println!(
+        logger.log(&format!(
             "  PV: {}",
             stats.pv
                 .iter()
                 .map(|&(x, y)| position_name(&(x as i32, y as i32)))
                 .collect::<Vec<_>>()
                 .join(" -> ")
-        );
+        ));
     }
 
     if stats.branch_times.is_empty() {
@@ -205,19 +323,19 @@ fn print_search_stats(stats: &SearchStats) {
 
     let max_show = 10;
     let total = stats.branch_times.len();
-    println!("  Branch timings:");
+    logger.log("  Branch timings:");
 
     for (i, &(x, y, score, secs)) in stats.branch_times.iter().enumerate() {
         if i >= max_show {
             let others_count = total - max_show;
             let others_time: f64 = stats.branch_times[max_show..].iter().map(|b| b.3).sum();
-            println!("    + {} others {:>26.3}s", others_count, others_time);
+            logger.log(&format!("    + {} others {:>26.3}s", others_count, others_time));
             break;
         }
         let score_str = match score {
             Some(s) => format!("{:>7}pts", s),
             None => "       N/A".to_string(),
         };
-        println!("    {:>4} = {} {:>8.3}s", position_name(&(x as i32, y as i32)), score_str, secs);
+        logger.log(&format!("    {:>4} = {} {:>8.3}s", position_name(&(x as i32, y as i32)), score_str, secs));
     }
 }

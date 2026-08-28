@@ -1,11 +1,12 @@
 import tkinter as tk
-from lib_gomoku import Gomoku, MoveResult, get_ai_move, heuristic_evaluation
+from lib_gomoku import Gomoku, MoveResult, get_ai_move, get_ai_move_stats, heuristic_evaluation
 import argparse
 import time
 import threading
 from src.setting_panel import SettingsPanel
 from src.player_panel import Player, PlayerPanel
 from src.board_canvas import BoardCanvas
+from src.score_bar import ScoreBar
 from src.screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, LIGHT_BACKGROUND, SELECT_BACKGROUND, BORDER_COLOR, LABEL_FONT, NAME_FONT, SETTING_PANEL_WIDTH
 
 
@@ -18,6 +19,7 @@ class GomokuGUI:
         self.is_playing = False
         self.debug = True
         self.ai_thinking = False
+        self.ai_stats = []  # list of (elapsed_secs, nodes_visited, pruning_percent)
 
         # ===== MAIN LAYOUT =====
         self.main_frame = tk.Frame(
@@ -26,6 +28,8 @@ class GomokuGUI:
             highlightthickness=2,
         )
         self.main_frame.pack()
+
+        self.score_bar = ScoreBar(self.main_frame, self.sizeeee)
 
         self.left_frame = tk.Frame(self.main_frame)
         self.left_frame.pack(side="left")
@@ -97,7 +101,9 @@ class GomokuGUI:
 
         if result == MoveResult.VALID:
             result, capture_count, captured = self.game.handle_move(x, y)
-            self.setting_panel.update_score(heuristic_evaluation(self.game))
+            score = heuristic_evaluation(self.game)
+            self.setting_panel.update_score(score)
+            self.score_bar.update_score(score)
             if captured:
                 self.canvas.show_capture(captured)
             self.player_frames[self.game.current_player].update_capture(
@@ -135,7 +141,10 @@ class GomokuGUI:
 
         self.is_playing = True
         self.canvas.reset_board(self.is_playing)
+        self.ai_stats = []
         self.setting_panel.reset_panel(self.is_playing)
+        self.setting_panel.reset_ai_stats()
+        self.score_bar.update_score(0)
         self.player_frames["X"].reset_panel()
         self.player_frames["O"].reset_panel()
 
@@ -155,7 +164,7 @@ class GomokuGUI:
         self.update_undo_redo_buttons()
 
         def run_ai():
-            mv, moves = get_ai_move(self.game)
+            mv, moves, elapsed, nodes, pruning = get_ai_move_stats(self.game)
 
             def apply_move():
                 self.ai_thinking = False
@@ -168,6 +177,8 @@ class GomokuGUI:
                         selected = x == x1 and y == y1
                         if self.debug:
                             self.canvas.draw_possible_stone(y1, x1, "O", score1, selected)
+                    self.ai_stats.append((elapsed, nodes, pruning))
+                    self.setting_panel.update_ai_stats(self.ai_stats)
                     self.play_one_turn(x, y)
                 self.update_undo_redo_buttons()
 

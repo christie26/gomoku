@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 use colored::*;
 
+pub mod constants;
 pub mod heuristic;
 pub mod minimax;
 
@@ -1017,6 +1018,7 @@ fn lib_gomoku(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Gomoku>()?;
     m.add_function(wrap_pyfunction!(heuristic::heuristic_evaluation, m)?)?;
     m.add_function(wrap_pyfunction!(minimax::get_ai_move, m)?)?;
+    m.add_function(wrap_pyfunction!(minimax::get_ai_move_stats, m)?)?;
     m.add_function(wrap_pyfunction!(minimax::get_hint, m)?)?;
     m.add_function(wrap_pyfunction!(minimax::get_move_pv, m)?)?;
 
