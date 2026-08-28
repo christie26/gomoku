@@ -1015,6 +1015,35 @@ fn search_deadline() -> Instant {
     }
 }
 
+/// When multiple root moves end up tied for the best score, pick randomly
+/// among them instead of always keeping the first (scan-order) one. Flip to
+/// `false` to restore fully deterministic move selection.
+const RANDOMIZE_TIED_MOVES: bool = true;
+
+/// Small dependency-free xorshift64 PRNG, seeded from OS randomness via
+/// `RandomState` (the stdlib already draws that entropy for HashMap keys, so
+/// this needs no `rand` crate). Only used to break exact-score ties at the
+/// root — never touches search internals.
+struct Rng(u64);
+impl Rng {
+    fn seeded() -> Self {
+        use std::collections::hash_map::RandomState;
+        use std::hash::{BuildHasher, Hasher};
+        Rng(RandomState::new().build_hasher().finish() | 1)
+    }
+    fn next_u64(&mut self) -> u64 {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.0 = x;
+        x
+    }
+    fn next_usize(&mut self, bound: usize) -> usize {
+        (self.next_u64() % bound as u64) as usize
+    }
+}
+
 pub const BOARD_SIZE: usize = 19;
 
 // =====================================================================
@@ -1484,6 +1513,21 @@ pub fn get_ai_move_with_stats(
     }
 
     final_stats.depth_times = depth_times;
+
+    if RANDOMIZE_TIED_MOVES {
+        if let Some((_, _, best_value)) = best_move {
+            let tied: Vec<(usize, usize)> = all_moves
+                .iter()
+                .filter(|m| m.2 == Some(best_value))
+                .map(|m| (m.0, m.1))
+                .collect();
+            if tied.len() > 1 {
+                let (r, c) = tied[Rng::seeded().next_usize(tied.len())];
+                best_move = Some((r, c, best_value));
+            }
+        }
+    }
+
     (best_move, all_moves, final_stats)
 }
 
