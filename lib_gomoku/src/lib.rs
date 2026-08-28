@@ -143,11 +143,11 @@ fn classify(
     center_stone: i32,
 ) -> Option<PatternKind> {
     let total = plus.total_my + minus.total_my + center_stone;
-    let contig_total = plus.contig_my + minus.contig_my + center_stone;
+    let contig_total = if center_stone != 0 { plus.contig_my + minus.contig_my + center_stone } else {plus.contig_my.max(minus.contig_my)};
     let empty = plus.empty_count + minus.empty_count + (1 - center_stone);    
     if contig_total == 5 && center_stone != 0 {
         Some(PatternKind::FiveRow)
-    } else if contig_total == 4 && center_stone != 0 && plus.empty_count > 0 && minus.empty_count > 0 {
+    } else if contig_total == 4 && plus.empty_count > 0 && minus.empty_count > 0 {
         Some(PatternKind::OpenFour)
     } else if contig_total == 4 && (plus.end_open || minus.end_open) {
         Some(PatternKind::BlockFour)
@@ -172,20 +172,34 @@ fn build_pattern_range(
     y0: i32,
     plus: &LineScan,
     minus: &LineScan,
+    center_stone: i32,
 ) -> Pattern {
     let (lower, upper) = if kind == PatternKind::FiveRow {
         (-minus.contig_my, plus.contig_my)
     } else if kind == PatternKind::BlockFour {
-        if plus.end_open {
-            (
-                -(minus.total_my + minus.empty_count + 1),
-                plus.total_my + plus.empty_count,
-            )
+        let contig_total = if center_stone != 0 { plus.contig_my + minus.contig_my + center_stone } else {plus.contig_my.max(minus.contig_my)};
+        if contig_total == 4 {
+          if plus.empty_count > 0 {
+              (
+                  -(minus.total_my + minus.empty_count + 1),
+                  plus.total_my + plus.empty_count,
+              )
+          } else if minus.empty_count > 0 {
+              (
+                  -(minus.total_my + minus.empty_count),
+                  plus.total_my + plus.empty_count + 1,
+              )
+          } else {
+              (
+                  -(minus.total_my + minus.empty_count),
+                  plus.total_my + plus.empty_count,
+              )
+          }
         } else {
-          (
-                -(minus.total_my + minus.empty_count),
-                plus.total_my + plus.empty_count + 1,
-            )
+              (
+                  -(minus.total_my + minus.empty_count),
+                  plus.total_my + plus.empty_count,
+              )
         }
     }
     else {
@@ -341,7 +355,7 @@ impl Gomoku {
         let plus = self.scan_line_as(*player, 1, dx, dy, ax, ay);
         let minus = self.scan_line_as(*player, -1, dx, dy, ax, ay);
         let kind = classify(&plus, &minus, 1)?;
-        Some((kind, build_pattern_range(kind, dx, dy, ax, ay, &plus, &minus)))
+        Some((kind, build_pattern_range(kind, dx, dy, ax, ay, &plus, &minus, 1)))
     }
 
     fn register(&mut self, kind: PatternKind, player: &Stone, pattern: Pattern) {
@@ -613,7 +627,7 @@ impl Gomoku {
                 continue;
             };
 
-            let pattern = build_pattern_range(kind, dx, dy, x0, y0, &plus, &minus);
+            let pattern = build_pattern_range(kind, dx, dy, x0, y0, &plus, &minus, 1);
             self.register(kind, &player, pattern);
         }
     }
@@ -638,7 +652,7 @@ impl Gomoku {
             // println!("plus: {:#?}",plus);
             // println!("minus: {:#?}",minus);
 
-            let pattern = build_pattern_range(kind, dx, dy, x0, y0, &plus, &minus);
+            let pattern = build_pattern_range(kind, dx, dy, x0, y0, &plus, &minus, 0);
             self.register(kind, &player, pattern);
         }
         // println!("{},{} pattern after: {:#?}", x0, y0, self.patterns.get(&Stone::Black).unwrap());
@@ -1126,17 +1140,17 @@ mod tests {
     #[test]
     fn register_from_move_block_four_variants() {
         let cases: Vec<(i32, i32, &str, usize, Vec<Position>)> = vec![
-            // O.XXXXO
-            (5, 4, "O.XXXXO", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-            (5, 4, "O.XXXXO", 3, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-            (5, 4, "O.XXXXO", 4, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-            (5, 4, "O.XXXXO", 5, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-            // OX.XXXO
+            // O.XXXXO -> .XXXXO
+            (5, 4, "O.XXXXO", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
+            (5, 4, "O.XXXXO", 3, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
+            (5, 4, "O.XXXXO", 4, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
+            (5, 4, "O.XXXXO", 5, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
+            // OX.XXXO -> X.XXX
             (5, 4, "OX.XXXO", 1, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
             (5, 4, "OX.XXXO", 3, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
             (5, 4, "OX.XXXO", 4, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
             (5, 4, "OX.XXXO", 5, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-            // OXX.XXO
+            // OXX.XXO -> XX.XX
             (5, 4, "OXX.XXO", 1, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
             (5, 4, "OXX.XXO", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
         ];
