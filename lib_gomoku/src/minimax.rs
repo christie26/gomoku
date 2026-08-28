@@ -5,7 +5,7 @@ use rayon::prelude::*;
 
 use std::cmp::{max, min};
 use std::sync::{Mutex, OnceLock};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 // =====================================================================
 // SearchBoard: zero-heap make/unmake board for the search
@@ -1000,6 +1000,21 @@ const MAX_DEPTH: usize = 6;
 const SHALLOW_ORDER_DEPTH: usize = 1;
 const RADIUS : usize = 2;
 
+/// Wall-clock budget for the iterative-deepening search in
+/// `get_ai_move_with_stats`/`get_move_pv`. `Some(ms)` aborts an in-progress
+/// depth once exceeded, falling back to the last fully-completed depth.
+/// `None` disables the timer entirely (search always runs to MAX_DEPTH) —
+/// flip this to compare timed vs. untimed behavior.
+const TIME_LIMIT_MS: Option<u64> = Some(500);
+// const TIME_LIMIT_MS: Option<u64> = None;
+
+fn search_deadline() -> Instant {
+    match TIME_LIMIT_MS {
+        Some(ms) => Instant::now() + Duration::from_millis(ms),
+        None => Instant::now() + Duration::from_secs(365 * 24 * 60 * 60),
+    }
+}
+
 pub const BOARD_SIZE: usize = 19;
 
 // =====================================================================
@@ -1030,15 +1045,20 @@ fn sb_alphabeta(
     max_depth: usize,
     stats: &mut SearchStats,
     tt: &ShardedTT,
-) -> (i32, Vec<(usize, usize)>) {
+    deadline: Instant,
+) -> (i32, Vec<(usize, usize)>, bool) {
+    if Instant::now() >= deadline {
+        return (0, vec![], true);
+    }
+
     stats.nodes_visited += 1;
 
     if board.is_terminal() {
-        return (sb_state_value(board, depth), vec![]);
+        return (sb_state_value(board, depth), vec![], false);
     }
 
     if depth == max_depth {
-        return (board.sb_heuristic_evaluation(), vec![]);
+        return (board.sb_heuristic_evaluation(), vec![], false);
     }
 
     let depth_remaining = max_depth - depth;
@@ -1051,12 +1071,12 @@ fn sb_alphabeta(
         if entry.depth_remaining >= depth_remaining {
             stats.tt_hits += 1;
             match entry.flag {
-                TTFlag::Exact => return (entry.value, vec![]),
+                TTFlag::Exact => return (entry.value, vec![], false),
                 TTFlag::LowerBound => alpha = max(alpha, entry.value),
                 TTFlag::UpperBound => beta = min(beta, entry.value),
             }
             if alpha >= beta {
-                return (entry.value, vec![]);
+                return (entry.value, vec![], false);
             }
         }
     }
@@ -1082,33 +1102,37 @@ fn sb_alphabeta(
 
         let undo = board.make_move(move_r, move_c);
 
-        let (mut child_val, mut child_pv);
+        let (mut child_val, mut child_pv, mut child_timed_out);
         if first {
-            (child_val, child_pv) = sb_alphabeta(
-                board, alpha, beta, !is_max_player, depth + 1, max_depth, stats, tt,
+            (child_val, child_pv, child_timed_out) = sb_alphabeta(
+                board, alpha, beta, !is_max_player, depth + 1, max_depth, stats, tt, deadline,
             );
             first = false;
         } else if is_max_player {
-            (child_val, child_pv) = sb_alphabeta(
-                board, alpha, alpha + 1, false, depth + 1, max_depth, stats, tt,
+            (child_val, child_pv, child_timed_out) = sb_alphabeta(
+                board, alpha, alpha + 1, false, depth + 1, max_depth, stats, tt, deadline,
             );
-            if child_val > alpha && child_val < beta {
-                (child_val, child_pv) = sb_alphabeta(
-                    board, alpha, beta, false, depth + 1, max_depth, stats, tt,
+            if !child_timed_out && child_val > alpha && child_val < beta {
+                (child_val, child_pv, child_timed_out) = sb_alphabeta(
+                    board, alpha, beta, false, depth + 1, max_depth, stats, tt, deadline,
                 );
             }
         } else {
-            (child_val, child_pv) = sb_alphabeta(
-                board, beta - 1, beta, true, depth + 1, max_depth, stats, tt,
+            (child_val, child_pv, child_timed_out) = sb_alphabeta(
+                board, beta - 1, beta, true, depth + 1, max_depth, stats, tt, deadline,
             );
-            if child_val < beta && child_val > alpha {
-                (child_val, child_pv) = sb_alphabeta(
-                    board, alpha, beta, true, depth + 1, max_depth, stats, tt,
+            if !child_timed_out && child_val < beta && child_val > alpha {
+                (child_val, child_pv, child_timed_out) = sb_alphabeta(
+                    board, alpha, beta, true, depth + 1, max_depth, stats, tt, deadline,
                 );
             }
         }
 
         board.undo_move(&undo);
+
+        if child_timed_out {
+            return (best_value, best_pv, true);
+        }
 
         if is_max_player {
             if child_val > best_value {
@@ -1152,7 +1176,7 @@ fn sb_alphabeta(
         best_move: best_move_here,
     });
 
-    (best_value, best_pv)
+    (best_value, best_pv, false)
 }
 
 // =====================================================================
@@ -1186,18 +1210,25 @@ pub fn get_move_pv(state: &Gomoku, x: usize, y: usize) -> (Vec<(usize, usize)>, 
     let is_max_player = board.current == Cell::Black;
     let max_depth = if board.move_count < 4 { 3 } else { MAX_DEPTH };
     let tt = shared_tt();
+    let deadline = search_deadline();
 
     let undo = board.make_move(x, y);
 
     let mut final_pv = vec![];
     let mut final_value = 0i32;
     for depth in 1..=max_depth {
+        if Instant::now() >= deadline {
+            break;
+        }
         let mut stats = SearchStats::new();
         stats.max_depth = depth;
-        let (value, child_pv) = sb_alphabeta(
+        let (value, child_pv, timed_out) = sb_alphabeta(
             &mut board, MIN_VALUE, MAX_VALUE, !is_max_player,
-            1, depth, &mut stats, tt,
+            1, depth, &mut stats, tt, deadline,
         );
+        if timed_out {
+            break;
+        }
         final_value = value;
         final_pv = child_pv;
     }
@@ -1231,8 +1262,12 @@ pub fn get_ai_move_with_stats(
     let mut final_stats = SearchStats::new();
     let mut depth_times: Vec<(usize, f64, u64)> = Vec::new();
     let tt = shared_tt();
+    let deadline = search_deadline();
 
     for depth in 1..=max_depth {
+        if Instant::now() >= deadline {
+            break;
+        }
         let depth_start = Instant::now();
         let mut stats = SearchStats::new();
         stats.max_depth = depth;
@@ -1253,6 +1288,7 @@ pub fn get_ai_move_with_stats(
         }
 
         // ---- Phase 1: Sequential first child with full window ----
+        let mut phase1_timed_out = false;
         {
             let m = &mut all_moves[0];
             let move_r = m.0;
@@ -1261,33 +1297,41 @@ pub fn get_ai_move_with_stats(
             let branch_start = Instant::now();
 
             let undo = board.make_move(move_r, move_c);
-            let (value, child_pv) = sb_alphabeta(
-                &mut board, alpha, beta, !is_max_player, 1, depth, &mut stats, tt,
+            let (value, child_pv, timed_out) = sb_alphabeta(
+                &mut board, alpha, beta, !is_max_player, 1, depth, &mut stats, tt, deadline,
             );
             board.undo_move(&undo);
 
-            let branch_elapsed = branch_start.elapsed().as_secs_f64();
-            m.2 = Some(value);
-            branch_times.push((move_r, move_c, Some(value), branch_elapsed));
+            if timed_out {
+                phase1_timed_out = true;
+            } else {
+                let branch_elapsed = branch_start.elapsed().as_secs_f64();
+                m.2 = Some(value);
+                branch_times.push((move_r, move_c, Some(value), branch_elapsed));
 
-            if is_max_player && value > best_value {
-                best_value = value;
-                alpha = max(alpha, best_value);
-                iteration_best_move = Some((move_r, move_c, value));
-                iteration_pv = std::iter::once((move_r, move_c))
-                    .chain(child_pv.into_iter())
-                    .collect();
-            } else if !is_max_player && value < best_value {
-                best_value = value;
-                beta = min(beta, best_value);
-                iteration_best_move = Some((move_r, move_c, value));
-                iteration_pv = std::iter::once((move_r, move_c))
-                    .chain(child_pv.into_iter())
-                    .collect();
+                if is_max_player && value > best_value {
+                    best_value = value;
+                    alpha = max(alpha, best_value);
+                    iteration_best_move = Some((move_r, move_c, value));
+                    iteration_pv = std::iter::once((move_r, move_c))
+                        .chain(child_pv.into_iter())
+                        .collect();
+                } else if !is_max_player && value < best_value {
+                    best_value = value;
+                    beta = min(beta, best_value);
+                    iteration_best_move = Some((move_r, move_c, value));
+                    iteration_pv = std::iter::once((move_r, move_c))
+                        .chain(child_pv.into_iter())
+                        .collect();
+                }
             }
+        }
+        if phase1_timed_out {
+            break;
         }
 
         // ---- Phase 2: Parallel YBWC for the remaining root moves ----
+        let mut phase2_timed_out = false;
         if alpha < beta && all_moves.len() > 1 {
             let parent_alpha = alpha;
             let parent_beta = beta;
@@ -1309,13 +1353,14 @@ pub fn get_ai_move_with_stats(
                 Vec<(usize, usize)>,
                 SearchStats,
                 f64,
+                bool,
             )> = tasks
                 .into_par_iter()
                 .map(|((r, c), mut child_board)| {
                     let mut child_stats = SearchStats::new();
                     let branch_start = Instant::now();
-                    let (v, pv) = if is_max_player {
-                        let (mut v, mut pv) = sb_alphabeta(
+                    let (v, pv, timed_out) = if is_max_player {
+                        let (mut v, mut pv, mut timed_out) = sb_alphabeta(
                             &mut child_board,
                             parent_alpha,
                             parent_alpha + 1,
@@ -1324,8 +1369,9 @@ pub fn get_ai_move_with_stats(
                             depth,
                             &mut child_stats,
                             tt,
+                            deadline,
                         );
-                        if v > parent_alpha && v < parent_beta {
+                        if !timed_out && v > parent_alpha && v < parent_beta {
                             let r2 = sb_alphabeta(
                                 &mut child_board,
                                 parent_alpha,
@@ -1335,13 +1381,15 @@ pub fn get_ai_move_with_stats(
                                 depth,
                                 &mut child_stats,
                                 tt,
+                                deadline,
                             );
                             v = r2.0;
                             pv = r2.1;
+                            timed_out = r2.2;
                         }
-                        (v, pv)
+                        (v, pv, timed_out)
                     } else {
-                        let (mut v, mut pv) = sb_alphabeta(
+                        let (mut v, mut pv, mut timed_out) = sb_alphabeta(
                             &mut child_board,
                             parent_beta - 1,
                             parent_beta,
@@ -1350,8 +1398,9 @@ pub fn get_ai_move_with_stats(
                             depth,
                             &mut child_stats,
                             tt,
+                            deadline,
                         );
-                        if v < parent_beta && v > parent_alpha {
+                        if !timed_out && v < parent_beta && v > parent_alpha {
                             let r2 = sb_alphabeta(
                                 &mut child_board,
                                 parent_alpha,
@@ -1361,47 +1410,56 @@ pub fn get_ai_move_with_stats(
                                 depth,
                                 &mut child_stats,
                                 tt,
+                                deadline,
                             );
                             v = r2.0;
                             pv = r2.1;
+                            timed_out = r2.2;
                         }
-                        (v, pv)
+                        (v, pv, timed_out)
                     };
                     let branch_elapsed = branch_start.elapsed().as_secs_f64();
-                    ((r, c), v, pv, child_stats, branch_elapsed)
+                    ((r, c), v, pv, child_stats, branch_elapsed, timed_out)
                 })
                 .collect();
 
-            // Merge phase: serial best-update, stats merge, branch_times.
-            for ((r, c), value, child_pv, child_stats, branch_elapsed) in results {
-                stats.children_explored += 1;
-                stats.merge(&child_stats);
+            phase2_timed_out = results.iter().any(|r| r.5);
 
-                // Write the score back into all_moves.
-                for m in all_moves.iter_mut() {
-                    if m.0 == r && m.1 == c {
-                        m.2 = Some(value);
-                        break;
+            if !phase2_timed_out {
+                // Merge phase: serial best-update, stats merge, branch_times.
+                for ((r, c), value, child_pv, child_stats, branch_elapsed, _) in results {
+                    stats.children_explored += 1;
+                    stats.merge(&child_stats);
+
+                    // Write the score back into all_moves.
+                    for m in all_moves.iter_mut() {
+                        if m.0 == r && m.1 == c {
+                            m.2 = Some(value);
+                            break;
+                        }
+                    }
+                    branch_times.push((r, c, Some(value), branch_elapsed));
+
+                    if is_max_player && value > best_value {
+                        best_value = value;
+                        alpha = max(alpha, best_value);
+                        iteration_best_move = Some((r, c, value));
+                        iteration_pv = std::iter::once((r, c))
+                            .chain(child_pv.into_iter())
+                            .collect();
+                    } else if !is_max_player && value < best_value {
+                        best_value = value;
+                        beta = min(beta, best_value);
+                        iteration_best_move = Some((r, c, value));
+                        iteration_pv = std::iter::once((r, c))
+                            .chain(child_pv.into_iter())
+                            .collect();
                     }
                 }
-                branch_times.push((r, c, Some(value), branch_elapsed));
-
-                if is_max_player && value > best_value {
-                    best_value = value;
-                    alpha = max(alpha, best_value);
-                    iteration_best_move = Some((r, c, value));
-                    iteration_pv = std::iter::once((r, c))
-                        .chain(child_pv.into_iter())
-                        .collect();
-                } else if !is_max_player && value < best_value {
-                    best_value = value;
-                    beta = min(beta, best_value);
-                    iteration_best_move = Some((r, c, value));
-                    iteration_pv = std::iter::once((r, c))
-                        .chain(child_pv.into_iter())
-                        .collect();
-                }
             }
+        }
+        if phase2_timed_out {
+            break;
         }
 
         stats.branch_times = branch_times;
