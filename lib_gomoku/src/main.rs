@@ -38,8 +38,9 @@ impl RunLogger {
     }
 }
 
-/// Random 6-digit run id, used to make each run's tag unique even when the
-/// search-tuning constants are unchanged from the previous run.
+/// Random 6-digit run id. Doubles as the run's tag — the constants
+/// themselves are already recorded as separate columns in runs.csv, so the
+/// tag just needs to be a short, unique handle for this run.
 fn random_6_digit() -> u32 {
     use std::collections::hash_map::RandomState;
     use std::hash::{BuildHasher, Hasher};
@@ -47,26 +48,8 @@ fn random_6_digit() -> u32 {
     100_000 + (r % 900_000) as u32
 }
 
-/// Encodes the search-tuning constants for this build into a short tag, so
-/// runs with different constants.rs settings are distinguishable in the
-/// logs directory and in runs.csv.
 fn build_tag() -> String {
-    let time_limit = match TIME_LIMIT_MS {
-        Some(ms) => ms.to_string(),
-        None => "none".to_string(),
-    };
-    format!(
-        "d{}_sod{}_r{}_drd{}_dr{}_tl{}_rnd{}_tt{}_{}",
-        MAX_DEPTH,
-        SHALLOW_ORDER_DEPTH,
-        RADIUS,
-        DEEP_RADIUS_DEPTH,
-        DEEP_RADIUS,
-        time_limit,
-        RANDOMIZE_TIED_MOVES as u8,
-        TT_SIZE_BITS,
-        random_6_digit(),
-    )
+    random_6_digit().to_string()
 }
 
 fn logs_dir() -> PathBuf {
