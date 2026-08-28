@@ -1005,8 +1005,8 @@ const RADIUS : usize = 2;
 /// depth once exceeded, falling back to the last fully-completed depth.
 /// `None` disables the timer entirely (search always runs to MAX_DEPTH) —
 /// flip this to compare timed vs. untimed behavior.
-const TIME_LIMIT_MS: Option<u64> = Some(500);
-// const TIME_LIMIT_MS: Option<u64> = None;
+// const TIME_LIMIT_MS: Option<u64> = Some(500);
+const TIME_LIMIT_MS: Option<u64> = None;
 
 fn search_deadline() -> Instant {
     match TIME_LIMIT_MS {
