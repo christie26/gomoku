@@ -79,6 +79,21 @@ let mut chars = coord.chars();
     (x, y)
 }
 
+fn encode_short_coord((x, y): Position) -> String {
+    format!("{}{}", (b'a' + x as u8) as char, y + 1)
+}
+
+fn encode_patterns(patterns: &[Pattern]) -> String {
+    let patterns: Vec<String> = patterns
+        .iter()
+        .map(|p| {
+            let coords: Vec<String> = p.iter().map(|&pos| encode_short_coord(pos)).collect();
+            format!("[{}]", coords.join(", "))
+        })
+        .collect();
+    format!("[{}]", patterns.join(", "))
+}
+
 impl Case {
 
     fn new(pattern: &'static str, index: usize, before: Vec<Vec<&str>>, after: Vec<Vec<&str>>) -> Self {
@@ -117,8 +132,9 @@ fn run_cases(setup: Setup, kind: PatternKind, cases: Vec<Case>) {
         let actual_before = patterns_of(&before, kind);
         if *actual_before != case.before {
             failures.push(format!(
-                "{:?} idx={}: before expected: {:?}, what we got: {actual_before:?}",
-                case.pattern, case.index, case.before
+                "{:?} idx={}: before expected: {}, what we got: {}",
+                case.pattern, case.index,
+                encode_patterns(&case.before), encode_patterns(actual_before)
             ));
             continue;
         }
@@ -126,8 +142,9 @@ fn run_cases(setup: Setup, kind: PatternKind, cases: Vec<Case>) {
         let actual_after = patterns_of(black_patterns(&game), kind);
         if *actual_after != case.after {
             failures.push(format!(
-                "{:?} idx={}: after expected: {:?}, what we got: {actual_after:?}",
-                case.pattern, case.index, case.after
+                "{:?} idx={}: after expected: {}, what we got: {}",
+                case.pattern, case.index,
+                encode_patterns(&case.after), encode_patterns(actual_after)
             ));
         }
     }
@@ -144,6 +161,14 @@ mod decode_short_coords {
         assert_eq!(decode_short_coord("b5"), (1, 4));
         assert_eq!(decode_short_coord("f6"), (5, 5));
         assert_eq!(decode_short_coord("j10"), (9, 9));
+    }
+
+    #[test]
+    fn test_encode_short_coords() {
+        assert_eq!(encode_short_coord((0, 0)), "a1");
+        assert_eq!(encode_short_coord((18, 18)), "s19");
+        assert_eq!(encode_short_coord((5, 5)), "f6");
+        assert_eq!(encode_short_coord((9, 9)), "j10");
     }
 
 }
