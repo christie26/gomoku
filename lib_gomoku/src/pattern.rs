@@ -41,7 +41,7 @@ pub(crate) fn classify(
         Some(PatternKind::FiveRow)
     } else if contig_total == 4 && plus.empty_count > 0 && minus.empty_count > 0 {
         Some(PatternKind::OpenFour)
-    } else if contig_total == 4 && (plus.end_open || minus.end_open) {
+    } else if total == 4 && (plus.end_open || minus.end_open) {
         Some(PatternKind::BlockFour)
     } else if total == 4 && empty == 1 {
         Some(PatternKind::BlockFour)
@@ -80,24 +80,29 @@ pub(crate) fn build_pattern_range(
           if plus.empty_count > 0 {
               (
                   -(minus.total_my + minus.empty_count + 1),
-                  plus.total_my + plus.empty_count,
+                  plus.total_my + 1,
               )
-          } else if minus.empty_count > 0 {
+          } else  {
+            // if minus.empty_count > 0
               (
-                  -(minus.total_my + minus.empty_count),
+                  -(minus.total_my + 1),
                   plus.total_my + plus.empty_count + 1,
-              )
-          } else {
-              (
-                  -(minus.total_my + minus.empty_count),
-                  plus.total_my + plus.empty_count,
               )
           }
         } else {
+          if plus.contig_my != plus.total_my {
               (
-                  -(minus.total_my + minus.empty_count),
-                  plus.total_my + plus.empty_count,
+                  -(minus.total_my),
+                  plus.total_my + 1,
               )
+          } else {
+            // println!("plus: {:#?}", plus);
+            // println!("minus: {:#?}", minus);
+              (
+                  -(minus.total_my + 1),
+                  plus.total_my,
+              )
+          }
         }
     }
     else {
