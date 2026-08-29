@@ -745,3 +745,6 @@ mod remove_stone_remove_pattern {
         );
     }
 }
+
+// O.XXXO + O/X/.
+//TODO: ..00XXX.0. make test case of what happens when both left 0 captured, or only one
