@@ -26,14 +26,19 @@ fn black_patterns(game: &Gomoku) -> &PlayerPatterns {
 fn setup_window_add_stone(row: i32, base: i32, pattern: &str, add_index: usize) -> (Gomoku, PlayerPatterns) {
     let mut game = Gomoku::new(19);
     for (i, ch) in pattern.chars().enumerate() {
-        if ch == 'O' {
+        if ch == 'O' && i != add_index{
             place(&mut game, Stone::White, row, base + i as i32);
         } else if ch == 'X' && i != add_index {
             place(&mut game, Stone::Black, row, base + i as i32);
         }
     }
     let before = black_patterns(&game).clone();
-    place(&mut game, Stone::Black, row, base + add_index as i32);
+    let last = match pattern.chars().nth(add_index) {
+        Some('X') => Stone::Black,
+        Some('O') => Stone::White,
+        other => panic!("add_index={add_index}는 돌 자리가 아님: {other:?}"),
+    };
+    place(&mut game, last, row, base + add_index as i32);
     (game, before)
 }
 
