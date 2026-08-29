@@ -52,7 +52,7 @@ fn setup_window_remove_stone(row: i32, base: i32, pattern: &str, remove_index: u
 }
 
 #[test]
-fn register_from_move_open_two_variants() {
+fn new_move_add_open_two() {
     let cases: Vec<(&str, usize, Option<Vec<Position>>)> = vec![
         // ..XX..
         ("..XX..", 2, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)])),
@@ -89,7 +89,7 @@ fn register_from_move_open_two_variants() {
 }
 
 #[test]
-fn register_from_move_open_three_variants() {
+fn new_move_add_open_three() {
     let cases: Vec<(i32, i32, &str, usize, Option<Vec<Position>>)> = vec![
         // XXX..
         (5, 4, "OXXX..", 1, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)])),
@@ -143,7 +143,7 @@ fn register_from_move_open_three_variants() {
 }
 
 #[test]
-fn register_from_move_free_three_variants() {
+fn new_move_add_free_three() {
     let cases: Vec<(i32, i32, &str, usize, Vec<Position>)> = vec![
         // ..XXX..
         (5, 5, "..XXX..", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
@@ -178,7 +178,7 @@ fn register_from_move_free_three_variants() {
 }
 
 #[test]
-fn register_from_move_block_four_variants() {
+fn new_move_add_block_four() {
     let cases: Vec<(i32, i32, &str, usize, Vec<Position>)> = vec![
         // O.XXXXO -> .XXXXO
         (5, 4, "O.XXXXO", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
@@ -215,7 +215,7 @@ fn register_from_move_block_four_variants() {
 }
 
 #[test]
-fn register_from_move_open_four_variants() {
+fn new_move_add_open_four() {
     let cases: Vec<(i32, i32, &str, usize, Vec<Position>)> = vec![
         // O.XXXX.O
         (5, 4, "O.XXXX.O", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
@@ -239,7 +239,7 @@ fn register_from_move_open_four_variants() {
 }
 
 #[test]
-fn register_from_move_five_row() {
+fn new_move_add_five_row() {
     // XXXXX 완성 -> five_row 등록
     let (game, before) = setup_window_new_stone(5, 5, "XXXXX", 4);
     assert!(before.five_row.is_empty());
