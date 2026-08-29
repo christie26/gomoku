@@ -47,7 +47,6 @@ fn setup_window_remove_stone(row: i32, base: i32, pattern: &str, remove_index: u
         }
     }
     let before = black_patterns(&game).clone();
-
     remove(&mut game, row, base + remove_index as i32);
     (game, before)
 }
@@ -269,19 +268,19 @@ fn new_move_remove_block_four() {
     ];
 
     let mut failures = Vec::new();
-    for (row, base, pattern, new_index, expected) in cases {
-        let (game, before) = setup_window_remove_stone(row, base, pattern, new_index);
-        if before.block_four != vec![expected.clone()] {
+    for (row, base, pattern, index, expected) in cases {
+        let (mut game, _) = setup_window_remove_stone(row, base, pattern, index);
+        if black_patterns(&game).block_four != vec![expected.clone()] {
             failures.push(format!(
-                "{pattern:?} idx={new_index}: 제거 이전에 등록되어 있어야 하는데 {:?}",
-                before.block_four
+                "{pattern:?} idx={index}: 제거 이전에 등록되어 있어야 하는데 {:?}",
+                black_patterns(&game).block_four
             ));
             continue;
         }
 
         let actual = &black_patterns(&game).block_four;
         if !actual.is_empty() {
-            failures.push(format!("{pattern:?} idx={new_index}: 제거 후에도 등록이 남아있음: {actual:?}"));
+            failures.push(format!("{pattern:?} idx={index}: 제거 후에도 등록이 남아있음: {actual:?}"));
         }
     }
     assert!(failures.is_empty(), "\n{}", failures.join("\n"));
