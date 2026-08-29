@@ -51,220 +51,254 @@ fn setup_window_remove_stone(row: i32, base: i32, pattern: &str, remove_index: u
     (game, before)
 }
 
-mod new_move_add {
+struct Case {
+    row: i32,
+    base: i32,
+    pattern: &'static str,
+    index: usize,
+    before: Vec<Pattern>,
+    after: Vec<Pattern>,
+}
+
+type Setup = fn(i32, i32, &str, usize) -> (Gomoku, PlayerPatterns);
+
+fn patterns_of(patterns: &PlayerPatterns, kind: PatternKind) -> &Vec<Pattern> {
+    match kind {
+        PatternKind::OpenTwo => &patterns.open_two,
+        PatternKind::OpenThree => &patterns.open_three,
+        PatternKind::FreeThree => &patterns.free_three,
+        PatternKind::OpenFour => &patterns.open_four,
+        PatternKind::BlockFour => &patterns.block_four,
+        PatternKind::FiveRow => &patterns.five_row,
+    }
+}
+
+fn run_cases(setup: Setup, kind: PatternKind, cases: Vec<Case>) {
+    let mut failures = Vec::new();
+    for case in cases {
+        let (game, before) = setup(case.row, case.base, case.pattern, case.index);
+
+        let actual_before = patterns_of(&before, kind);
+        if *actual_before != case.before {
+            failures.push(format!(
+                "{:?} idx={}: before expected: {:?}, what we got: {actual_before:?}",
+                case.pattern, case.index, case.before
+            ));
+            continue;
+        }
+
+        let actual_after = patterns_of(black_patterns(&game), kind);
+        if *actual_after != case.after {
+            failures.push(format!(
+                "{:?} idx={}: after expected: {:?}, what we got: {actual_after:?}",
+                case.pattern, case.index, case.after
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+}
+
+mod new_stone_add_pattern {
     use super::*;
 
     #[test]
     fn open_two() {
-        let cases: Vec<(&str, usize, Option<Vec<Position>>)> = vec![
-            // ..XX..
-            ("..XX..", 2, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)])),
-            // ..XX.O
-            ("..XX.O", 2, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)])),
-            ("..XX.O", 3, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)])),
-            // O.X.X.O
-            ("O.X.X.O", 2, Some(vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10)])),
-        ];
-
-        let mut failures = Vec::new();
-        for (pattern, new_index, expected) in cases {
-            let (game, before) = setup_window_new_stone(5, 5, pattern, new_index);
-            if !before.open_two.is_empty() {
-                failures.push(format!("{pattern:?} idx={new_index}: we found pattern before last move"));
-                continue;
-            }
-            let actual = &black_patterns(&game).open_two;
-            if *actual != vec![expected] {
-                failures.push(format!("{pattern:?} idx={new_index}: different from expected: {actual:?}"));
-            }
-        }
-        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+        run_cases(
+            setup_window_new_stone,
+            PatternKind::OpenTwo,
+            vec![
+                // ..XX..
+                Case { row: 5, base: 5, pattern: "..XX..", index: 2,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
+                // ..XX.O
+                Case { row: 5, base: 5, pattern: "..XX.O", index: 2,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                Case { row: 5, base: 5, pattern: "..XX.O", index: 3,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                // O.X.X.O
+                Case { row: 5, base: 5, pattern: "O.X.X.O", index: 2,
+                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
+            ],
+        );
     }
 
     #[test]
     fn open_three() {
-        let cases: Vec<(i32, i32, &str, usize, Option<Vec<Position>>)> = vec![
-            // XXX..
-            (5, 4, "OXXX..", 1, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)])),
-            (5, 4, "OXXX..", 2, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)])),
-            (5, 4, "OXXX..", 3, Some(vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)])),
-            // XX.X.
-            (1, 5, "OXX.X.O", 1, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            (1, 5, "OXX.X.O", 2, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            (1, 5, "OXX.X.O", 4, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            // X.XX.
-            (1, 5, "OX.XX.O", 1, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            (1, 5, "OX.XX.O", 3, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            (1, 5, "OX.XX.O", 4, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            // .XXX.
-            (1, 5, "O.XXX.O", 2, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            (1, 5, "O.XXX.O", 3, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            (1, 5, "O.XXX.O", 4, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            // X..XX
-            (1, 5, "OX..XXO", 1, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            (1, 5, "OX..XXO", 4, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            (1, 5, "OX..XXO", 5, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            // X.X.X
-            (1, 5, "OX.X.XO", 1, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            (1, 5, "OX.X.XO", 3, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-            (1, 5, "OX.X.XO", 5, Some(vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)])),
-        ];
-
-        let mut failures = Vec::new();
-        for (row, base, pattern, new_index, expected) in cases {
-            let (game, before) = setup_window_new_stone(row, base, pattern, new_index);
-            if !before.open_three.is_empty() {
-                failures.push(format!("{pattern:?} idx={new_index}: we found pattern before last move"));
-                continue;
-            }
-
-            let actual = &black_patterns(&game).open_three;
-            if *actual != vec![expected] {
-                failures.push(format!("{pattern:?} idx={new_index}: different from expected: {actual:?}"));
-            }
-        }
-        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+        run_cases(
+            setup_window_new_stone,
+            PatternKind::OpenThree,
+            vec![
+                // XXX..
+                Case { row: 5, base: 4, pattern: "OXXX..", index: 1,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                Case { row: 5, base: 4, pattern: "OXXX..", index: 2,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                Case { row: 5, base: 4, pattern: "OXXX..", index: 3,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                // XX.X.
+                Case { row: 1, base: 5, pattern: "OXX.X.O", index: 1,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "OXX.X.O", index: 2,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "OXX.X.O", index: 4,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                // X.XX.
+                Case { row: 1, base: 5, pattern: "OX.XX.O", index: 1,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "OX.XX.O", index: 3,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "OX.XX.O", index: 4,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                // .XXX.
+                Case { row: 1, base: 5, pattern: "O.XXX.O", index: 2,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "O.XXX.O", index: 3,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "O.XXX.O", index: 4,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                // X..XX
+                Case { row: 1, base: 5, pattern: "OX..XXO", index: 1,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "OX..XXO", index: 4,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "OX..XXO", index: 5,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                // X.X.X
+                Case { row: 1, base: 5, pattern: "OX.X.XO", index: 1,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "OX.X.XO", index: 3,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "OX.X.XO", index: 5,
+                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+            ],
+        );
     }
 
     #[test]
     fn free_three() {
-        let cases: Vec<(i32, i32, &str, usize, Vec<Position>)> = vec![
-            // ..XXX..
-            (5, 5, "..XXX..", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
-            (5, 5, "..XXX..", 3, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
-            // .XXX..
-            (5, 5, "O.XXX..O", 2, vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
-            (5, 5, "O.XXX..O", 3, vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
-            (5, 5, "O.XXX..O", 4, vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
-            // .XX.X.
-            (5, 5, "O.XX.X.O", 2, vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
-            (5, 5, "O.XX.X.O", 3, vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
-            (5, 5, "O.XX.X.O", 5, vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]),
-        ];
-
-        let mut failures = Vec::new();
-        for (row, base, pattern, new_index, expected) in cases {
-            let (game, before) = setup_window_new_stone(row, base, pattern, new_index);
-            if !before.free_three.is_empty() {
-                failures.push(format!("{pattern:?} idx={new_index}: we found pattern before last move"));
-                continue;
-            }
-
-            let actual = &black_patterns(&game).free_three;
-            if *actual != vec![expected] {
-                failures.push(format!("{pattern:?} idx={new_index}: different from expected: {actual:?}"));
-            }
-        }
-        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+        run_cases(
+            setup_window_new_stone,
+            PatternKind::FreeThree,
+            vec![
+                // ..XXX..
+                Case { row: 5, base: 5, pattern: "..XXX..", index: 2,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
+                Case { row: 5, base: 5, pattern: "..XXX..", index: 3,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
+                // .XXX..
+                Case { row: 5, base: 5, pattern: "O.XXX..O", index: 2,
+                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
+                Case { row: 5, base: 5, pattern: "O.XXX..O", index: 3,
+                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
+                Case { row: 5, base: 5, pattern: "O.XXX..O", index: 4,
+                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
+                // .XX.X.
+                Case { row: 5, base: 5, pattern: "O.XX.X.O", index: 2,
+                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
+                Case { row: 5, base: 5, pattern: "O.XX.X.O", index: 3,
+                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
+                Case { row: 5, base: 5, pattern: "O.XX.X.O", index: 5,
+                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
+            ],
+        );
     }
 
     #[test]
     fn block_four() {
-        let cases: Vec<(i32, i32, &str, usize, Vec<Position>)> = vec![
-            // O.XXXXO -> .XXXXO
-            (5, 4, "O.XXXXO", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
-            (5, 4, "O.XXXXO", 3, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
-            (5, 4, "O.XXXXO", 4, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
-            (5, 4, "O.XXXXO", 5, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
-            (5, 4, "O.XXXXO", 6, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
-            // OX.XXXO -> X.XXX
-            (5, 4, "OX.XXXO", 1, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-            (5, 4, "OX.XXXO", 3, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-            (5, 4, "OX.XXXO", 4, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-            (5, 4, "OX.XXXO", 5, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-            // OXX.XXO -> XX.XX
-            (5, 4, "OXX.XXO", 1, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-            (5, 4, "OXX.XXO", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-        ];
-
-        let mut failures = Vec::new();
-        for (row, base, pattern, new_index, expected) in cases {
-            let (game, before) = setup_window_new_stone(row, base, pattern, new_index);
-            if !before.block_four.is_empty() {
-                failures.push(format!("{pattern:?} idx={new_index}: we found pattern before last move"));
-                continue;
-            }
-
-            let actual = &black_patterns(&game).block_four;
-            if *actual != vec![expected] {
-                failures.push(format!("{pattern:?} idx={new_index}: different from expected: {actual:?}"));
-            }
-        }
-        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+        run_cases(
+            setup_window_new_stone,
+            PatternKind::BlockFour,
+            vec![
+                // O.XXXXO -> .XXXXO
+                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 2,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
+                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 3,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
+                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 4,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
+                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 5,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
+                // OX.XXXO -> X.XXX
+                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 1,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 3,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 4,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 5,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                // OXX.XXO -> XX.XX
+                Case { row: 5, base: 4, pattern: "OXX.XXO", index: 1,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                Case { row: 5, base: 4, pattern: "OXX.XXO", index: 2,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+            ],
+        );
     }
 
     #[test]
     fn open_four() {
-        let cases: Vec<(i32, i32, &str, usize, Vec<Position>)> = vec![
-            // O.XXXX.O
-            (5, 4, "O.XXXX.O", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
-            (5, 4, "O.XXXX.O", 3, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
-        ];
-
-        let mut failures = Vec::new();
-        for (row, base, pattern, new_index, expected) in cases {
-            let (game, before) = setup_window_new_stone(row, base, pattern, new_index);
-            if !before.open_four.is_empty() {
-                failures.push(format!("{pattern:?} idx={new_index}: we found pattern before last move"));
-                continue;
-            }
-
-            let actual = &black_patterns(&game).open_four;
-            if *actual != vec![expected] {
-                failures.push(format!("{pattern:?} idx={new_index}: different from expected: {actual:?}"));
-            }
-        }
-        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+        run_cases(
+            setup_window_new_stone,
+            PatternKind::OpenFour,
+            vec![
+                // O.XXXX.O
+                Case { row: 5, base: 4, pattern: "O.XXXX.O", index: 2,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
+                Case { row: 5, base: 4, pattern: "O.XXXX.O", index: 3,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
+            ],
+        );
     }
 
     #[test]
     fn five_row() {
-        // XXXXX 완성 -> five_row 등록
-        let (game, before) = setup_window_new_stone(5, 5, "XXXXX", 4);
-        assert!(before.five_row.is_empty());
-
-        let expected = vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)];
-        assert_eq!(black_patterns(&game).five_row, vec![expected]);
+        run_cases(
+            setup_window_new_stone,
+            PatternKind::FiveRow,
+            vec![
+                // XXXXX 완성 -> five_row 등록
+                Case { row: 5, base: 5, pattern: "XXXXX", index: 4,
+                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+            ],
+        );
     }
 }
 
-mod new_move_remove {
-  use super::*;
-  #[test]
-  fn block_four() {
-      let cases: Vec<(i32, i32, &str, usize, Vec<Position>)> = vec![
-          // O.XXXXO -> .XXXXO
-          (5, 4, "O.XXXXO", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
-          (5, 4, "O.XXXXO", 3, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
-          (5, 4, "O.XXXXO", 4, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
-          (5, 4, "O.XXXXO", 5, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]),
-          // OX.XXXO -> X.XXX
-          (5, 4, "OX.XXXO", 1, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-          (5, 4, "OX.XXXO", 3, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-          (5, 4, "OX.XXXO", 4, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-          (5, 4, "OX.XXXO", 5, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-          // OXX.XXO -> XX.XX
-          (5, 4, "OXX.XXO", 1, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-          (5, 4, "OXX.XXO", 2, vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]),
-      ];
-  
-      let mut failures = Vec::new();
-      for (row, base, pattern, index, expected) in cases {
-          let (mut game, _) = setup_window_remove_stone(row, base, pattern, index);
-          if black_patterns(&game).block_four != vec![expected.clone()] {
-              failures.push(format!(
-                  "{pattern:?} idx={index}: 제거 이전에 등록되어 있어야 하는데 {:?}",
-                  black_patterns(&game).block_four
-              ));
-              continue;
-          }
-  
-          let actual = &black_patterns(&game).block_four;
-          if !actual.is_empty() {
-              failures.push(format!("{pattern:?} idx={index}: 제거 후에도 등록이 남아있음: {actual:?}"));
-          }
-      }
-      assert!(failures.is_empty(), "\n{}", failures.join("\n"));
-  }
+mod remove_stone_remove_pattern {
+    use super::*;
+
+    #[test]
+    fn block_four() {
+        run_cases(
+            setup_window_remove_stone,
+            PatternKind::BlockFour,
+            vec![
+                // O.XXXXO -> .XXXXO
+                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 2,
+                       before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]], after: vec![] },
+                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 3,
+                       before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]], after: vec![] },
+                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 4,
+                       before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]], after: vec![] },
+                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 5,
+                       before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]], after: vec![] },
+                // OX.XXXO -> X.XXX
+                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 1,
+                       before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]], after: vec![] },
+                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 3,
+                       before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]], after: vec![] },
+                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 4,
+                       before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]], after: vec![] },
+                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 5,
+                       before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]], after: vec![] },
+                // OXX.XXO -> XX.XX
+                Case { row: 5, base: 4, pattern: "OXX.XXO", index: 1,
+                       before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]], after: vec![] },
+                Case { row: 5, base: 4, pattern: "OXX.XXO", index: 2,
+                       before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]], after: vec![] },
+            ],
+        );
+    }
 }
 
