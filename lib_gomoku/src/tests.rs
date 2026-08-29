@@ -85,7 +85,8 @@ impl Case {
         let before = before.into_iter().map(|p| p.into_iter().map(decode_short_coord).collect()).collect();
         let after = after.into_iter().map(|p| p.into_iter().map(decode_short_coord).collect()).collect();
 
-        Case { row: 5, base: 5, pattern, index, before, after }
+        // default j10
+        Case { row: 9, base: 9, pattern, index, before, after }
     }
 
     fn with_row_base(&mut self, row_base: &str) {
@@ -142,6 +143,7 @@ mod decode_short_coords {
         assert_eq!(decode_short_coord("s19"), (18, 18));
         assert_eq!(decode_short_coord("b5"), (1, 4));
         assert_eq!(decode_short_coord("f6"), (5, 5));
+        assert_eq!(decode_short_coord("j10"), (9, 9));
     }
 
 }
@@ -156,7 +158,7 @@ mod add_stone_add_pattern {
             PatternKind::OpenTwo,
             vec![
                 // ..XX..
-                Case::new("..XX..", 2, vec![], vec![vec!["f6", "f7", "f8", "f9", "f10", "f11"]]),
+                Case::new("..XX..", 2, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]]),
                 Case { row: 5, base: 5, pattern: "..XX..", index: 2,
                        before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
                 // ..XX.O
