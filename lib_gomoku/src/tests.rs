@@ -246,11 +246,12 @@ mod add_stone_add_pattern {
                 // ..XXX..
                 Case::new("..XXX..", 2, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]]),
                 Case::new("..XXX..", 3, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]]),
-                // O.XXX.. - TODO
-                Case::new("O.XXX..", 0, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]]),
-                Case::new("O.XXX..", 2, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]]),
-                Case::new("O.XXX..", 3, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]]),
-                Case::new("O.XXX..", 4, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]]),
+                // O.XXX..
+                Case::new("O.XXX..", 0, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], 
+                                        vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
+                Case::new("O.XXX..", 2, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
+                Case::new("O.XXX..", 3, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
+                Case::new("O.XXX..", 4, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
                 // .XX.X.
                 Case::new(".XX.X.", 1, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]]),
                 Case::new(".XX.X.", 2, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]]),
