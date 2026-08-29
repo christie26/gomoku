@@ -346,16 +346,16 @@ mod add_stone_remove_pattern {
             PatternKind::FreeThree,
             vec![
                 // ..XXX..
-                Case::new("..XXX..", 2, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]]),
-                Case::new("..XXX..", 3, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]]),
+                Case::new("O.XXX..", 0,  vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                Case::new(".OXXX..", 1,  vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
                 // .XXX..
-                Case::new("O.XXX..O", 2, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
-                Case::new("O.XXX..O", 3, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
-                Case::new("O.XXX..O", 4, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
+                Case::new("OOXXX..O", 2,  vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                Case::new("O.XXXO.O", 5,  vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                Case::new("O.XXX.OO", 6,  vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
                 // .XX.X.
-                Case::new("O.XX.X.O", 2, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
-                Case::new("O.XX.X.O", 3, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
-                Case::new("O.XX.X.O", 5, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
+                Case::new("OOXX.X.O", 1,  vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                Case::new("O.XXOX.O", 4,  vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                Case::new("O.XX.XOO", 6,  vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
             ],
         );
     }
@@ -366,19 +366,12 @@ mod add_stone_remove_pattern {
             setup_window_add_stone,
             PatternKind::BlockFour,
             vec![
-                // O.XXXXO -> .XXXXO
-                Case::new("O.XXXXO", 2, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
-                Case::new("O.XXXXO", 3, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
-                Case::new("O.XXXXO", 4, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
-                Case::new("O.XXXXO", 5, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
-                // OX.XXXO -> X.XXX
-                Case::new("OX.XXXO", 1, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
-                Case::new("OX.XXXO", 3, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
-                Case::new("OX.XXXO", 4, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
-                Case::new("OX.XXXO", 5, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
-                // OXX.XXO -> XX.XX
-                Case::new("OXX.XXO", 1, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
-                Case::new("OXX.XXO", 2, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
+                // O.XXXX
+                Case::new("OXXXX", 0, vec![vec!["j10", "j11", "j12", "j13", "j14"]],vec![]),
+                // X.XXX
+                Case::new("XOXXX", 1, vec![vec!["j10", "j11", "j12", "j13", "j14"]],vec![]),
+                // XX.XX
+                Case::new("XXOXX", 2, vec![vec!["j10", "j11", "j12", "j13", "j14"]],vec![]),
             ],
         );
     }
@@ -390,8 +383,7 @@ mod add_stone_remove_pattern {
             PatternKind::OpenFour,
             vec![
                 // O.XXXX.O
-                Case::new("O.XXXX.O", 2, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
-                Case::new("O.XXXX.O", 3, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
+                Case::new("OOXXXX.O", 1, vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
             ],
         );
     }
