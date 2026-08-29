@@ -156,6 +156,7 @@ mod add_stone_add_pattern {
             PatternKind::OpenTwo,
             vec![
                 // ..XX..
+                Case::new("..XX..", 2, vec![], vec![vec!["f6", "f7", "f8", "f9", "f10", "f11"]]),
                 Case { row: 5, base: 5, pattern: "..XX..", index: 2,
                        before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
                 // ..XX.O
