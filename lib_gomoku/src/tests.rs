@@ -5,16 +5,16 @@ fn place(game: &mut Gomoku, player: Stone, x: i32, y: i32) {
     game.opponent_player = match player {
         Stone::Black => Stone::White,
         Stone::White => Stone::Black,
-        Stone::Empty => panic!("Empty는 플레이어가 될 수 없다"),
+        Stone::Empty => panic!("Empty is not player"),
     };
     let (result, _, _) = game.handle_move(x, y);
-    assert_eq!(result, MoveResult::Valid, "({x},{y}) {:?} 착수가 실패함", player);
+    assert_eq!(result, MoveResult::Valid, "({x},{y}) {:?} fail to handle_move", player);
 }
 fn remove(game: &mut Gomoku, x: i32, y: i32) {
     assert_ne!(
         game.board[x as usize][y as usize],
         Stone::Empty,
-        "({x},{y})에는 지울 돌이 없음"
+        "No stone to remove in ({x},{y})"
     );
     game.remove_stone(x, y);
 }
@@ -36,7 +36,7 @@ fn setup_window_add_stone(row: i32, base: i32, pattern: &str, add_index: usize) 
     let last = match pattern.chars().nth(add_index) {
         Some('X') => Stone::Black,
         Some('O') => Stone::White,
-        other => panic!("add_index={add_index}는 돌 자리가 아님: {other:?}"),
+        other => panic!("add_index={add_index}is not stone: {other:?}"),
     };
     place(&mut game, last, row, base + add_index as i32);
     (game, before)
