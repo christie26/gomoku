@@ -60,6 +60,36 @@ struct Case {
     after: Vec<Pattern>,
 }
 
+
+fn decode_short_coord(coord: &str) -> Position {
+let mut chars = coord.chars();
+    let col_char = chars.next().unwrap().to_ascii_uppercase();
+    let x = (col_char as i32) - ('A' as i32);
+    let row_str = chars.as_str();
+    let row_num: i32 = row_str.parse().expect("invalid row");
+    assert!(row_num > 0);
+    assert!(row_num < 20);
+    let y = row_num - 1;
+
+    (x, y)
+}
+
+impl Case {
+
+    fn new(pattern: &'static str, index: usize, before: Vec<Vec<&str>>, after: Vec<Vec<&str>>) -> Self {
+        let before = before.into_iter().map(|p| p.into_iter().map(decode_short_coord).collect()).collect();
+        let after = after.into_iter().map(|p| p.into_iter().map(decode_short_coord).collect()).collect();
+
+        Case { row: 5, base: 5, pattern, index, before, after }
+    }
+
+    fn with_row_base(&mut self, row_base: &str) {
+        let (row, base) = decode_short_coord(row_base);
+        self.row = row;
+        self.base = base;
+    }
+}
+
 type Setup = fn(i32, i32, &str, usize) -> (Gomoku, PlayerPatterns);
 
 fn patterns_of(patterns: &PlayerPatterns, kind: PatternKind) -> &Vec<Pattern> {
@@ -96,6 +126,19 @@ fn run_cases(setup: Setup, kind: PatternKind, cases: Vec<Case>) {
         }
     }
     assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+}
+
+mod decode_short_coords {
+    use super::*;
+
+    #[test]
+    fn test_decode_short_coords() {
+        assert_eq!(decode_short_coord("a1"), (0, 0));
+        assert_eq!(decode_short_coord("s19"), (18, 18));
+        assert_eq!(decode_short_coord("b5"), (1, 4));
+        assert_eq!(decode_short_coord("f6"), (5, 5));
+    }
+
 }
 
 mod add_stone_add_pattern {
@@ -432,6 +475,7 @@ mod add_stone_remove_pattern {
     }
 }
 
+//TODO: Etienne does thsi
 mod remove_stone_add_pattern {
     use super::*;
 
@@ -599,6 +643,7 @@ mod remove_stone_add_pattern {
     }
 }
 
+//TODO: Etienne does thsi
 mod remove_stone_remove_pattern {
     use super::*;
 
