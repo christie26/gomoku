@@ -26,14 +26,19 @@ fn black_patterns(game: &Gomoku) -> &PlayerPatterns {
 fn setup_window_add_stone(row: i32, base: i32, pattern: &str, add_index: usize) -> (Gomoku, PlayerPatterns) {
     let mut game = Gomoku::new(19);
     for (i, ch) in pattern.chars().enumerate() {
-        if ch == 'O' {
+        if ch == 'O' && i != add_index{
             place(&mut game, Stone::White, row, base + i as i32);
         } else if ch == 'X' && i != add_index {
             place(&mut game, Stone::Black, row, base + i as i32);
         }
     }
     let before = black_patterns(&game).clone();
-    place(&mut game, Stone::Black, row, base + add_index as i32);
+    let last = match pattern.chars().nth(add_index) {
+        Some('X') => Stone::Black,
+        Some('O') => Stone::White,
+        other => panic!("add_index={add_index}는 돌 자리가 아님: {other:?}"),
+    };
+    place(&mut game, last, row, base + add_index as i32);
     (game, before)
 }
 
@@ -325,8 +330,10 @@ mod add_stone_remove_pattern {
                        before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]], after: vec![] },
                 Case { row: 5, base: 5, pattern: ".OXX.O", index: 2,
                        before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]], after: vec![] },
-                // O.X.X.O 
+                // O.X.X.O
                 Case { row: 5, base: 5, pattern: "O.XOX.O", index: 3,
+                       before: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]], after: vec![] },
+                Case { row: 5, base: 5, pattern: "OOX.X.O", index: 2,
                        before: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]], after: vec![] },
             ],
         );
@@ -339,47 +346,31 @@ mod add_stone_remove_pattern {
             PatternKind::OpenThree,
             vec![
                 // XXX..
-                Case { row: 5, base: 4, pattern: "OXXX..", index: 1,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OXXX..", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OXXX..", index: 3,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                Case { row: 5, base: 4, pattern: "OXXXO.", index: 4,
+                       before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]]  , after: vec![]},
+                Case { row: 5, base: 4, pattern: "OXXX.O", index: 5,
+                       before: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]]  , after: vec![]},
                 // XX.X.
-                Case { row: 1, base: 5, pattern: "OXX.X.O", index: 1,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OXX.X.O", index: 2,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OXX.X.O", index: 4,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "OXXOX.O", index: 3,
+                       before: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] , after: vec![] },
+                Case { row: 1, base: 5, pattern: "OXX.XOO", index: 5,
+                       before: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] , after: vec![] },
                 // X.XX.
-                Case { row: 1, base: 5, pattern: "OX.XX.O", index: 1,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX.XX.O", index: 3,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX.XX.O", index: 4,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "OXOXX.O", index: 2,
+                       before: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] , after: vec![] },
+                Case { row: 1, base: 5, pattern: "OX.XXOO", index: 5,
+                       before: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] , after: vec![] },
                 // .XXX.
-                Case { row: 1, base: 5, pattern: "O.XXX.O", index: 2,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "O.XXX.O", index: 3,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "O.XXX.O", index: 4,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "OOXXX.O", index: 1,
+                       before: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] , after: vec![] },
                 // X..XX
-                Case { row: 1, base: 5, pattern: "OX..XXO", index: 1,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX..XXO", index: 4,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX..XXO", index: 5,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "OXO.XXO", index: 2,
+                       before: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] , after: vec![] },
+                Case { row: 1, base: 5, pattern: "OX.OXXO", index: 3,
+                       before: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] , after: vec![] },
                 // X.X.X
-                Case { row: 1, base: 5, pattern: "OX.X.XO", index: 1,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX.X.XO", index: 3,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX.X.XO", index: 5,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                Case { row: 1, base: 5, pattern: "OXOX.XO", index: 2,
+                       before: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] , after: vec![] },
             ],
         );
     }
@@ -461,18 +452,6 @@ mod add_stone_remove_pattern {
         );
     }
 
-    #[test]
-    fn five_row() {
-        run_cases(
-            setup_window_add_stone,
-            PatternKind::FiveRow,
-            vec![
-                // XXXXX 완성 -> five_row 등록
-                Case { row: 5, base: 5, pattern: "XXXXX", index: 4,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-            ],
-        );
-    }
 }
 
 //TODO: Etienne does thsi

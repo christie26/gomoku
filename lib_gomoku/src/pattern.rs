@@ -251,7 +251,7 @@ impl Gomoku {
         }
     }
 
-    fn rescan_pattern(&self, pattern: &Pattern, pos: Position, player: &Stone) -> Option<(PatternKind, Pattern)> {
+    pub(crate) fn rescan_pattern(&self, pattern: &Pattern, pos: Position, player: &Stone) -> Option<(PatternKind, Pattern)> {
         if pattern.len() < 2 {
             return None;
         }
