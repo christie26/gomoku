@@ -68,6 +68,12 @@ pub(crate) fn build_pattern_range(
 ) -> Pattern {
     let (lower, upper) = if kind == PatternKind::FiveRow {
         (-minus.contig_my, plus.contig_my)
+    } else if  kind == PatternKind::OpenFour {
+      // plus.empty_count > 0 && minus.empty_count > 0 and we don't care how many. 
+        (
+            -(minus.total_my + 1),
+            plus.total_my + 1,
+        )
     } else if kind == PatternKind::BlockFour {
         let contig_total = if center_stone != 0 { plus.contig_my + minus.contig_my + center_stone } else {plus.contig_my.max(minus.contig_my)};
         if contig_total == 4 {

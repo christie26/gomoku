@@ -189,6 +189,8 @@ mod add_stone_add_pattern {
                 Case::new("..XX.O", 3, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14"]]),
                 Case::new("..XX.O", 5, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], 
                                        vec![vec!["j10", "j11", "j12", "j13", "j14"]]),
+                // ..X.X..
+                Case::new("..X.X..", 2, vec![], vec![vec!["j10","j11", "j12", "j13", "j14", "j15","j16"]]),
                 // O.X.X.O
                 Case::new("O.X.X.O", 0, vec![vec!["j10","j11", "j12", "j13", "j14", "j15"]], 
                                         vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
@@ -301,7 +303,9 @@ mod add_stone_add_pattern {
             PatternKind::FiveRow,
             vec![
                 // XXXXX
-                Case::new("XXXXX", 4, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14"]]),
+                Case::new("XXXXX", 0, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14"]]),
+                Case::new("XXXXX", 1, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14"]]),
+                Case::new("XXXXX", 2, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14"]]),
             ],
         );
     }
