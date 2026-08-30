@@ -114,31 +114,6 @@ pub(crate) fn build_pattern_range(
     (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect()
 }
 
-pub(crate) fn free_three_for_move(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minus: &LineScan) -> Option<Pattern> {
-    if plus.total_my + minus.total_my != 2
-    || plus.empty_count + minus.empty_count < 3
-    || ! plus.end_open
-    || ! minus.end_open {
-        return None;
-    }
-
-    // adjust empty space number because [..0.@0..] in this case, empty space on the rightest side is useless
-    let mut adjusted_plus_empty = plus.empty_count;
-    let mut adjusted_minus_empty = minus.empty_count;
-
-    if plus.hole && minus.empty_count == 2 {
-        adjusted_minus_empty = 1;
-    }
-    if minus.hole && plus.empty_count == 2 {
-        adjusted_plus_empty = 1;
-    }
-
-    let plus_end = adjusted_plus_empty + plus.total_my;
-    let minus_end = adjusted_minus_empty + minus.total_my;
-
-    Some((-minus_end..=plus_end).map(|i| (x0 + dx * i, y0 + dy * i)).collect())
-}
-
 pub(crate) fn free_three_for_capture(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minus: &LineScan) -> Vec<Pattern> {
     let mut out = Vec::new();
     let plus_three = plus.total_my == 3 && plus.empty_count == 2;

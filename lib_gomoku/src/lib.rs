@@ -9,7 +9,7 @@ pub mod minimax;
 pub mod pattern;
 
 use pattern::{
-    build_pattern_range, classify, free_three_for_capture, free_three_for_move,
+    build_pattern_range, classify, free_three_for_capture,
     print_pattern_kind, PatternKind, PlayerPatterns,
 };
 pub use pattern::position_name;
@@ -261,7 +261,7 @@ impl Gomoku {
             .filter(|&(dx, dy)| {
                 let plus = self.scan_line(1, dx, dy, x0, y0);
                 let minus = self.scan_line(-1, dx, dy, x0, y0);
-                free_three_for_move(dx, dy, x0, y0, &plus, &minus).is_some()
+                classify(&plus, &minus, 1).is_some()
             })
             .count();
 
@@ -348,10 +348,6 @@ impl Gomoku {
         for (dx, dy) in directions {
             let plus = self.scan_line(1, dx, dy, x0, y0);
             let minus = self.scan_line(-1, dx, dy, x0, y0);
-
-            if let Some(pattern) = free_three_for_move(dx, dy, x0, y0, &plus, &minus) {
-                self.register(PatternKind::FreeThree, &player, pattern);
-            }
 
             let Some(kind) = classify(&plus, &minus, 1)
             else {
