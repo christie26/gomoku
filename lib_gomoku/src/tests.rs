@@ -400,8 +400,8 @@ mod add_stone_remove_pattern {
             setup_window_add_stone,
             PatternKind::BlockFour,
             vec![
-                // O.XXXX
-                Case::new("OXXXX", 0, vec![vec!["j10", "j11", "j12", "j13", "j14"]],vec![]),
+                // .XXXXO
+                Case::new("OXXXXO", 0, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]],vec![]),
                 // X.XXX
                 Case::new("XOXXX", 1, vec![vec!["j10", "j11", "j12", "j13", "j14"]],vec![]),
                 // XX.XX
