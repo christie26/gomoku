@@ -403,9 +403,10 @@ impl Gomoku {
                     if !pattern.contains(&pos) {
                         continue;
                     }
-                    // TODO - check if this logic is necessary 
-                    if let Some((new_kind, new_pattern)) = self.rescan_pattern(pattern, pos, &player) {
+                    if self.current_player != player {
+                      if let Some((new_kind, new_pattern)) = self.rescan_pattern(pattern, pos, &player) {
                         pending.push((player, new_kind, new_pattern));
+                      }
                     }
                 }
             }
