@@ -45,9 +45,9 @@ pub(crate) fn classify(
         Some(PatternKind::BlockFour)
     } else if total == 4 && empty == 1 {
         Some(PatternKind::BlockFour)
-    } else if total == 3 && empty == 3 {
+    } else if (contig_total ==3 && empty >=3) || (total == 3 && empty >= 3 && plus.end_open && minus.end_open) {
         Some(PatternKind::FreeThree)
-    } else if total == 3 && empty == 2 {
+    } else if total == 3 && empty >= 2 {
         Some(PatternKind::OpenThree)
     } else if total == 2 && plus.empty_count > 0 && minus.empty_count > 0 {
         Some(PatternKind::OpenTwo)
