@@ -425,27 +425,23 @@ mod add_stone_remove_pattern {
 
 }
 
-//TODO: Etienne does thsi
 mod remove_stone_add_pattern {
     use super::*;
 
     #[test]
     fn open_two() {
         run_cases(
-            setup_window_add_stone,
+            setup_window_remove_stone,
             PatternKind::OpenTwo,
             vec![
-                // ..XX..
-                Case { row: 5, base: 5, pattern: "..XX..", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
-                // ..XX.O
-                Case { row: 5, base: 5, pattern: "..XX.O", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 5, pattern: "..XX.O", index: 3,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                // O.X.X.O
-                Case { row: 5, base: 5, pattern: "O.X.X.O", index: 2,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
+                // Removing 'O' at index 4 turns "..XXO." into "..XX.."
+                Case::new("..XXO.", 4, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]]),
+                // Removing 'O' at index 4 turns "..XXOO" into "..XX.O"
+                Case::new("..XXOO", 4, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14"]]),
+                Case::new(".OXX.O", 1, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14"]]),
+                // Removing 'O' at index 3 turns "O.XOX.O" into "O.X.X.O"
+                Case::new("O.XOX.O", 3, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
+                Case::new("OOX.X.O", 1, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
             ],
         );
     }
@@ -453,51 +449,23 @@ mod remove_stone_add_pattern {
     #[test]
     fn open_three() {
         run_cases(
-            setup_window_add_stone,
+            setup_window_remove_stone,
             PatternKind::OpenThree,
             vec![
-                // XXX..
-                Case { row: 5, base: 4, pattern: "OXXX..", index: 1,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OXXX..", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OXXX..", index: 3,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                // XX.X.
-                Case { row: 1, base: 5, pattern: "OXX.X.O", index: 1,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OXX.X.O", index: 2,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OXX.X.O", index: 4,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                // X.XX.
-                Case { row: 1, base: 5, pattern: "OX.XX.O", index: 1,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX.XX.O", index: 3,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX.XX.O", index: 4,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                // .XXX.
-                Case { row: 1, base: 5, pattern: "O.XXX.O", index: 2,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "O.XXX.O", index: 3,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "O.XXX.O", index: 4,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                // X..XX
-                Case { row: 1, base: 5, pattern: "OX..XXO", index: 1,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX..XXO", index: 4,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX..XXO", index: 5,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                // X.X.X
-                Case { row: 1, base: 5, pattern: "OX.X.XO", index: 1,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX.X.XO", index: 3,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX.X.XO", index: 5,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                // Removing 'O' at index 4 turns "OXXXO." into "OXXX.."
+
+                // becomes OXXX..
+                Case::new("OXXXO.", 4, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
+                Case::new("OXXX.O", 5, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
+
+                // becomes OXX.X.O
+                Case::new("OXXOX.O", 3, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
+                Case::new("OXX.XOO", 5, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
+                Case::new("OXOXX.O", 2, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
+                Case::new("OX.XXOO", 5, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
+
+                // becomes O.XXX.O
+                Case::new("OOXXX.O", 1, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
             ],
         );
     }
@@ -505,28 +473,15 @@ mod remove_stone_add_pattern {
     #[test]
     fn free_three() {
         run_cases(
-            setup_window_add_stone,
+            setup_window_remove_stone,
             PatternKind::FreeThree,
             vec![
-                // ..XXX..
-                Case { row: 5, base: 5, pattern: "..XXX..", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                Case { row: 5, base: 5, pattern: "..XXX..", index: 3,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                // .XXX..
-                Case { row: 5, base: 5, pattern: "O.XXX..O", index: 2,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                Case { row: 5, base: 5, pattern: "O.XXX..O", index: 3,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                Case { row: 5, base: 5, pattern: "O.XXX..O", index: 4,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                // .XX.X.
-                Case { row: 5, base: 5, pattern: "O.XX.X.O", index: 2,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                Case { row: 5, base: 5, pattern: "O.XX.X.O", index: 3,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                Case { row: 5, base: 5, pattern: "O.XX.X.O", index: 5,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
+                // Removing 'O' at index 0 turns "O.XXX.." into "..XXX.."
+                Case::new("O.XXX..", 0, vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]]),
+                Case::new(".OXXX..", 1, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]]),
+                Case::new("OOXXX..O", 1, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
+                Case::new("O.XXXO.O", 5, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]]),
+                Case::new("O.XXOX.O", 4, vec![], vec![vec!["j11", "j12", "j13", "j14", "j15"]]),
             ],
         );
     }
@@ -534,32 +489,16 @@ mod remove_stone_add_pattern {
     #[test]
     fn block_four() {
         run_cases(
-            setup_window_add_stone,
+            setup_window_remove_stone,
             PatternKind::BlockFour,
             vec![
-                // O.XXXXO -> .XXXXO
-                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
-                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 3,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
-                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 4,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
-                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 5,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
-                // OX.XXXO -> X.XXX
-                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 1,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 3,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 4,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 5,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                // OXX.XXO -> XX.XX
-                Case { row: 5, base: 4, pattern: "OXX.XXO", index: 1,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OXX.XXO", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                // Removing 'O' at index 0 turns "OXXXX" into ".XXXX"
+                // .XXXXO
+                Case::new("OXXXXO", 0, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]]),
+                // X.XXX
+                Case::new("XOXXX", 1, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14"]]),
+                // XX.XX
+                Case::new("XXOXX", 2, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14"]]),
             ],
         );
     }
@@ -567,14 +506,11 @@ mod remove_stone_add_pattern {
     #[test]
     fn open_four() {
         run_cases(
-            setup_window_add_stone,
+            setup_window_remove_stone,
             PatternKind::OpenFour,
             vec![
-                // O.XXXX.O
-                Case { row: 5, base: 4, pattern: "O.XXXX.O", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
-                Case { row: 5, base: 4, pattern: "O.XXXX.O", index: 3,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
+                // Removing 'O' at index 0 turns "OXXXX." into ".XXXX."
+                Case::new("OXXXX.", 0, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]]),
             ],
         );
     }
@@ -582,38 +518,27 @@ mod remove_stone_add_pattern {
     #[test]
     fn five_row() {
         run_cases(
-            setup_window_add_stone,
+            setup_window_remove_stone,
             PatternKind::FiveRow,
-            vec![
-                // XXXXX 완성 -> five_row 등록
-                Case { row: 5, base: 5, pattern: "XXXXX", index: 4,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-            ],
+            vec![],
         );
     }
 }
 
-//TODO: Etienne does thsi
 mod remove_stone_remove_pattern {
     use super::*;
 
     #[test]
     fn open_two() {
         run_cases(
-            setup_window_add_stone,
+            setup_window_remove_stone,
             PatternKind::OpenTwo,
             vec![
-                // ..XX..
-                Case { row: 5, base: 5, pattern: "..XX..", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
-                // ..XX.O
-                Case { row: 5, base: 5, pattern: "..XX.O", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 5, pattern: "..XX.O", index: 3,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                // O.X.X.O
-                Case { row: 5, base: 5, pattern: "O.X.X.O", index: 2,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
+                // Removing 'X' at index 2 breaks "..XX.."
+                Case::new("..XX..", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("..XX.O", 2, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
+                Case::new("..XX.O", 3, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
+                Case::new("..X.X..", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
             ],
         );
     }
@@ -621,51 +546,16 @@ mod remove_stone_remove_pattern {
     #[test]
     fn open_three() {
         run_cases(
-            setup_window_add_stone,
+            setup_window_remove_stone,
             PatternKind::OpenThree,
             vec![
-                // XXX..
-                Case { row: 5, base: 4, pattern: "OXXX..", index: 1,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OXXX..", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OXXX..", index: 3,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                // XX.X.
-                Case { row: 1, base: 5, pattern: "OXX.X.O", index: 1,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OXX.X.O", index: 2,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OXX.X.O", index: 4,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                // X.XX.
-                Case { row: 1, base: 5, pattern: "OX.XX.O", index: 1,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX.XX.O", index: 3,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX.XX.O", index: 4,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                // .XXX.
-                Case { row: 1, base: 5, pattern: "O.XXX.O", index: 2,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "O.XXX.O", index: 3,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "O.XXX.O", index: 4,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                // X..XX
-                Case { row: 1, base: 5, pattern: "OX..XXO", index: 1,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX..XXO", index: 4,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX..XXO", index: 5,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                // X.X.X
-                Case { row: 1, base: 5, pattern: "OX.X.XO", index: 1,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX.X.XO", index: 3,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
-                Case { row: 1, base: 5, pattern: "OX.X.XO", index: 5,
-                       before: vec![], after: vec![vec![(1, 6), (1, 7), (1, 8), (1, 9), (1, 10)]] },
+                // Removing 'X' at index 1 breaks "OXXX.."
+                // becomes OX.X..
+                Case::new("OXXX..", 1, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OXXX..", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OXX.X.", 1, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OX.XX.", 3, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("O.XXX.O", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
             ],
         );
     }
@@ -673,28 +563,13 @@ mod remove_stone_remove_pattern {
     #[test]
     fn free_three() {
         run_cases(
-            setup_window_add_stone,
+            setup_window_remove_stone,
             PatternKind::FreeThree,
             vec![
-                // ..XXX..
-                Case { row: 5, base: 5, pattern: "..XXX..", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                Case { row: 5, base: 5, pattern: "..XXX..", index: 3,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                // .XXX..
-                Case { row: 5, base: 5, pattern: "O.XXX..O", index: 2,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                Case { row: 5, base: 5, pattern: "O.XXX..O", index: 3,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                Case { row: 5, base: 5, pattern: "O.XXX..O", index: 4,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                // .XX.X.
-                Case { row: 5, base: 5, pattern: "O.XX.X.O", index: 2,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                Case { row: 5, base: 5, pattern: "O.XX.X.O", index: 3,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
-                Case { row: 5, base: 5, pattern: "O.XX.X.O", index: 5,
-                       before: vec![], after: vec![vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10), (5, 11)]] },
+                // Removing 'X' at index 2 breaks "..XXX.."
+                Case::new("..XXX..", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                Case::new("O.XXX..", 2, vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                Case::new(".XX.X.", 1, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
             ],
         );
     }
@@ -702,32 +577,13 @@ mod remove_stone_remove_pattern {
     #[test]
     fn block_four() {
         run_cases(
-            setup_window_add_stone,
+            setup_window_remove_stone,
             PatternKind::BlockFour,
             vec![
-                // O.XXXXO -> .XXXXO
-                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
-                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 3,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
-                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 4,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
-                Case { row: 5, base: 4, pattern: "O.XXXXO", index: 5,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
-                // OX.XXXO -> X.XXX
-                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 1,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 3,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 4,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OX.XXXO", index: 5,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                // OXX.XXO -> XX.XX
-                Case { row: 5, base: 4, pattern: "OXX.XXO", index: 1,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
-                Case { row: 5, base: 4, pattern: "OXX.XXO", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                // Removing 'X' at index 1 breaks ".XXXXO"
+                Case::new(".XXXXO", 1, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("X.XXX", 0, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
+                Case::new("XX.XX", 1, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
             ],
         );
     }
@@ -735,14 +591,12 @@ mod remove_stone_remove_pattern {
     #[test]
     fn open_four() {
         run_cases(
-            setup_window_add_stone,
+            setup_window_remove_stone,
             PatternKind::OpenFour,
             vec![
-                // O.XXXX.O
-                Case { row: 5, base: 4, pattern: "O.XXXX.O", index: 2,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
-                Case { row: 5, base: 4, pattern: "O.XXXX.O", index: 3,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]] },
+                // Removing 'X' at index 1 breaks ".XXXX."
+                Case::new(".XXXX.", 1, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new(".XXXX.", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
             ],
         );
     }
@@ -750,16 +604,12 @@ mod remove_stone_remove_pattern {
     #[test]
     fn five_row() {
         run_cases(
-            setup_window_add_stone,
+            setup_window_remove_stone,
             PatternKind::FiveRow,
             vec![
-                // XXXXX 완성 -> five_row 등록
-                Case { row: 5, base: 5, pattern: "XXXXX", index: 4,
-                       before: vec![], after: vec![vec![(5, 5), (5, 6), (5, 7), (5, 8), (5, 9)]] },
+                // Removing 'X' at index 2 breaks "XXXXX"
+                Case::new("XXXXX", 2, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
             ],
         );
     }
 }
-
-// O.XXXO + O/X/.
-//TODO: ..00XXX.0. make test case of what happens when both left 0 captured, or only one
