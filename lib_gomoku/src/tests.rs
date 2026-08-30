@@ -539,11 +539,21 @@ mod remove_stone_remove_pattern {
             setup_window_remove_stone,
             PatternKind::OpenTwo,
             vec![
-                // Removing 'X' at index 2 breaks "..XX.."
+                // ..XX..
                 Case::new("..XX..", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                // ..XX.O
                 Case::new("..XX.O", 2, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
                 Case::new("..XX.O", 3, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
-                Case::new("..X.X..", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                Case::new("..XX.O", 5, vec![vec!["j10", "j11", "j12", "j13", "j14"]], 
+                                       vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]]),
+                // O.X.X.O
+                Case::new("O.X.X.O", 0, vec![vec!["j11", "j12", "j13", "j14", "j15"]], 
+                                        vec![vec!["j10","j11", "j12", "j13", "j14", "j15"]]),
+                Case::new("O.X.X.O", 2, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
+                // NOTE - we cannot detect 5 empty space
+                // ..X.X..
+                Case::new("..X.X..", 2, vec![vec!["j10","j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("..X.X..", 4, vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
             ],
         );
     }
@@ -554,13 +564,26 @@ mod remove_stone_remove_pattern {
             setup_window_remove_stone,
             PatternKind::OpenThree,
             vec![
-                // Removing 'X' at index 1 breaks "OXXX.."
-                // becomes OX.X..
+                // OXXX..
+                Case::new("OXXX..", 0, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
                 Case::new("OXXX..", 1, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
                 Case::new("OXXX..", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OXXX..", 3, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                // OXX.X.
+                Case::new("OXX.X.", 0, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
                 Case::new("OXX.X.", 1, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OXX.X.", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OXX.X.", 4, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                // OX.XX.
+                Case::new("OX.XX.", 0, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OX.XX.", 1, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
                 Case::new("OX.XX.", 3, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OX.XX.", 4, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                // O.XXX.O
+                Case::new("O.XXX.O", 0, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
                 Case::new("O.XXX.O", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                Case::new("O.XXX.O", 3, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                Case::new("O.XXX.O", 4, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
             ],
         );
     }
@@ -571,10 +594,19 @@ mod remove_stone_remove_pattern {
             setup_window_remove_stone,
             PatternKind::FreeThree,
             vec![
-                // Removing 'X' at index 2 breaks "..XXX.."
+                // ..XXX..
                 Case::new("..XXX..", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                Case::new("..XXX..", 3, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                // O.XXX..
+                Case::new("O.XXX..", 0, vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], 
+                                        vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]]),
                 Case::new("O.XXX..", 2, vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                Case::new("O.XXX..", 3, vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                Case::new("O.XXX..", 4, vec![vec!["j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                // .XX.X.
                 Case::new(".XX.X.", 1, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new(".XX.X.", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new(".XX.X.", 4, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
             ],
         );
     }
@@ -585,9 +617,19 @@ mod remove_stone_remove_pattern {
             setup_window_remove_stone,
             PatternKind::BlockFour,
             vec![
-                // Removing 'X' at index 1 breaks ".XXXXO"
+                // .XXXXO
                 Case::new(".XXXXO", 1, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new(".XXXXO", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new(".XXXXO", 3, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new(".XXXXO", 4, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new(".XXXXO", 5, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                // X.XXX
                 Case::new("X.XXX", 0, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
+                Case::new("X.XXX", 2, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
+                Case::new("X.XXX", 3, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
+                Case::new("X.XXX", 4, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
+                // XX.XX
+                Case::new("XX.XX", 0, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
                 Case::new("XX.XX", 1, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
             ],
         );
@@ -599,7 +641,7 @@ mod remove_stone_remove_pattern {
             setup_window_remove_stone,
             PatternKind::OpenFour,
             vec![
-                // Removing 'X' at index 1 breaks ".XXXX."
+                // .XXXX.
                 Case::new(".XXXX.", 1, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
                 Case::new(".XXXX.", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
             ],
@@ -612,7 +654,9 @@ mod remove_stone_remove_pattern {
             setup_window_remove_stone,
             PatternKind::FiveRow,
             vec![
-                // Removing 'X' at index 2 breaks "XXXXX"
+                // XXXXX
+                Case::new("XXXXX", 0, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
+                Case::new("XXXXX", 1, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
                 Case::new("XXXXX", 2, vec![vec!["j10", "j11", "j12", "j13", "j14"]], vec![]),
             ],
         );
