@@ -151,7 +151,7 @@ fn main() {
 
         let game_clone = game.clone();
         let handle =
-            thread::spawn(move || Python::with_gil(|py| minimax::get_ai_move_with_stats(&game_clone)));
+            thread::spawn(move || Python::with_gil(|_py| minimax::get_ai_move_with_stats(&game_clone)));
 
         let mut res = None;
         let mut moves = vec![];
