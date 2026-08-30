@@ -126,26 +126,6 @@ pub(crate) fn build_pattern_range(
     (lower..=upper).map(|i| (x0 + dx * i, y0 + dy * i)).collect()
 }
 
-pub(crate) fn free_three_for_capture(dx: i32, dy: i32, x0: i32, y0: i32, plus: &LineScan, minus: &LineScan) -> Vec<Pattern> {
-    let mut out = Vec::new();
-    let plus_three = plus.total_my == 3 && plus.empty_count == 2;
-    let minus_three = minus.total_my == 3 && minus.empty_count == 2;
-
-    if plus_three || minus_three {
-        if plus_three {
-            out.push((0..=(plus.total_my + plus.empty_count)).map(|i| (x0 + dx * i, y0 + dy * i)).collect());
-        }
-        if minus_three {
-            out.push((-(minus.total_my + minus.empty_count)..=0).map(|i| (x0 + dx * i, y0 + dy * i)).collect());
-        }
-    } else if !plus.hole && !minus.hole && plus.total_my + minus.total_my == 3 && plus.empty_count > 0 && minus.empty_count > 0 {
-        let plus_end = plus.total_my + 1;
-        let minus_end = minus.total_my + 1;
-        out.push((-minus_end..=plus_end).map(|i| (x0 + dx * i, y0 + dy * i)).collect());
-    }
-    out
-}
-
 pub fn position_name(pos: &(i32, i32)) -> String {
         let (y, x) = pos;
         let x = "abcdefghijklmnopqrstuvwxyz".chars().nth(*x as usize).unwrap_or('-');
