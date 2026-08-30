@@ -257,6 +257,19 @@ mod add_stone_add_pattern {
                 Case::new(".XX.X.", 1, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]]),
                 Case::new(".XX.X.", 2, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]]),
                 Case::new(".XX.X.", 4, vec![], vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]]),
+
+                // Should not be counted as a free three
+                // OXX.X.
+                Case::new("OXX.X.", 0, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OXX.X.", 1, vec![], vec![]),
+                Case::new("OXX.X.", 2, vec![], vec![]),
+                Case::new("OXX.X.", 4, vec![], vec![]),
+
+                // OX.XX.
+                Case::new("OX.XX.", 0, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OX.XX.", 1, vec![], vec![]),
+                Case::new("OX.XX.", 3, vec![], vec![]),
+                Case::new("OX.XX.", 4, vec![], vec![]),
             ],
         );
     }
