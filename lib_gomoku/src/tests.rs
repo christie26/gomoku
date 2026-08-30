@@ -354,21 +354,22 @@ mod add_stone_remove_pattern {
             PatternKind::OpenThree,
             vec![
                 // OXXX..
-                Case::new("OXXXO.", 4, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
-                Case::new("OXXX.O", 5, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
-                // OXX.X. - TODO
-                Case::new("OXXOX.O", 3, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
-                Case::new("OXX.XOO", 5, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
-                // OX.XX. - TODO
-                Case::new("OXOXX.O", 2, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
-                Case::new("OX.XXOO", 5, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
-                // O.XXX.O - TODO
-                Case::new("OOXXX.O", 1, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
-                // X..XX - TODO
-                Case::new("OXO.XXO", 2, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
-                Case::new("OX.OXXO", 3, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
-                // X.X.X - TODO
-                Case::new("OXOX.XO", 2, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OXXXO.", 4, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OXXX.O", 5, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                // OXX.X.
+                Case::new("OXXOX.O", 3, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OXX.XOO", 5, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                // OX.XX.
+                Case::new("OXOXX.O", 2, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                Case::new("OX.XXOO", 5, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15"]], vec![]),
+                // O.XXX.O
+                Case::new("OOXXX.O", 1, vec![vec!["j10", "j11", "j12", "j13", "j14", "j15", "j16"]], vec![]),
+                // TODO
+                // // X..XX
+                // Case::new("OXO.XXO", 2, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
+                // Case::new("OX.OXXO", 3, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
+                // // X.X.X
+                // Case::new("OXOX.XO", 2, vec![vec!["j11", "j12", "j13", "j14", "j15"]], vec![]),
             ],
         );
     }
