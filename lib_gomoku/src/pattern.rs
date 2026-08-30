@@ -82,8 +82,7 @@ pub(crate) fn build_pattern_range(
                   -(minus.total_my + minus.empty_count + 1),
                   plus.total_my + 1,
               )
-          } else  {
-            // if minus.empty_count > 0
+          } else  { // if minus.empty_count > 0
               (
                   -(minus.total_my + 1),
                   plus.total_my + plus.empty_count + 1,
@@ -96,16 +95,29 @@ pub(crate) fn build_pattern_range(
                   plus.total_my + 1,
               )
           } else {
-            // println!("plus: {:#?}", plus);
-            // println!("minus: {:#?}", minus);
-              (
-                  -(minus.total_my + 1),
-                  plus.total_my,
-              )
+            (
+              -(minus.total_my + 1),
+              plus.total_my,
+            )
           }
         }
-    }
-    else {
+      } else if kind == PatternKind::OpenThree {
+        let closed_plus_bonus = if plus.end_open { 0 } else {1} ;
+        let closed_minus_bonus = if minus.end_open { 0 } else {1} ;
+        let adjust_plus_empty_count = if !minus.end_open && minus.empty_count == 1 {1} else {plus.empty_count};
+        let adjust_minus_empty_count = if !plus.end_open && plus.empty_count == 1 {1} else {minus.empty_count};
+        (
+            -(minus.total_my + adjust_minus_empty_count + closed_minus_bonus),
+            plus.total_my + adjust_plus_empty_count + closed_plus_bonus,
+        )
+      } else if kind == PatternKind::FreeThree {
+          let adjust_plus_empty = if minus.hole {plus.empty_count.min(1)} else {plus.empty_count};
+          let adjust_minus_empty = if plus.hole {minus.empty_count.min(1)} else {minus.empty_count};
+          (
+              -(minus.total_my + adjust_minus_empty),
+              plus.total_my + adjust_plus_empty,
+          )
+    } else {
         (
             -(minus.total_my + minus.empty_count),
             plus.total_my + plus.empty_count,
