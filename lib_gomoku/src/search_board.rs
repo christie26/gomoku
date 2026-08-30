@@ -175,6 +175,9 @@ const SCAN_DIRS: [(i32, i32); 4] = [(1, 0), (0, 1), (1, 1), (1, -1)];
 /// most 2 empties past its last stone, so 8 is comfortably beyond the reach.
 const LOCAL_RADIUS: i32 = 8;
 
+/// A move changes the cell it lands on plus at most four captured pairs.
+const MAX_CHANGED_CELLS: usize = 9;
+
 /// One ray walked outward from an anchor. Port of `pattern_legacy::LineScan`.
 struct LineScan {
     contig_my: i32,
@@ -203,7 +206,9 @@ fn classify(plus: &LineScan, minus: &LineScan, center_stone: i32) -> Option<Patt
         plus.contig_my.max(minus.contig_my)
     };
     let empty = plus.empty_count + minus.empty_count + (1 - center_stone);
-    if contig_total == 5 && center_stone != 0 {
+    // `>= 5`, not `== 5`: an overline still wins, and the legacy classifier's
+    // exact `== 5` left runs of six or more scoring nothing at all.
+    if contig_total >= 5 && center_stone != 0 {
         Some(PatternKind::FiveRow)
     } else if contig_total == 4 && plus.empty_count > 0 && minus.empty_count > 0 {
         Some(PatternKind::OpenFour)
@@ -371,9 +376,42 @@ impl SearchBoard {
         let old_last_move = self.last_move;
         let old_total_stones = self.total_stones;
 
-        // Snapshot local pattern contributions around (r,c) before any mutation.
-        // Used by the fast incremental path below when this move captures nothing.
-        let (before_b, before_w) = self.sb_local_patterns(r as i32, c as i32);
+        let ri = r as i32;
+        let ci = c as i32;
+
+        // Find captures before touching anything. The before/after snapshots
+        // have to cover every cell this move changes, and which stones come off
+        // the board is only knowable by looking. Detection reads offsets 1..3
+        // along each direction and never (r,c) itself, so it gives the same
+        // answer before the stone is placed as after.
+        let mut captured_stones = [(0usize, 0usize); 8];
+        let mut num_captured = 0usize;
+
+        for &(dr, dc) in ALL_DIRS.iter() {
+            let (r1, c1) = (ri + dr, ci + dc);
+            let (r2, c2) = (ri + 2 * dr, ci + 2 * dc);
+            let (r3, c3) = (ri + 3 * dr, ci + 3 * dc);
+
+            if !Self::in_bounds(r3, c3) { continue; }
+            if self.get(r1, c1) == self.opponent
+                && self.get(r2, c2) == self.opponent
+                && self.get(r3, c3) == self.current
+            {
+                captured_stones[num_captured] = (r1 as usize, c1 as usize);
+                captured_stones[num_captured + 1] = (r2 as usize, c2 as usize);
+                num_captured += 2;
+            }
+        }
+
+        // Every cell this move touches, so one local sweep covers the lot.
+        let mut changed = [(0i32, 0i32); MAX_CHANGED_CELLS];
+        changed[0] = (ri, ci);
+        for i in 0..num_captured {
+            changed[i + 1] = (captured_stones[i].0 as i32, captured_stones[i].1 as i32);
+        }
+        let changed = &changed[..num_captured + 1];
+
+        let (before_b, before_w) = self.sb_local_patterns(changed);
 
         // Place stone
         self.cells[r][c] = self.current;
@@ -382,40 +420,15 @@ impl SearchBoard {
         self.move_count += 1;
         self.last_move = Some((r, c));
 
-        // Execute captures: scan 8 directions for current-opp-opp-current pattern
-        let mut captured_stones = [(0usize, 0usize); 8];
-        let mut num_captured = 0usize;
-        let ri = r as i32;
-        let ci = c as i32;
-
-        for &(dr, dc) in ALL_DIRS.iter() {
-            let r1 = ri + dr;
-            let c1 = ci + dc;
-            let r2 = ri + 2 * dr;
-            let c2 = ci + 2 * dc;
-            let r3 = ri + 3 * dr;
-            let c3 = ci + 3 * dc;
-
-            if !Self::in_bounds(r3, c3) { continue; }
-            if self.get(r1, c1) == self.opponent
-                && self.get(r2, c2) == self.opponent
-                && self.get(r3, c3) == self.current
-            {
-                // Capture the two opponent stones
-                let opp_zi = self.opponent.zobrist_idx();
-                let (ur1, uc1) = (r1 as usize, c1 as usize);
-                let (ur2, uc2) = (r2 as usize, c2 as usize);
-                self.cells[ur1][uc1] = Cell::Empty;
-                self.cells[ur2][uc2] = Cell::Empty;
-                self.hash ^= z.board[ur1 * 19 + uc1][opp_zi];
-                self.hash ^= z.board[ur2 * 19 + uc2][opp_zi];
-                captured_stones[num_captured] = (ur1, uc1);
-                captured_stones[num_captured + 1] = (ur2, uc2);
-                num_captured += 2;
-                self.captures[self.current as usize] += 1;
-                self.total_stones -= 2;
-            }
+        // Lift the captured stones
+        let opp_zi = self.opponent.zobrist_idx();
+        for i in 0..num_captured {
+            let (ur, uc) = captured_stones[i];
+            self.cells[ur][uc] = Cell::Empty;
+            self.hash ^= z.board[ur * 19 + uc][opp_zi];
         }
+        self.captures[self.current as usize] += (num_captured / 2) as i32;
+        self.total_stones -= num_captured;
 
         // Switch player
         self.hash ^= z.player;
@@ -423,18 +436,11 @@ impl SearchBoard {
         self.current = self.opponent;
         self.opponent = tmp;
 
-        // Update incrementally maintained pattern counts. A non-capturing move
-        // only ever changes patterns in the placed stone's own neighborhood, so
-        // diffing a local rescan before/after is enough. Captures can reopen
-        // lines far from (r,c) (each removed stone affects its own neighborhood),
-        // so that rarer path falls back to a full rescan instead.
-        let (delta_black, delta_white) = if num_captured == 0 {
-            let (after_b, after_w) = self.sb_local_patterns(r as i32, c as i32);
-            (after_b - before_b, after_w - before_w)
-        } else {
-            let (new_black, new_white) = self.sb_scan_patterns();
-            (new_black - self.black_patterns, new_white - self.white_patterns)
-        };
+        // Update the incrementally maintained pattern counts. A move can only
+        // change classifications near the cells it touched, so diffing a local
+        // sweep over those cells before and after is enough — captures included.
+        let (after_b, after_w) = self.sb_local_patterns(changed);
+        let (delta_black, delta_white) = (after_b - before_b, after_w - before_w);
         self.black_patterns.apply_delta(&delta_black, 1);
         self.white_patterns.apply_delta(&delta_white, 1);
 
@@ -451,6 +457,14 @@ impl SearchBoard {
             delta_black,
             delta_white,
         }
+    }
+
+    /// Hand the turn over without playing a stone. Self-inverse: call it again
+    /// to take the pass back. Nothing on the board changes, so no pattern
+    /// counts move either.
+    pub(crate) fn make_null_move(&mut self) {
+        self.hash ^= zobrist().player;
+        std::mem::swap(&mut self.current, &mut self.opponent);
     }
 
     pub(crate) fn undo_move(&mut self, info: &UndoInfo) {
@@ -535,10 +549,39 @@ impl SearchBoard {
 
     /// Port of `Gomoku::is_double_three_move`: classify all four directions as
     /// if `self.current` already had a stone on (x0,y0), which is still empty.
+    /// Could a stone at (x0,y0) possibly be part of a free three along
+    /// (dx,dy)? A free three puts three stones inside a six-cell window, and
+    /// the two furthest apart sit three cells apart, so the other two stones
+    /// must both lie within three steps. Six array reads, and it rejects most
+    /// candidates before the ray scans below have to run.
+    #[inline]
+    fn could_be_free_three(&self, x0: i32, y0: i32, dx: i32, dy: i32, player: Cell) -> bool {
+        let mut nearby = 0;
+        for i in 1..=3i32 {
+            for sign in [1i32, -1] {
+                let (x, y) = (x0 + dx * i * sign, y0 + dy * i * sign);
+                if Self::in_bounds(x, y) && self.get(x, y) == player {
+                    nearby += 1;
+                }
+            }
+        }
+        nearby >= 2
+    }
+
+    /// Port of `Gomoku::is_double_three_move`: classify all four directions as
+    /// if `self.current` already had a stone on (x0,y0), which is still empty.
     pub(crate) fn sb_is_double_three(&self, x0: i32, y0: i32) -> bool {
         let player = self.current;
+        let dirs = [(1, -1), (1, 0), (1, 1), (0, 1)];
         let mut free_three_count = 0;
-        for (dx, dy) in [(1, -1), (1, 0), (1, 1), (0, 1)] {
+        for (i, (dx, dy)) in dirs.into_iter().enumerate() {
+            // Can't reach two even if every remaining direction is a free three.
+            if free_three_count + (4 - i) < 2 {
+                return false;
+            }
+            if !self.could_be_free_three(x0, y0, dx, dy, player) {
+                continue;
+            }
             let plus = self.scan_line_as(player, 1, dx, dy, x0, y0);
             let minus = self.scan_line_as(player, -1, dx, dy, x0, y0);
             if classify(&plus, &minus, 1) == Some(PatternKind::FreeThree) {
@@ -659,30 +702,34 @@ impl SearchBoard {
 
     /// Get winner after a make_move (which already switched players).
     /// `board.opponent` is who just moved, `board.current` is who moves next.
+    /// Counts for `player`, whichever colour that is.
+    #[inline]
+    pub(crate) fn patterns_of(&self, player: Cell) -> &PatternCounts {
+        if player == Cell::Black { &self.black_patterns } else { &self.white_patterns }
+    }
+
+    /// Winner after a `make_move`, which has already switched players — so
+    /// `self.opponent` is whoever just moved and `self.current` moves next.
+    ///
+    /// Reads the incrementally maintained five counts instead of sweeping the
+    /// board. `five_rows > 0` is exactly `has_five_in_row`: `classify` matches
+    /// `FiveRow` on any contiguous run of five or more, ahead of every other
+    /// rule, and `scan_all`/`scan_around` report each run once. The board sweep
+    /// only survives for the capture-breakable case, which needs the run's
+    /// cells and is reached only once a five already exists.
     pub(crate) fn get_winner(&self) -> Option<Cell> {
-        // 1. Check if the player who just moved (opponent) has >= 5 captures
+        // 1. Five captured pairs by whoever just moved.
         if self.captures[self.opponent as usize] >= 5 {
             return Some(self.opponent);
         }
-        // 2. Check if current player (who didn't just move) has a five_row
-        //    (the opponent's move might have created it via capture removal — rare but check)
-        //    Actually in the original: check opponent_player's five_row first (step 2)
-        //    After make_move: self.current was the opponent_player before the move.
-        //    The original Gomoku::get_winner checks:
-        //      - current_player captures >= 5 (before switch_player was called in make_next_state)
-        //      - opponent_player five_row (which is the one who just had their patterns updated)
-        //      - current_player uncapturable five
-        //    After make_move switches, self.opponent = who just moved = old current_player.
-        //    self.current = old opponent_player.
-        //
-        //    Mapping:
-        //    old current_player captures >= 5 → self.opponent captures >= 5 (done above)
-        //    old opponent_player five_row → self.current has five_in_row
-        if self.has_five_in_row(self.current) {
+        // 2. A five for the side about to move (a capture can open one up).
+        if self.patterns_of(self.current).five_rows > 0 {
             return Some(self.current);
         }
-        //    old current_player uncapturable five → self.opponent uncapturable five
-        if self.has_uncapturable_five(self.opponent) {
+        // 3. A five for the mover that no capture can break apart.
+        if self.patterns_of(self.opponent).five_rows > 0
+            && self.has_uncapturable_five(self.opponent)
+        {
             return Some(self.opponent);
         }
         None
@@ -758,13 +805,25 @@ impl SearchBoard {
         if me == Cell::Empty {
             return None;
         }
-        // Cheapest rejection first: most anchors are not the first stone.
         let minus = self.scan_line_as(me, -1, dr, dc, r, c);
-        if minus.stones != 0 {
-            return None;
-        }
         let plus = self.scan_line_as(me, 1, dr, dc, r, c);
         let kind = classify(&plus, &minus, 1)?;
+
+        // Which stone owns the formation depends on which rule matched, because
+        // `classify` does not use every stone its rays saw. The five/open-four
+        // rules are decided by the contiguous run alone, so a loose stone
+        // further back is irrelevant to them; the rest are decided by the whole
+        // stone count, so the first stone the rays reached owns those. Getting
+        // this wrong either double-counts a formation or loses it: keying five
+        // on the ray's first stone made `X.XXXXX` score zero, because the run's
+        // real start was rejected in favour of the detached stone.
+        let owner_offset = match kind {
+            PatternKind::FiveRow | PatternKind::OpenFour => -minus.contig_my,
+            _ => -((32 - minus.stones.leading_zeros()) as i32),
+        };
+        if owner_offset != 0 {
+            return None;
+        }
 
         // Bit k of the mask marks a stone k cells along `dir` from (r,c).
         Some(Formation { color: me, kind, mask: 1 | (plus.stones << 1) })
@@ -807,23 +866,53 @@ impl SearchBoard {
         }
     }
 
-    /// Every formation whose classification a change at (ar,ac) could alter.
+    /// Every formation whose classification the given changed cells could alter.
     ///
-    /// Only anchors on the same line as (ar,ac) can see it, and only within
-    /// `LOCAL_RADIUS`. Diffing this before and after a single-cell change gives
-    /// the same answer as re-running `scan_all`, which
+    /// Only anchors on the same line as a changed cell can see it, and only
+    /// within `LOCAL_RADIUS`. Diffing this before and after a move gives the
+    /// same answer as re-running `scan_all` — the invariant
     /// `incremental_patterns_match_full_rescan_over_random_games` checks.
-    fn scan_around<S: PatternSink>(&self, ar: i32, ac: i32, sink: &mut S) {
+    ///
+    /// The changed cells all sit within two steps of the placed stone, so along
+    /// any one scan direction they fall on only a few lines. Cells sharing a
+    /// line get one merged sweep instead of one sweep each, which is what stops
+    /// the sweeps from overlapping and double-counting a formation.
+    fn scan_around<S: PatternSink>(&self, changed: &[(i32, i32)], sink: &mut S) {
         for &(dr, dc) in &SCAN_DIRS {
-            for k in -LOCAL_RADIUS..=LOCAL_RADIUS {
-                self.emit_at(ar + dr * k, ac + dc * k, dr, dc, sink);
+            // Per line: (line key, a cell on it, that cell's position along the
+            // line, and the lowest/highest changed position on the line).
+            let mut lines = [(0i32, (0i32, 0i32), 0i32, 0i32, 0i32); MAX_CHANGED_CELLS];
+            let mut n = 0usize;
+
+            for &(x, y) in changed {
+                // Constant along `dir`, so it names the line (x,y) sits on.
+                let key = dc * x - dr * y;
+                // Steps by one per step along `dir`, so it orders cells on it.
+                let pos = if dr != 0 { x } else { y };
+                match lines[..n].iter_mut().find(|l| l.0 == key) {
+                    Some(l) => {
+                        l.3 = l.3.min(pos);
+                        l.4 = l.4.max(pos);
+                    }
+                    None => {
+                        lines[n] = (key, (x, y), pos, pos, pos);
+                        n += 1;
+                    }
+                }
+            }
+
+            for &(_, (x0, y0), origin, lo, hi) in &lines[..n] {
+                for pos in (lo - LOCAL_RADIUS)..=(hi + LOCAL_RADIUS) {
+                    let k = pos - origin;
+                    self.emit_at(x0 + dr * k, y0 + dc * k, dr, dc, sink);
+                }
             }
         }
     }
 
-    pub(crate) fn sb_local_patterns(&self, ar: i32, ac: i32) -> (PatternCounts, PatternCounts) {
+    pub(crate) fn sb_local_patterns(&self, changed: &[(i32, i32)]) -> (PatternCounts, PatternCounts) {
         let mut sink = CountSink::default();
-        self.scan_around(ar, ac, &mut sink);
+        self.scan_around(changed, &mut sink);
         (sink.black, sink.white)
     }
 
@@ -848,7 +937,22 @@ impl SearchBoard {
 
     // ---- Candidate move generation ----
 
-    pub(crate) fn get_candidate_moves(&mut self, depth: usize) -> Vec<(usize, usize)> {
+    /// Legal moves worth searching, best-first.
+    ///
+    /// `history` is the caller's move-ordering table, when it has one: moves
+    /// that have caused cutoffs elsewhere in this search are tried first, and
+    /// the static score only breaks ties between moves with equal history.
+    /// `check_legality` filters out double-three moves up front. Interior
+    /// search nodes pass `false` and check the few moves they actually search
+    /// instead: alpha-beta explores a handful of the candidates offered, so
+    /// legality-testing all of them is mostly wasted work. Callers that hand
+    /// the list to someone else — the root, the UI — must pass `true`.
+    pub(crate) fn get_candidate_moves(
+        &mut self,
+        depth: usize,
+        history: Option<&[u32; 361]>,
+        check_legality: bool,
+    ) -> Vec<(usize, usize)> {
         // Empty board → center
         if self.total_stones == 0 {
             return vec![(9, 9)];
@@ -880,7 +984,7 @@ impl SearchBoard {
             let r = idx / 19;
             let c = idx % 19;
             if self.cells[r][c] != Cell::Empty { continue; }
-            if self.sb_is_double_three(r as i32, c as i32) { continue; }
+            if check_legality && self.sb_is_double_three(r as i32, c as i32) { continue; }
             moves.push((r, c));
         }
 
@@ -898,8 +1002,10 @@ impl SearchBoard {
                 if mover == Cell::Black { -score } else { score }
             });
         } else {
+            let mover = self.current;
             moves.sort_by_cached_key(|&(r, c)| {
-                std::cmp::Reverse(self.evaluate_position(r, c, self.current))
+                let hist = history.map_or(0, |h| h[r * 19 + c]);
+                std::cmp::Reverse((hist, self.evaluate_position(r, c, mover)))
             });
         }
 
@@ -976,6 +1082,7 @@ mod tests {
     #[test]
     pub(crate) fn incremental_patterns_match_full_rescan_over_random_games() {
         let mut rng = TestRng(0xC0FFEE_u64);
+        let mut captures_seen = 0usize;
         for game in 0..30usize {
             let mut board = SearchBoard::empty();
             let mut undos = Vec::new();
@@ -991,6 +1098,7 @@ mod tests {
                 let (r, c) = empties[rng.next_usize(empties.len())];
 
                 let undo = board.make_move(r, c);
+                captures_seen += undo.num_captured;
                 assert_patterns_match(&board, &format!("game {game} move {} at ({r},{c})", undos.len()));
                 undos.push(undo);
 
@@ -1009,6 +1117,179 @@ mod tests {
             }
             assert_eq!(board.black_patterns, PatternCounts::default());
             assert_eq!(board.white_patterns, PatternCounts::default());
+        }
+
+        // Captures take the multi-cell path through make_move. If random play
+        // ever stops producing them, this test silently stops covering it.
+        assert!(
+            captures_seen > 50,
+            "only {captures_seen} stones captured across all games — the capture path is barely covered"
+        );
+    }
+
+    /// A run longer than five still counts as a five. The legacy classifier
+    /// tested `contig_total == 5` exactly, which left overlines scoring
+    /// nothing — no five, and no four either.
+    #[test]
+    fn overlines_count_as_five() {
+        for len in 5..=8usize {
+            let mut board = SearchBoard::empty();
+            for c in 5..5 + len {
+                board.cells[9][c] = Cell::Black;
+                board.total_stones += 1;
+            }
+            let (black, _) = board.sb_scan_patterns();
+            assert_eq!(black.five_rows, 1, "run of {len} should count as one five");
+            assert!(board.has_five_in_row(Cell::Black), "run of {len} should be a win");
+        }
+    }
+
+    /// A detached stone further along the line must not hide the run next to
+    /// it. `X.XXXXX` used to score zero: the ray from the five's first stone
+    /// reached the loose stone, so that anchor was rejected as "not first",
+    /// while the loose stone itself classified as nothing.
+    #[test]
+    fn detached_stone_does_not_hide_a_five() {
+        for (label, cols) in [
+            ("XXXXX", vec![5, 6, 7, 8, 9]),
+            ("X.XXXXX", vec![5, 7, 8, 9, 10, 11]),
+            ("XX.XXXXX", vec![5, 6, 8, 9, 10, 11, 12]),
+            ("X..XXXXX", vec![5, 8, 9, 10, 11, 12]),
+        ] {
+            let mut board = SearchBoard::empty();
+            for c in cols {
+                board.cells[9][c] = Cell::Black;
+                board.total_stones += 1;
+            }
+            let (black, _) = board.sb_scan_patterns();
+            assert_eq!(black.five_rows, 1, "{label} should hold exactly one five");
+        }
+    }
+
+    /// The counterpart: a formation must not be counted once per stone in it.
+    /// `OOX.X.O` is the case that pins the rule down — from the right-hand X
+    /// the gaps look open both ways, but the line is walled in.
+    #[test]
+    fn formations_are_counted_once() {
+        let mut board = SearchBoard::empty();
+        for (c, cell) in [(9, Cell::White), (10, Cell::White), (11, Cell::Black),
+                          (13, Cell::Black), (15, Cell::White)] {
+            board.cells[9][c] = cell;
+            board.total_stones += 1;
+        }
+        let (black, _) = board.sb_scan_patterns();
+        assert_eq!(black.open_twos, 0, "OOX.X.O is walled in, not an open two");
+    }
+
+    /// `get_winner` reads `five_rows` instead of sweeping the board, which is
+    /// only sound if the maintained count agrees with a real board scan on
+    /// every position the search can reach.
+    #[test]
+    fn five_count_agrees_with_board_scan() {
+        let mut rng = TestRng(0x5EED_5EED);
+        for game in 0..200usize {
+            let mut board = SearchBoard::empty();
+            let mut undos = Vec::new();
+            for _ in 0..60 {
+                let empties: Vec<(usize, usize)> = (0..19usize)
+                    .flat_map(|r| (0..19usize).map(move |c| (r, c)))
+                    .filter(|&(r, c)| board.cells[r][c] == Cell::Empty)
+                    .collect();
+                if empties.is_empty() { break; }
+                let (r, c) = empties[rng.next_usize(empties.len())];
+                undos.push(board.make_move(r, c));
+                for player in [Cell::Black, Cell::White] {
+                    assert_eq!(
+                        board.patterns_of(player).five_rows > 0,
+                        board.has_five_in_row(player),
+                        "game {game} move {} at ({r},{c}): five count disagrees with board scan for {player:?}",
+                        undos.len(),
+                    );
+                }
+                if board.get_winner().is_some() { break; }
+            }
+        }
+    }
+
+    /// `sb_is_double_three` skips its ray scans when a cheap neighbour count
+    /// rules the direction out. That shortcut must never change a verdict.
+    #[test]
+    fn double_three_prefilter_matches_unfiltered() {
+        // The same check with no pre-filter and no early exit.
+        fn reference(board: &SearchBoard, x0: i32, y0: i32) -> bool {
+            let player = board.current;
+            let mut count = 0;
+            for (dx, dy) in [(1, -1), (1, 0), (1, 1), (0, 1)] {
+                let plus = board.scan_line_as(player, 1, dx, dy, x0, y0);
+                let minus = board.scan_line_as(player, -1, dx, dy, x0, y0);
+                if classify(&plus, &minus, 1) == Some(PatternKind::FreeThree) {
+                    count += 1;
+                }
+            }
+            count > 1
+        }
+
+        let mut rng = TestRng(0xD3ADB33F);
+        for game in 0..60usize {
+            let mut board = SearchBoard::empty();
+            for _ in 0..50 {
+                let empties: Vec<(usize, usize)> = (0..19usize)
+                    .flat_map(|r| (0..19usize).map(move |c| (r, c)))
+                    .filter(|&(r, c)| board.cells[r][c] == Cell::Empty)
+                    .collect();
+                if empties.is_empty() { break; }
+                for &(r, c) in &empties {
+                    assert_eq!(
+                        board.sb_is_double_three(r as i32, c as i32),
+                        reference(&board, r as i32, c as i32),
+                        "game {game}: pre-filter changed the verdict at ({r},{c})",
+                    );
+                }
+                let (r, c) = empties[rng.next_usize(empties.len())];
+                board.make_move(r, c);
+                if board.get_winner().is_some() { break; }
+            }
+        }
+    }
+
+    /// A stone that captures in several directions at once changes up to nine
+    /// cells spread over a 5x5 box. That is the widest the local sweep in
+    /// `make_move` ever has to cover, so check it against a full rescan.
+    #[test]
+    fn multi_direction_capture_matches_full_rescan() {
+        for placements in [
+            // Two pairs, opposite directions along one row.
+            vec![((9, 6), Cell::Black), ((9, 7), Cell::White), ((9, 8), Cell::White),
+                 ((9, 10), Cell::White), ((9, 11), Cell::White), ((9, 12), Cell::Black)],
+            // Three pairs at once: along the row, the column and a diagonal.
+            vec![((9, 6), Cell::Black), ((9, 7), Cell::White), ((9, 8), Cell::White),
+                 ((6, 9), Cell::Black), ((7, 9), Cell::White), ((8, 9), Cell::White),
+                 ((6, 6), Cell::Black), ((7, 7), Cell::White), ((8, 8), Cell::White)],
+            // Four pairs radiating from the landing square — eight stones lifted,
+            // the most a single move can change.
+            vec![((9, 6), Cell::Black), ((9, 7), Cell::White), ((9, 8), Cell::White),
+                 ((9, 12), Cell::Black), ((9, 11), Cell::White), ((9, 10), Cell::White),
+                 ((6, 9), Cell::Black), ((7, 9), Cell::White), ((8, 9), Cell::White),
+                 ((12, 9), Cell::Black), ((11, 9), Cell::White), ((10, 9), Cell::White)],
+        ] {
+            let mut board = SearchBoard::empty();
+            for ((r, c), cell) in placements {
+                board.cells[r][c] = cell;
+                board.total_stones += 1;
+                board.hash ^= zobrist().board[r * 19 + c][cell.zobrist_idx()];
+            }
+            let (b, w) = board.sb_scan_patterns();
+            board.black_patterns = b;
+            board.white_patterns = w;
+
+            board.current = Cell::Black;
+            board.opponent = Cell::White;
+            let undo = board.make_move(9, 9);
+            assert!(undo.num_captured >= 4, "expected a multi-direction capture, got {}", undo.num_captured);
+            assert_patterns_match(&board, "after multi-direction capture");
+
+            board.undo_move(&undo);
+            assert_patterns_match(&board, "after undoing multi-direction capture");
         }
     }
 }

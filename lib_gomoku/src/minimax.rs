@@ -1,6 +1,7 @@
 use crate::constants::{
-    MAX_DEPTH, MAX_VALUE, MIN_VALUE, RANDOMIZE_TIED_MOVES, TIME_LIMIT_MS, TT_SHARDS,
-    TT_SHARD_MASK, TT_SIZE_BITS,
+    LMR_DEEP_MOVE, LMR_MIN_DEPTH, LMR_MIN_MOVE, MAX_DEPTH, MAX_VALUE, MIN_VALUE,
+    CANDIDATE_CAP, CANDIDATE_CAP_DEPTH, NULL_MOVE_MIN_DEPTH, NULL_MOVE_REDUCTION,
+    RANDOMIZE_TIED_MOVES, TIME_LIMIT_MS, TT_SHARDS, TT_SHARD_MASK, TT_SIZE_BITS,
 };
 use crate::search_board::{Cell, SearchBoard};
 use crate::Gomoku;
@@ -80,11 +81,30 @@ impl ShardedTT {
         let shard = (hash & TT_SHARD_MASK) as usize;
         self.shards[shard].lock().unwrap().store(hash, entry);
     }
+
+    /// Drop every entry. Entries are keyed by Zobrist hash so stale ones are
+    /// not wrong, but they do make one search's cost depend on what ran before
+    /// it — clear between unrelated positions to get comparable timings.
+    pub fn clear(&self) {
+        for shard in &self.shards {
+            let mut t = shard.lock().unwrap();
+            for slot in t.entries.iter_mut() {
+                *slot = None;
+            }
+        }
+    }
 }
 
 // Kept alive for the process lifetime so entries survive across turns —
 // most sub-positions from one turn's search recur in the next turn's tree.
 static GLOBAL_TT: OnceLock<ShardedTT> = OnceLock::new();
+
+/// Empty the shared transposition table. Useful between games, and required
+/// for any benchmark that wants one position's cost not to depend on the last.
+#[pyfunction]
+pub fn clear_transposition_table() {
+    shared_tt().clear();
+}
 
 fn shared_tt() -> &'static ShardedTT {
     GLOBAL_TT.get_or_init(|| ShardedTT::new(TT_SIZE_BITS))
@@ -208,6 +228,58 @@ fn sb_state_value(board: &SearchBoard, depth: usize) -> i32 {
 // root in `get_ai_move_with_stats`. Recursive YBWC was tried but caused a
 // 100×+ blowup in nodes_visited because losing α-tightening between siblings
 // compounds at every level of recursion.
+/// Killer-move and history tables: memory of which moves have been causing
+/// beta cutoffs, used only to decide what order to try moves in.
+///
+/// Killers are per-ply — a refutation that works against one move usually
+/// works against its siblings. History is board-wide and depth-weighted, so a
+/// cutoff found deep in the tree counts for more than a shallow one.
+///
+/// Purely an ordering hint: it never changes which moves are legal, nor what
+/// any node evaluates to — only how fast alpha-beta finds the cutoff.
+/// One instance per search task, so no locking and no cross-thread sharing.
+pub struct MoveHeuristics {
+    killers: [[Option<(usize, usize)>; 2]; MAX_PLY],
+    history: [u32; 361],
+}
+
+/// Deepest ply the killer table can index. `depth` never exceeds `max_depth`,
+/// which is capped at `MAX_DEPTH`; the slack keeps indexing safe regardless.
+const MAX_PLY: usize = MAX_DEPTH + 4;
+
+impl MoveHeuristics {
+    pub fn new() -> Self {
+        MoveHeuristics { killers: [[None; 2]; MAX_PLY], history: [0; 361] }
+    }
+
+    #[inline]
+    fn killers_at(&self, ply: usize) -> [Option<(usize, usize)>; 2] {
+        if ply < MAX_PLY { self.killers[ply] } else { [None, None] }
+    }
+
+    /// Remember that `mv` caused a cutoff at `ply` with `depth_remaining` plies
+    /// left to search.
+    #[inline]
+    fn record_cutoff(&mut self, ply: usize, mv: (usize, usize), depth_remaining: usize) {
+        if ply < MAX_PLY && self.killers[ply][0] != Some(mv) {
+            self.killers[ply][1] = self.killers[ply][0];
+            self.killers[ply][0] = Some(mv);
+        }
+        // Depth-squared: a cutoff that pruned a deep subtree is worth more.
+        let bonus = (depth_remaining * depth_remaining) as u32;
+        let slot = &mut self.history[mv.0 * 19 + mv.1];
+        *slot = slot.saturating_add(bonus);
+        // Keep the table from saturating and going flat over a long search.
+        if *slot > HISTORY_CEILING {
+            for h in self.history.iter_mut() {
+                *h /= 2;
+            }
+        }
+    }
+}
+
+const HISTORY_CEILING: u32 = 1 << 20;
+
 fn sb_alphabeta(
     board: &mut SearchBoard,
     mut alpha: i32,
@@ -218,6 +290,8 @@ fn sb_alphabeta(
     stats: &mut SearchStats,
     tt: &ShardedTT,
     deadline: Instant,
+    heur: &mut MoveHeuristics,
+    allow_null: bool,
 ) -> (i32, Vec<(usize, usize)>, bool) {
     if Instant::now() >= deadline {
         return (0, vec![], true);
@@ -253,15 +327,77 @@ fn sb_alphabeta(
         }
     }
 
-    let mut candidates = board.get_candidate_moves(depth);
+    // Facing a four, every move is a forced response, so nothing here is
+    // "late" enough to reduce.
+    let threats = board.patterns_of(board.opponent);
+    let under_threat =
+        threats.five_rows > 0 || threats.open_fours > 0 || threats.block_fours > 0;
+
+    // The null-move probe needs a stricter condition than that. `get_winner`
+    // reads the position as "whoever is `opponent` just moved", and a pass
+    // breaks that assumption, so terminal scores inside the probe are only
+    // trustworthy where no terminal state is in reach. Requiring both sides to
+    // be four-free and five-free buys that. Skipping this is what let the
+    // engine walk past a split four: the probe mis-scored the position where
+    // the opponent completed it.
+    let own = board.patterns_of(board.current);
+    let tactical_position = under_threat
+        || own.five_rows > 0
+        || own.open_fours > 0
+        || own.block_fours > 0;
+
+    // Null-move probe: hand the turn over and see whether the position still
+    // beats beta. Passing is never an advantage in gomoku, so a position that
+    // survives a free enemy move would survive a real reply too.
+    if allow_null && !tactical_position && depth_remaining >= NULL_MOVE_MIN_DEPTH {
+        let probe_depth = max_depth - NULL_MOVE_REDUCTION;
+        board.make_null_move();
+        let (null_val, _, null_timed_out) = if is_max_player {
+            sb_alphabeta(board, beta - 1, beta, false, depth + 1, probe_depth,
+                         stats, tt, deadline, heur, false)
+        } else {
+            sb_alphabeta(board, alpha, alpha + 1, true, depth + 1, probe_depth,
+                         stats, tt, deadline, heur, false)
+        };
+        board.make_null_move();
+
+        if null_timed_out {
+            return (0, vec![], true);
+        }
+        if is_max_player && null_val >= beta {
+            return (null_val, vec![], false);
+        }
+        if !is_max_player && null_val <= alpha {
+            return (null_val, vec![], false);
+        }
+    }
+
+    let mut candidates = board.get_candidate_moves(depth, Some(&heur.history), false);
     stats.internal_nodes += 1;
     stats.total_children += candidates.len() as u64;
 
-    // Move ordering: put TT best move first
+    // Try the moves most likely to cause a cutoff first: the transposition
+    // table's best move, then this ply's killers. `get_candidate_moves` has
+    // already ordered the rest by history and static score.
+    let mut front = 0;
     if let Some(tt_move) = tt_best_move {
         if let Some(pos) = candidates.iter().position(|&m| m == tt_move) {
-            candidates.swap(0, pos);
+            candidates.swap(front, pos);
+            front += 1;
         }
+    }
+    for killer in heur.killers_at(depth).into_iter().flatten() {
+        if let Some(pos) = candidates.iter().skip(front).position(|&m| m == killer) {
+            candidates.swap(front, front + pos);
+            front += 1;
+        }
+    }
+
+    // Drop the tail of the ordering. Safe to do here and not during generation:
+    // the transposition-table move and this ply's killers are already at the
+    // front, so the cap can only fall on moves the ordering rates lowest.
+    if depth >= CANDIDATE_CAP_DEPTH {
+        candidates.truncate(front.max(CANDIDATE_CAP));
     }
 
     let mut best_value = if is_max_player { MIN_VALUE - 1 } else { MAX_VALUE + 1 };
@@ -269,33 +405,75 @@ fn sb_alphabeta(
     let mut best_pv: Vec<(usize, usize)> = vec![];
     let mut first = true;
 
-    for &(move_r, move_c) in &candidates {
+    let mut searched_any = false;
+    for (move_index, &(move_r, move_c)) in candidates.iter().enumerate() {
+        // Legality is checked here rather than during generation, so it is
+        // only paid for the moves actually searched.
+        if board.sb_is_double_three(move_r as i32, move_c as i32) {
+            continue;
+        }
         stats.children_explored += 1;
+        searched_any = true;
 
+        let mover = board.current;
         let undo = board.make_move(move_r, move_c);
+
+        // A move is tactical if it made a four or five, or captured. Those
+        // decide games, so they always get searched at full depth.
+        let gain = if mover == Cell::Black { &undo.delta_black } else { &undo.delta_white };
+        let is_tactical = undo.num_captured > 0
+            || gain.five_rows > 0
+            || gain.open_fours > 0
+            || gain.block_fours > 0;
+
+        // Late move reduction: this far down the ordering a move rarely raises
+        // alpha, so probe it shallower. Anything that beats alpha anyway is
+        // re-searched at full depth below, so a wrong guess costs time, not
+        // correctness.
+        let reduction = if depth_remaining >= LMR_MIN_DEPTH
+            && move_index >= LMR_MIN_MOVE
+            && !is_tactical
+            && !under_threat
+        {
+            if move_index >= LMR_DEEP_MOVE { 2 } else { 1 }
+        } else {
+            0
+        };
+        let reduced_depth = max_depth - reduction.min(depth_remaining - 1);
 
         let (mut child_val, mut child_pv, mut child_timed_out);
         if first {
             (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                board, alpha, beta, !is_max_player, depth + 1, max_depth, stats, tt, deadline,
+                board, alpha, beta, !is_max_player, depth + 1, max_depth, stats, tt, deadline, heur, true,
             );
             first = false;
         } else if is_max_player {
             (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                board, alpha, alpha + 1, false, depth + 1, max_depth, stats, tt, deadline,
+                board, alpha, alpha + 1, false, depth + 1, reduced_depth, stats, tt, deadline, heur, true,
             );
+            // Re-search at full depth if the shallow probe looked promising.
+            if !child_timed_out && reduction > 0 && child_val > alpha {
+                (child_val, child_pv, child_timed_out) = sb_alphabeta(
+                    board, alpha, alpha + 1, false, depth + 1, max_depth, stats, tt, deadline, heur, true,
+                );
+            }
             if !child_timed_out && child_val > alpha && child_val < beta {
                 (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                    board, alpha, beta, false, depth + 1, max_depth, stats, tt, deadline,
+                    board, alpha, beta, false, depth + 1, max_depth, stats, tt, deadline, heur, true,
                 );
             }
         } else {
             (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                board, beta - 1, beta, true, depth + 1, max_depth, stats, tt, deadline,
+                board, beta - 1, beta, true, depth + 1, reduced_depth, stats, tt, deadline, heur, true,
             );
+            if !child_timed_out && reduction > 0 && child_val < beta {
+                (child_val, child_pv, child_timed_out) = sb_alphabeta(
+                    board, beta - 1, beta, true, depth + 1, max_depth, stats, tt, deadline, heur, true,
+                );
+            }
             if !child_timed_out && child_val < beta && child_val > alpha {
                 (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                    board, alpha, beta, true, depth + 1, max_depth, stats, tt, deadline,
+                    board, alpha, beta, true, depth + 1, max_depth, stats, tt, deadline, heur, true,
                 );
             }
         }
@@ -328,8 +506,15 @@ fn sb_alphabeta(
 
         if alpha >= beta {
             stats.cutoffs += 1;
+            heur.record_cutoff(depth, (move_r, move_c), depth_remaining);
             break;
         }
+    }
+
+    // Every candidate turned out to be an illegal double three: there is no
+    // move to make, so the position stands as it is.
+    if !searched_any {
+        return (board.sb_heuristic_evaluation(), vec![], false);
     }
 
     // TT store
@@ -408,6 +593,7 @@ pub fn get_move_pv(state: &Gomoku, x: usize, y: usize) -> (Vec<(usize, usize)>, 
 
     let mut final_pv = vec![];
     let mut final_value = 0i32;
+    let mut heur = MoveHeuristics::new();
     for depth in 1..=max_depth {
         if Instant::now() >= deadline {
             break;
@@ -416,7 +602,7 @@ pub fn get_move_pv(state: &Gomoku, x: usize, y: usize) -> (Vec<(usize, usize)>, 
         stats.max_depth = depth;
         let (value, child_pv, timed_out) = sb_alphabeta(
             &mut board, MIN_VALUE, MAX_VALUE, !is_max_player,
-            1, depth, &mut stats, tt, deadline,
+            1, depth, &mut stats, tt, deadline, &mut heur, true,
         );
         if timed_out {
             break;
@@ -442,7 +628,7 @@ pub fn get_ai_move_with_stats(
     let mut board = SearchBoard::from_gomoku(state);
     let is_max_player = board.current == Cell::Black;
 
-    let candidates = board.get_candidate_moves(0);
+    let candidates = board.get_candidate_moves(0, None, true);
     let mut all_moves: Vec<(usize, usize, Option<i32>)> = candidates
         .into_iter()
         .map(|(r, c)| (r, c, None))
@@ -455,6 +641,9 @@ pub fn get_ai_move_with_stats(
     let mut depth_times: Vec<(usize, f64, u64)> = Vec::new();
     let tt = shared_tt();
     let deadline = search_deadline();
+    // Kept across iterative-deepening iterations: what refuted a move at depth
+    // d is usually still the refutation at depth d+1.
+    let mut root_heur = MoveHeuristics::new();
 
     for depth in 1..=max_depth {
         if Instant::now() >= deadline {
@@ -491,6 +680,8 @@ pub fn get_ai_move_with_stats(
             let undo = board.make_move(move_r, move_c);
             let (value, child_pv, timed_out) = sb_alphabeta(
                 &mut board, alpha, beta, !is_max_player, 1, depth, &mut stats, tt, deadline,
+                &mut root_heur,
+                true,
             );
             board.undo_move(&undo);
 
@@ -550,6 +741,9 @@ pub fn get_ai_move_with_stats(
                 .into_par_iter()
                 .map(|((r, c), mut child_board)| {
                     let mut child_stats = SearchStats::new();
+                    // Each task orders its own subtree; sharing one table
+                    // across rayon workers would need a lock per cutoff.
+                    let mut child_heur = MoveHeuristics::new();
                     let branch_start = Instant::now();
                     let (v, pv, timed_out) = if is_max_player {
                         let (mut v, mut pv, mut timed_out) = sb_alphabeta(
@@ -562,6 +756,8 @@ pub fn get_ai_move_with_stats(
                             &mut child_stats,
                             tt,
                             deadline,
+                            &mut child_heur,
+                            true,
                         );
                         if !timed_out && v > parent_alpha && v < parent_beta {
                             let r2 = sb_alphabeta(
@@ -574,6 +770,8 @@ pub fn get_ai_move_with_stats(
                                 &mut child_stats,
                                 tt,
                                 deadline,
+                                &mut child_heur,
+                                true,
                             );
                             v = r2.0;
                             pv = r2.1;
@@ -591,6 +789,8 @@ pub fn get_ai_move_with_stats(
                             &mut child_stats,
                             tt,
                             deadline,
+                            &mut child_heur,
+                            true,
                         );
                         if !timed_out && v < parent_beta && v > parent_alpha {
                             let r2 = sb_alphabeta(
@@ -603,6 +803,8 @@ pub fn get_ai_move_with_stats(
                                 &mut child_stats,
                                 tt,
                                 deadline,
+                                &mut child_heur,
+                                true,
                             );
                             v = r2.0;
                             pv = r2.1;

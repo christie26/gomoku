@@ -6,7 +6,7 @@ pub const BOARD_SIZE: usize = 19;
 
 pub const MAX_VALUE: i32 = 100_000;
 pub const MIN_VALUE: i32 = -100_000;
-pub const MAX_DEPTH: usize = 10;
+pub const MAX_DEPTH: usize = 9;
 pub const SHALLOW_ORDER_DEPTH: usize = 1;
 pub const RADIUS: usize = 2;
 // From this ply (inclusive) onward, shrink candidate-move radius to DEEP_RADIUS.
@@ -19,12 +19,43 @@ pub const DEEP_RADIUS: usize = 1;
 /// `None` disables the timer entirely (search always runs to MAX_DEPTH) —
 /// flip this to compare timed vs. untimed behavior.
 // pub const TIME_LIMIT_MS: Option<u64> = Some(500);
-pub const TIME_LIMIT_MS: Option<u64> = Some(500);
+pub const TIME_LIMIT_MS: Option<u64> = None;
 
 /// When multiple root moves end up tied for the best score, pick randomly
 /// among them instead of always keeping the first (scan-order) one. Flip to
 /// `false` to restore fully deterministic move selection.
 pub const RANDOMIZE_TIED_MOVES: bool = true;
+
+// Late move reductions. Moves far down the ordering rarely raise alpha, so
+// they are searched shallower first and only re-searched at full depth if one
+// beats alpha. Tactical moves (fours, fives, captures) are never reduced.
+
+/// Plies left below which reducing is not worth it.
+pub const LMR_MIN_DEPTH: usize = 3;
+/// Ordering position from which reductions start (0-based).
+pub const LMR_MIN_MOVE: usize = 3;
+/// Ordering position from which the reduction doubles.
+pub const LMR_DEEP_MOVE: usize = 6;
+
+// Null-move pruning. Passing is never an advantage in gomoku, so if a
+// position still beats beta after handing the turn over, the real move would
+// too. Not attempted while facing a four, where passing simply loses.
+
+/// Plies left below which the null-move probe is not worth its cost.
+pub const NULL_MOVE_MIN_DEPTH: usize = 3;
+/// How many plies the null-move probe gives up.
+pub const NULL_MOVE_REDUCTION: usize = 2;
+
+// Candidate cap. Alpha-beta explores only a handful of the moves offered at
+// each node, so past a point the tail of the ordered list is generated, sorted
+// and never looked at. Applied only below the shallow plies, and only after
+// the transposition-table move and killers have been moved to the front, so
+// the moves most likely to matter can never be cut.
+
+/// Maximum candidates searched at a node, once past `CANDIDATE_CAP_DEPTH`.
+pub const CANDIDATE_CAP: usize = 16;
+/// Ply from which the cap applies.
+pub const CANDIDATE_CAP_DEPTH: usize = 2;
 
 // Transposition table
 
