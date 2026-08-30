@@ -19,7 +19,7 @@ pub(crate) struct PlayerPatterns {
     pub(crate) five_row: Vec<Pattern>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum PatternKind {
     OpenTwo,
     OpenThree,
