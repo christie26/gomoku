@@ -6,7 +6,7 @@ pub const BOARD_SIZE: usize = 19;
 
 pub const MAX_VALUE: i32 = 100_000;
 pub const MIN_VALUE: i32 = -100_000;
-pub const MAX_DEPTH: usize = 6;
+pub const MAX_DEPTH: usize = 10;
 pub const SHALLOW_ORDER_DEPTH: usize = 1;
 pub const RADIUS: usize = 2;
 // From this ply (inclusive) onward, shrink candidate-move radius to DEEP_RADIUS.
@@ -19,7 +19,7 @@ pub const DEEP_RADIUS: usize = 1;
 /// `None` disables the timer entirely (search always runs to MAX_DEPTH) —
 /// flip this to compare timed vs. untimed behavior.
 // pub const TIME_LIMIT_MS: Option<u64> = Some(500);
-pub const TIME_LIMIT_MS: Option<u64> = None;
+pub const TIME_LIMIT_MS: Option<u64> = Some(500);
 
 /// When multiple root moves end up tied for the best score, pick randomly
 /// among them instead of always keeping the first (scan-order) one. Flip to

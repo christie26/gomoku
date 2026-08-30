@@ -6,13 +6,10 @@ use colored::*;
 pub mod constants;
 pub mod heuristic;
 pub mod minimax;
-pub mod pattern;
+pub mod search_board;
 
-use pattern::{
-    build_pattern_range, classify,
-    print_pattern_kind, PatternKind, PlayerPatterns,
-};
-pub use pattern::position_name;
+use search_board::{print_pattern_kind, Cell, SearchBoard};
+pub use search_board::position_name;
 
 // --- Zobrist hashing ---
 
@@ -148,11 +145,24 @@ pub struct Gomoku {
     pub current_player: Stone,
     opponent_player: Stone,
     capture_count: HashMap<Stone, i32>,
-    patterns: HashMap<Stone, PlayerPatterns>,
     win_capture_count: i32,
     current_move: Option<Position>,
     move_count: usize,
     pub hash: u64,
+}
+
+impl Gomoku {
+    /// Debug-only view of the recognized formations, keyed by stone. Derived
+    /// from the board on demand — `SearchBoard` owns pattern recognition and
+    /// keeps counts, not coordinates.
+    fn pattern_ranges(&self) -> HashMap<String, search_board::PlayerRanges> {
+        let (black, white) = SearchBoard::from_gomoku(self).sb_collect_patterns();
+        HashMap::from([
+            (Stone::Black.to_string(), black),
+            (Stone::White.to_string(), white),
+        ])
+    }
+
 }
 
 #[pymethods]
@@ -165,17 +175,12 @@ impl Gomoku {
         capture_count.insert(Stone::Black, 0);
         capture_count.insert(Stone::White, 0);
 
-        let mut patterns = HashMap::new();
-        patterns.insert(Stone::Black, PlayerPatterns::default());
-        patterns.insert(Stone::White, PlayerPatterns::default());
-
         Gomoku {
             size,
             board,
             current_player: Stone::Black,
             opponent_player: Stone::White,
             capture_count,
-            patterns,
             win_capture_count: 5,
             current_move: None,
             move_count: 0,
@@ -217,9 +222,9 @@ impl Gomoku {
         println!("current_player: {:?}", self.current_player);
         println!("opponent_player: {:?}", self.opponent_player);
         println!("current_move: {:?}", self.current_move);
-        for player in [Stone::Black, Stone::White] {
+        let (black, white) = SearchBoard::from_gomoku(self).sb_collect_patterns();
+        for (player, p) in [(Stone::Black, &black), (Stone::White, &white)] {
             println!("patterns[{player}]:");
-            let p = self.patterns.get(&player).unwrap();
             print_pattern_kind("open_two", &p.open_two);
             print_pattern_kind("open_three", &p.open_three);
             print_pattern_kind("free_three", &p.free_three);
@@ -254,18 +259,7 @@ impl Gomoku {
     }
 
     fn is_double_three_move(&self, x0: i32, y0: i32) -> bool {
-        let directions = [(1, -1), (1, 0), (1, 1), (0, 1)];
-
-        let free_three_count = directions
-            .into_iter()
-            .filter(|&(dx, dy)| {
-                let plus = self.scan_line(1, dx, dy, x0, y0);
-                let minus = self.scan_line(-1, dx, dy, x0, y0);
-                classify(&plus, &minus, 1) == Some(PatternKind::FreeThree)
-            })
-            .count();
-
-        free_three_count > 1
+        SearchBoard::cells_from_gomoku(self).sb_is_double_three(x0, y0)
     }
 
     fn capture_center(&mut self, x0: i32, y0: i32) -> (i32, Vec<(i32, i32)>) {
@@ -320,8 +314,8 @@ impl Gomoku {
         removed
     }
 
-    // 돌 하나를 제거하면서, 그로 인해 사라지는 패턴(remove_patterns_at)과
-    // 4방향 모두에서 새로 생기는 패턴(add_patterns_for_capture)을 함께 처리한다.
+    /// Clear a stone (capture). Pattern state is derived on demand from the
+    /// board by `SearchBoard`, so there is nothing to invalidate here.
     fn remove_stone(&mut self, x: i32, y: i32) {
         let z = zobrist();
         let color_idx = match self.board[x as usize][y as usize] {
@@ -331,92 +325,6 @@ impl Gomoku {
         };
         self.hash ^= z.board[x as usize * 19 + y as usize][color_idx];
         self.board[x as usize][y as usize] = Stone::Empty;
-
-        self.remove_patterns_at(x, y);
-        self.add_patterns_for_capture(x, y);
-    }
-
-    fn update_patterns_for_move(&mut self, x: i32, y: i32) {
-        self.remove_patterns_at(x, y);
-        self.add_patterns_for_move(x, y);
-    }
-
-    fn add_patterns_for_move(&mut self, x0: i32, y0: i32) {
-        let player = self.current_player;
-        let directions = [(1, 0), (0, 1), (1, 1), (1, -1)];
-
-        for (dx, dy) in directions {
-            let plus = self.scan_line(1, dx, dy, x0, y0);
-            let minus = self.scan_line(-1, dx, dy, x0, y0);
-
-            let Some(kind) = classify(&plus, &minus, 1)
-            else {
-                continue;
-            };
-
-            let pattern = build_pattern_range(kind, dx, dy, x0, y0, &plus, &minus, 1);
-            self.register(kind, &player, pattern);
-        }
-    }
-
-    fn add_patterns_for_capture(&mut self, x0: i32, y0: i32) {
-        let player = self.current_player;
-        let directions = [(1, -1), (1, 0), (1, 1), (0, 1)];
-
-        for (dx, dy) in directions {
-            let plus = self.scan_line(1, dx, dy, x0, y0);
-            let minus = self.scan_line(-1, dx, dy, x0, y0);
-
-            let Some(kind) = classify(&plus, &minus, 0)
-            else {
-              continue;
-            };
-            // println!("({},{})-direction:({},{})========",x0, y0, dx, dy);
-            // println!("plus: {:#?}",plus);
-            // println!("minus: {:#?}",minus);
-
-            let pattern = build_pattern_range(kind, dx, dy, x0, y0, &plus, &minus, 0);
-            self.register(kind, &player, pattern);
-        }
-        // println!("{},{} pattern after: {:#?}", x0, y0, self.patterns.get(&Stone::Black).unwrap());
-    }
-
-    fn remove_patterns_at(&mut self, x: i32, y: i32) {
-        let pos = (x, y);
-        const KINDS: [PatternKind; 6] = [
-            PatternKind::OpenTwo,
-            PatternKind::OpenThree,
-            PatternKind::FreeThree,
-            PatternKind::BlockFour,
-            PatternKind::OpenFour,
-            PatternKind::FiveRow,
-        ];
-        let mut pending: Vec<(Stone, PatternKind, Pattern)> = Vec::new();
-
-        for player in [Stone::Black, Stone::White] {
-            for kind in KINDS {
-                for pattern in self.patterns_ref(kind, &player) {
-                    if !pattern.contains(&pos) {
-                        continue;
-                    }
-                    if self.current_player != player {
-                      if let Some((new_kind, new_pattern)) = self.rescan_pattern(pattern, pos, &player) {
-                        pending.push((player, new_kind, new_pattern));
-                      }
-                    }
-                }
-            }
-        }
-
-        for player in [Stone::Black, Stone::White] {
-            for kind in KINDS {
-                self.patterns_mut(kind, &player).retain(|pattern| !pattern.contains(&pos));
-            }
-        }
-
-        for (player, kind, pattern) in pending {
-            self.register(kind, &player, pattern);
-        }
     }
 
     fn is_valid_move_simple_ruleset(&self, x: i32, y: i32) -> MoveResult {
@@ -450,7 +358,6 @@ impl Gomoku {
             let z = zobrist();
             let color_idx = if self.current_player == Stone::Black { 0 } else { 1 };
             self.hash ^= z.board[x as usize * 19 + y as usize][color_idx];
-            self.update_patterns_for_move(x, y);
 
             let (count, positions) = self.capture_center(x, y);
             capture_count = count;
@@ -537,22 +444,14 @@ impl Gomoku {
                 return Some(self.current_player.to_string());
             }
 
+            let board = SearchBoard::cells_from_gomoku(self);
             // 2. check opponent's five_row
-            if let Some(opponent_patterns) = self.patterns.get(&self.opponent_player) {
-                if !opponent_patterns.five_row.is_empty() {
-                    return Some(self.opponent_player.to_string());
-                }
+            if board.has_five_in_row(Cell::of(self.opponent_player)) {
+                return Some(self.opponent_player.to_string());
             }
-            // 3. check current's five_row
-            if let Some(my_patterns) = self.patterns.get(&self.current_player) {
-                'each_five: for five_row in &my_patterns.five_row {
-                    for &(fx, fy) in five_row {
-                        if self.stone_in_capturable_pair(fx as i32, fy as i32) {
-                            continue 'each_five;
-                        }
-                    }
-                    return Some(self.current_player.to_string());
-                }
+            // 3. check current's five_row that no capture can break
+            if board.has_uncapturable_five(Cell::of(self.current_player)) {
+                return Some(self.current_player.to_string());
             }
         }
         // 4. other than 3 cases, there's no winner
@@ -617,42 +516,32 @@ impl Gomoku {
 
     #[getter]
     fn free_three_list(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.patterns
-            .iter()
-            .map(|(stone, p)| (stone.to_string(), p.free_three.clone()))
-            .collect()
+        self.pattern_ranges().into_iter().map(|(k, p)| (k, p.free_three)).collect()
     }
 
     #[getter]
     fn five_row(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.patterns
-            .iter()
-            .map(|(stone, p)| (stone.to_string(), p.five_row.clone()))
-            .collect()
+        self.pattern_ranges().into_iter().map(|(k, p)| (k, p.five_row)).collect()
     }
 
     #[getter]
     fn open_two(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.patterns
-            .iter()
-            .map(|(stone, p)| (stone.to_string(), p.open_two.clone()))
-            .collect()
+        self.pattern_ranges().into_iter().map(|(k, p)| (k, p.open_two)).collect()
     }
 
     #[getter]
     fn open_three(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.patterns
-            .iter()
-            .map(|(stone, p)| (stone.to_string(), p.open_three.clone()))
-            .collect()
+        self.pattern_ranges().into_iter().map(|(k, p)| (k, p.open_three)).collect()
     }
 
     #[getter]
     fn open_four(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
-        self.patterns
-            .iter()
-            .map(|(stone, p)| (stone.to_string(), p.open_four.clone()))
-            .collect()
+        self.pattern_ranges().into_iter().map(|(k, p)| (k, p.open_four)).collect()
+    }
+
+    #[getter]
+    fn block_four(&self) -> HashMap<String, Vec<Vec<(i32, i32)>>> {
+        self.pattern_ranges().into_iter().map(|(k, p)| (k, p.block_four)).collect()
     }
 
     #[getter]
