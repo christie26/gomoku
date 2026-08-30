@@ -261,7 +261,7 @@ impl Gomoku {
             .filter(|&(dx, dy)| {
                 let plus = self.scan_line(1, dx, dy, x0, y0);
                 let minus = self.scan_line(-1, dx, dy, x0, y0);
-                classify(&plus, &minus, 1).is_some()
+                classify(&plus, &minus, 1) == Some(PatternKind::FreeThree)
             })
             .count();
 
