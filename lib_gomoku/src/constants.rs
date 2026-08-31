@@ -61,6 +61,13 @@ pub const WEIGHT_FREE_THREE_TEMPO: i32 = 60_000;
 pub const WEIGHT_OPEN_THREE: i32 = 100;
 pub const WEIGHT_OPEN_TWO: i32 = 50;
 
+/// A capture threat (`. O O X`: play the empty end and the pinned pair comes
+/// off) is worth a percentage of the capture it would complete. Much more when
+/// its owner is on move and can take the pair immediately than when the
+/// defender gets to break the threat first.
+pub const POTENTIAL_CAPTURE_PCT_ACTIVE: i32 = 50;
+pub const POTENTIAL_CAPTURE_PCT_IDLE: i32 = 20;
+
 pub const CAPTURE_BONUS_1: i32 = 5_000;
 pub const CAPTURE_BONUS_2: i32 = 12_000;
 pub const CAPTURE_BONUS_3: i32 = 25_000;

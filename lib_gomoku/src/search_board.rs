@@ -4,7 +4,7 @@
 //! coordinate-based system kept for reference in `pattern_legacy.rs`.
 
 use crate::constants::{
-    CAPTURE_BONUS_1, CAPTURE_BONUS_2, CAPTURE_BONUS_3, CAPTURE_BONUS_4_PLUS, COMBO_BLOCK_FOUR_AND_THREE, COMBO_CAPTURE_AND_FOUR, COMBO_DOUBLE_BLOCK_FOUR, COMBO_DOUBLE_OPEN_FOUR, COMBO_DOUBLE_THREE, COMBO_OPEN_AND_BLOCK_FOUR, COMBO_OPEN_FOUR_AND_THREE, DEEP_RADIUS, DEEP_RADIUS_DEPTH, RADIUS, SB_EVAL_CLAMP, SHALLOW_ORDER_DEPTH, WEIGHT_BLOCK_FOUR, WEIGHT_BLOCK_FOUR_TEMPO, WEIGHT_FIVE, WEIGHT_FREE_THREE, WEIGHT_FREE_THREE_TEMPO, WEIGHT_OPEN_FOUR, WEIGHT_OPEN_THREE, WEIGHT_OPEN_TWO,
+    CAPTURE_BONUS_1, CAPTURE_BONUS_2, CAPTURE_BONUS_3, CAPTURE_BONUS_4_PLUS, COMBO_BLOCK_FOUR_AND_THREE, COMBO_CAPTURE_AND_FOUR, COMBO_DOUBLE_BLOCK_FOUR, COMBO_DOUBLE_OPEN_FOUR, COMBO_DOUBLE_THREE, COMBO_OPEN_AND_BLOCK_FOUR, COMBO_OPEN_FOUR_AND_THREE, DEEP_RADIUS, POTENTIAL_CAPTURE_PCT_ACTIVE, POTENTIAL_CAPTURE_PCT_IDLE, DEEP_RADIUS_DEPTH, RADIUS, SB_EVAL_CLAMP, SHALLOW_ORDER_DEPTH, WEIGHT_BLOCK_FOUR, WEIGHT_BLOCK_FOUR_TEMPO, WEIGHT_FIVE, WEIGHT_FREE_THREE, WEIGHT_FREE_THREE_TEMPO, WEIGHT_OPEN_FOUR, WEIGHT_OPEN_THREE, WEIGHT_OPEN_TWO,
 };
 use crate::{zobrist, Gomoku, Pattern, Stone};
 
@@ -69,6 +69,9 @@ pub(crate) struct PatternCounts {
     pub(crate) open_threes: i32,
     pub(crate) open_twos: i32,
     pub(crate) free_threes: i32,
+    /// Opponent pairs one move away from being captured — see
+    /// `emit_capture_threat_at`. Counted for the player who would capture.
+    pub(crate) potential_captures: i32,
 }
 
 
@@ -82,7 +85,34 @@ impl std::ops::Sub for PatternCounts {
             open_threes: self.open_threes - other.open_threes,
             open_twos: self.open_twos - other.open_twos,
             free_threes: self.free_threes - other.free_threes,
+            potential_captures: self.potential_captures - other.potential_captures,
         }
+    }
+}
+
+/// Score for holding `pairs` captured pairs.
+fn capture_bonus(pairs: i32) -> i32 {
+    match pairs {
+        0 => 0,
+        1 => CAPTURE_BONUS_1,
+        2 => CAPTURE_BONUS_2,
+        3 => CAPTURE_BONUS_3,
+        4 => CAPTURE_BONUS_4_PLUS,
+        _ => CAPTURE_BONUS_4_PLUS,
+    }
+}
+
+/// What one more capture is worth to a player already holding `pairs`.
+///
+/// Normally the step between two rungs of `capture_bonus`. The table flattens
+/// at four pairs, but the fifth capture ends the game — `get_winner` gives it
+/// to whoever reaches five — so it is worth what any other winning formation
+/// is worth rather than the nothing the flat table would imply.
+fn next_capture_gain(pairs: i32) -> i32 {
+    if pairs + 1 >= 5 {
+        WEIGHT_FIVE
+    } else {
+        capture_bonus(pairs + 1) - capture_bonus(pairs)
     }
 }
 
@@ -95,6 +125,7 @@ impl PatternCounts {
         self.open_threes += delta.open_threes * sign;
         self.open_twos += delta.open_twos * sign;
         self.free_threes += delta.free_threes * sign;
+        self.potential_captures += delta.potential_captures * sign;
     }
 
     pub(crate) fn score(&self, captures: i32, is_active: bool) -> i32 {
@@ -104,14 +135,7 @@ impl PatternCounts {
         score += self.open_threes * WEIGHT_OPEN_THREE;
         score += self.open_twos * WEIGHT_OPEN_TWO;
 
-        score += match captures {
-            0 => 0,
-            1 => CAPTURE_BONUS_1,
-            2 => CAPTURE_BONUS_2,
-            3 => CAPTURE_BONUS_3,
-            4 => CAPTURE_BONUS_4_PLUS,
-            _ => CAPTURE_BONUS_4_PLUS,
-        };
+        score += capture_bonus(captures);
 
         if is_active {
           score += self.block_fours * WEIGHT_BLOCK_FOUR_TEMPO;
@@ -119,6 +143,20 @@ impl PatternCounts {
         } else {
           score += self.block_fours * WEIGHT_BLOCK_FOUR;
           score += self.free_threes * WEIGHT_FREE_THREE;
+        }
+
+        // A pair one move from being taken is worth a fraction of the capture
+        // it would complete: half of it while its owner is on move and can
+        // take the pair now, much less once the defender has a turn to break
+        // the threat. Scaled per threat like every other count here, even
+        // though only one can be executed per turn.
+        if self.potential_captures > 0 {
+            let pct = if is_active {
+                POTENTIAL_CAPTURE_PCT_ACTIVE
+            } else {
+                POTENTIAL_CAPTURE_PCT_IDLE
+            };
+            score += self.potential_captures * next_capture_gain(captures) * pct / 100;
         }
 
         let total_threes = self.open_threes + self.free_threes;
@@ -157,10 +195,12 @@ pub(crate) struct UndoInfo {
 }
 
 
-/// The six formations the evaluator scores. Same taxonomy as the legacy
-/// coordinate scanner kept in `pattern_legacy.rs`.
+/// The formations the evaluator scores. The six single-colour ones share the
+/// taxonomy of the legacy coordinate scanner kept in `pattern_legacy.rs`;
+/// `PotentialCapture` is the one two-colour shape, added here.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum PatternKind {
+    PotentialCapture,
     OpenTwo,
     OpenThree,
     FreeThree,
@@ -249,6 +289,7 @@ impl PatternSink for CountSink {
     fn hit(&mut self, color: Cell, kind: PatternKind, _s: (i32, i32), _d: (i32, i32), _l: i32) {
         let counts = if color == Cell::Black { &mut self.black } else { &mut self.white };
         match kind {
+            PatternKind::PotentialCapture => counts.potential_captures += 1,
             PatternKind::OpenTwo => counts.open_twos += 1,
             PatternKind::OpenThree => counts.open_threes += 1,
             PatternKind::FreeThree => counts.free_threes += 1,
@@ -263,6 +304,7 @@ impl PatternSink for CountSink {
 /// and `print_state` use these; the search never allocates them.
 #[derive(Clone, Debug, Default)]
 pub struct PlayerRanges {
+    pub potential_capture: Vec<Pattern>,
     pub open_two: Vec<Pattern>,
     pub open_three: Vec<Pattern>,
     pub free_three: Vec<Pattern>,
@@ -282,6 +324,7 @@ impl PatternSink for RangeSink {
         let ranges = if color == Cell::Black { &mut self.black } else { &mut self.white };
         let cells = (0..len).map(|i| (start.0 + dir.0 * i, start.1 + dir.1 * i)).collect();
         match kind {
+            PatternKind::PotentialCapture => ranges.potential_capture.push(cells),
             PatternKind::OpenTwo => ranges.open_two.push(cells),
             PatternKind::OpenThree => ranges.open_three.push(cells),
             PatternKind::FreeThree => ranges.free_three.push(cells),
@@ -830,6 +873,8 @@ impl SearchBoard {
     /// each side where the board has one — enough for the debug/display callers
     /// that want coordinates.
     fn emit_at<S: PatternSink>(&self, r: i32, c: i32, dr: i32, dc: i32, sink: &mut S) {
+        self.emit_capture_threat_at(r, c, dr, dc, sink);
+
         let Some(f) = self.classify_at(r, c, dr, dc) else {
             return;
         };
@@ -848,6 +893,38 @@ impl SearchBoard {
         }
 
         sink.hit(f.color, f.kind, start, (dr, dc), len);
+    }
+    
+    fn emit_capture_threat_at<S: PatternSink>(
+        &self,
+        r: i32,
+        c: i32,
+        dr: i32,
+        dc: i32,
+        sink: &mut S,
+    ) {
+        // Both ends in bounds puts the two cells between them in bounds too.
+        let (r3, c3) = (r + 3 * dr, c + 3 * dc);
+        if !Self::in_bounds(r, c) || !Self::in_bounds(r3, c3) {
+            return;
+        }
+
+        // The pinned pair: two stones of one colour, side by side.
+        let pair = self.get(r + dr, c + dc);
+        if pair == Cell::Empty || self.get(r + 2 * dr, c + 2 * dc) != pair {
+            return;
+        }
+
+        // One end already held by the taker, the other end empty for them to
+        // play. `. O O .` threatens nothing and `X O O X` cannot occur.
+        let taker = pair.opponent();
+        let (head, tail) = (self.get(r, c), self.get(r3, c3));
+        let is_threat = (head == Cell::Empty && tail == taker)
+            || (head == taker && tail == Cell::Empty);
+
+        if is_threat {
+            sink.hit(taker, PatternKind::PotentialCapture, (r, c), (dr, dc), 4);
+        }
     }
 
     /// Every formation on the board, both colors, in one pass.
@@ -1026,11 +1103,13 @@ impl SearchBoard {
         }
     }
 
-    /// Lift a stone off the board outside of a capture.
-    ///
-    /// No production path does this — `make_move` is the only thing that
-    /// removes stones — so there is no incremental delta to apply and the
-    /// counts are re-derived with a full rescan.
+    pub(crate) fn set_stone_raw(&mut self, r: usize, c: usize, stone: Cell) {
+        assert_eq!(self.cells[r][c], Cell::Empty, "({r},{c}) is already occupied");
+        self.hash ^= zobrist().board[r * 19 + c][stone.zobrist_idx()];
+        self.cells[r][c] = stone;
+        self.total_stones += 1;
+    }
+
     pub(crate) fn remove_stone_raw(&mut self, r: usize, c: usize) {
         let stone = self.cells[r][c];
         assert_ne!(stone, Cell::Empty, "no stone to remove at ({r},{c})");
@@ -1120,6 +1199,53 @@ mod tests {
             captures_seen > 50,
             "only {captures_seen} stones captured across all games — the capture path is barely covered"
         );
+    }
+
+    #[test]
+    fn capture_threats_are_counted_for_the_taker() {
+        // (window, threats for Black, threats for White)
+        let cases: [(&str, i32, i32); 10] = [
+            // Black plays the empty end and lifts the White pair.
+            (".OOX", 1, 0),
+            ("XOO.", 1, 0),
+            // Mirrored colours: the threat belongs to White instead.
+            (".XXO", 0, 1),
+            ("OXX.", 0, 1),
+            // No stone pinning the far end, so nothing is threatened.
+            (".OO.", 0, 0),
+            // Pair already walled in on both sides: it was taken, or is safe.
+            ("XOOX", 0, 0),
+            // Three in a row is not a capturable pair.
+            (".OOOX", 0, 0),
+            // Not adjacent, not a pair.
+            (".O.OX", 0, 0),
+            // Same window found once, not once per direction.
+            ("XOO..OOX", 2, 0),
+            // Overlapping windows both count: X O O X O O . is safe on the
+            // left (walled) and threatened on the right.
+            ("XOOXOO.", 1, 0),
+        ];
+
+        let mut failures = Vec::new();
+        for (window, want_black, want_white) in cases {
+            let mut board = SearchBoard::empty();
+            for (i, ch) in window.chars().enumerate() {
+                let cell = match ch {
+                    'X' => Cell::Black,
+                    'O' => Cell::White,
+                    _ => continue,
+                };
+                board.set_stone_raw(9, 5 + i, cell);
+            }
+            let (black, white) = board.sb_scan_patterns();
+            if black.potential_captures != want_black || white.potential_captures != want_white {
+                failures.push(format!(
+                    "{window}: black {} (want {want_black}), white {} (want {want_white})",
+                    black.potential_captures, white.potential_captures
+                ));
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
     }
 
     /// A run longer than five still counts as a five. The legacy classifier

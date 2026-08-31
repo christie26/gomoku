@@ -225,6 +225,7 @@ impl Gomoku {
         let (black, white) = SearchBoard::from_gomoku(self).sb_collect_patterns();
         for (player, p) in [(Stone::Black, &black), (Stone::White, &white)] {
             println!("patterns[{player}]:");
+            print_pattern_kind("potential_capture", &p.potential_capture);
             print_pattern_kind("open_two", &p.open_two);
             print_pattern_kind("open_three", &p.open_three);
             print_pattern_kind("free_three", &p.free_three);

@@ -113,6 +113,7 @@ type Setup = fn(i32, i32, &str, usize) -> (SearchBoard, PatternCounts);
 
 fn count_of(counts: &PatternCounts, kind: PatternKind) -> i32 {
     match kind {
+        PatternKind::PotentialCapture => counts.potential_captures,
         PatternKind::OpenTwo => counts.open_twos,
         PatternKind::OpenThree => counts.open_threes,
         PatternKind::FreeThree => counts.free_threes,
