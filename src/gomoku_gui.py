@@ -9,7 +9,8 @@ from board_canvas import BoardCanvas
 from score_bar import ScoreBar
 from screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, LIGHT_BACKGROUND, SELECT_BACKGROUND, BORDER_COLOR, LABEL_FONT, NAME_FONT, SETTING_PANEL_WIDTH
 
-
+def format_coordinate(x:int, y:int):
+    return "abcdefghijklmnopqrs"[x] + str(y+1)
 class GomokuGUI:
     def __init__(self, root, player1, player2, history=None, use_undo=False):
         self.root = root
@@ -99,6 +100,7 @@ class GomokuGUI:
 
     # ===== GAME FLOW =====
     def play_one_turn(self, x, y, score = None):
+        print(f"TURN #{self.history_index+1}: {format_coordinate(y,x)} played.\n\n")
         if self.players[self.game.current_player].is_human or not self.debug:
             self.canvas.delete_debug()
         result = self.game.is_valid_move(x, y)
@@ -131,7 +133,7 @@ class GomokuGUI:
             self.state_history.append(self.game.clone_gomoku())
             self.history_index += 1
             self.update_undo_redo_buttons()
-            self.game.print_state()
+            # self.game.print_state()
 
     def start_game(self):
         self.set_game(Gomoku(size=BOARD_SIZE))
@@ -188,6 +190,7 @@ class GomokuGUI:
         self.update_undo_redo_buttons()
 
         def run_ai():
+            print("[AI stats]")
             mv, moves, elapsed, nodes, pruning = get_ai_move_stats(self.game)
 
             def apply_move():
