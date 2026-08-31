@@ -96,14 +96,15 @@ class GomokuGUI:
             return
 
     # ===== GAME FLOW =====
-    def play_one_turn(self, x, y):
+    def play_one_turn(self, x, y, score = None):
         if self.players[self.game.current_player].is_human or not self.debug:
             self.canvas.delete_debug()
         result = self.game.is_valid_move(x, y)
 
         if result == MoveResult.VALID:
             result, capture_count, captured = self.game.handle_move(x, y)
-            score = heuristic_evaluation(self.game)
+            if score is None:
+              score = heuristic_evaluation(self.game)
             self.setting_panel.update_score(score)
             self.score_bar.update_score(score)
             if captured:
@@ -191,7 +192,7 @@ class GomokuGUI:
                 if mv:
                     if self.debug:
                         self.canvas.delete_debug()
-                    x, y, _ = mv
+                    x, y, score = mv
                     for m in moves:
                         x1, y1, score1 = m
                         selected = x == x1 and y == y1
@@ -199,7 +200,7 @@ class GomokuGUI:
                             self.canvas.draw_possible_stone(y1, x1, "O", score1, selected)
                     self.ai_stats.append((elapsed, nodes, pruning))
                     self.setting_panel.update_ai_stats(self.ai_stats)
-                    self.play_one_turn(x, y)
+                    self.play_one_turn(x, y, score)
                 self.update_undo_redo_buttons()
 
             self.root.after(0, apply_move)
