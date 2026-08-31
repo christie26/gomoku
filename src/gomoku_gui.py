@@ -216,7 +216,7 @@ class GomokuGUI:
         self.setting_panel.reset_panel(self.is_playing)
 
     def show_hint(self):
-        mv, _ = get_ai_move(self.game)
+        mv, _, _, _, _ = get_ai_move_stats(self.game)
         x, y, _ = mv
         self.canvas.draw_possible_stone(y, x, self.game.current_player, None, True)
 

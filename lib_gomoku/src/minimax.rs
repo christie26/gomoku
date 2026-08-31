@@ -495,18 +495,6 @@ fn sb_alphabeta(
 // Public API functions (Python bindings + Rust self-play)
 // =====================================================================
 
-#[pyfunction]
-pub fn get_ai_move(
-    _py: Python,
-    state: &Gomoku,
-) -> (
-    Option<(usize, usize, i32)>,
-    Vec<(usize, usize, Option<i32>)>,
-) {
-    let (best, moves, _) = get_ai_move_with_stats(state);
-    (best, moves)
-}
-
 /// Same search as `get_ai_move`, plus the wall-clock time, node count and
 /// pruning percentage of the last completed iterative-deepening depth —
 /// for surfacing search performance in the UI.
@@ -542,42 +530,8 @@ pub fn get_hint(
     moves
 }
 
-#[pyfunction]
-pub fn get_move_pv(state: &Gomoku, x: usize, y: usize) -> (Vec<(usize, usize)>, i32) {
-    let mut board = SearchBoard::from_gomoku(state);
-    let is_max_player = board.current == Cell::Black;
-    let max_depth = if board.move_count < 4 { 3 } else { MAX_DEPTH };
-    let tt = shared_tt();
-    let deadline = search_deadline();
 
-    let undo = board.make_move(x, y);
 
-    let mut final_pv = vec![];
-    let mut final_value = 0i32;
-    let mut heur = MoveHeuristics::new();
-    for depth in 1..=max_depth {
-        if Instant::now() >= deadline {
-            break;
-        }
-        let mut stats = SearchStats::new();
-        stats.max_depth = depth;
-        let (value, child_pv, timed_out) = sb_alphabeta(
-            &mut board, MIN_VALUE, MAX_VALUE, !is_max_player,
-            1, depth, &mut stats, tt, deadline, &mut heur,
-        );
-        if timed_out {
-            break;
-        }
-        final_value = value;
-        final_pv = child_pv;
-    }
-
-    board.undo_move(&undo);
-
-    let mut pv = vec![(x, y)];
-    pv.extend(final_pv);
-    (pv, final_value)
-}
 
 pub fn get_ai_move_with_stats(
     state: &Gomoku,
