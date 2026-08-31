@@ -90,39 +90,39 @@ class SettingsPanel:
         # -------------------
         # 2. Ruleset
         # -------------------
-        rules_frame = tk.Label(
-            self.setting_frame,
-            text="Ruleset",
-            padx=5,
-            pady=0,
-            font=(NAME_FONT, 16),
-            background=LIGHT_BACKGROUND,
-        )
-        rules_frame.pack(pady=(15, 0), anchor="w")
+        # rules_frame = tk.Label(
+        #     self.setting_frame,
+        #     text="Ruleset",
+        #     padx=5,
+        #     pady=0,
+        #     font=(NAME_FONT, 16),
+        #     background=LIGHT_BACKGROUND,
+        # )
+        # rules_frame.pack(pady=(15, 0), anchor="w")
 
-        self.ruleset = tk.StringVar(value="1")
+        # self.ruleset = tk.StringVar(value="1")
 
-        rb4 = tk.Radiobutton(
-            self.setting_frame,
-            text="Option 1",
-            variable=self.ruleset,
-            value="1",
-            font=NAME_FONT,
-            background=LIGHT_BACKGROUND,
-        )
-        rb4.pack(anchor="w")
-        self.setting_ratios.append(rb4)
+        # rb4 = tk.Radiobutton(
+        #     self.setting_frame,
+        #     text="Option 1",
+        #     variable=self.ruleset,
+        #     value="1",
+        #     font=NAME_FONT,
+        #     background=LIGHT_BACKGROUND,
+        # )
+        # rb4.pack(anchor="w")
+        # self.setting_ratios.append(rb4)
 
-        rb5 = tk.Radiobutton(
-            self.setting_frame,
-            text="Option 2",
-            variable=self.ruleset,
-            value="2",
-            font=NAME_FONT,
-            background=LIGHT_BACKGROUND,
-        )
-        rb5.pack(anchor="w")
-        self.setting_ratios.append(rb5)
+        # rb5 = tk.Radiobutton(
+        #     self.setting_frame,
+        #     text="Option 2",
+        #     variable=self.ruleset,
+        #     value="2",
+        #     font=NAME_FONT,
+        #     background=LIGHT_BACKGROUND,
+        # )
+        # rb5.pack(anchor="w")
+        # self.setting_ratios.append(rb5)
 
         # -------------------
         # 3. Debug Tool

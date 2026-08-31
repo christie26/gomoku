@@ -133,8 +133,8 @@ class GomokuGUI:
         self.set_game(Gomoku(size=BOARD_SIZE))
         self.canvas.set_game(self.game)
 
-        ruleset = self.setting_panel.ruleset.get()
-        print(f"Game is started with {ruleset} ruleset")
+        # ruleset = self.setting_panel.ruleset.get()
+        # print(f"Game is started with {ruleset} ruleset")
 
         p = self.game.current_player
         self.highlight_active_player()
