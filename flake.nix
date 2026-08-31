@@ -61,9 +61,9 @@
           fi
 
           source .venv/bin/activate
-          echo "✅ Virtual environment activated"
-          echo ""
-          echo "Ready to run: maturin develop"
+
+	  cd lib_gomoku && maturin develop --release
+	  cd .. && python src/gomoku_gui.py --white Etienne --black Yoonseo
         '';
       };
     });

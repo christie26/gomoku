@@ -1,7 +1,7 @@
 import math
 import tkinter as tk
 
-from src.screen_constant import BORDER_COLOR
+from screen_constant import BORDER_COLOR
 
 SCORE_BAR_WIDTH = 24
 SCORE_BAR_SCALE = 30_000  # higher = bar reacts more slowly to score changes

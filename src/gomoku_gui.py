@@ -3,11 +3,11 @@ from lib_gomoku import Gomoku, MoveResult, get_ai_move_stats, get_minimax_eval
 import argparse
 import time
 import threading
-from src.setting_panel import SettingsPanel
-from src.player_panel import Player, PlayerPanel
-from src.board_canvas import BoardCanvas
-from src.score_bar import ScoreBar
-from src.screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, LIGHT_BACKGROUND, SELECT_BACKGROUND, BORDER_COLOR, LABEL_FONT, NAME_FONT, SETTING_PANEL_WIDTH
+from setting_panel import SettingsPanel
+from player_panel import Player, PlayerPanel
+from board_canvas import BoardCanvas
+from score_bar import ScoreBar
+from screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, LIGHT_BACKGROUND, SELECT_BACKGROUND, BORDER_COLOR, LABEL_FONT, NAME_FONT, SETTING_PANEL_WIDTH
 
 
 class GomokuGUI:
