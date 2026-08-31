@@ -3,14 +3,17 @@ use crate::constants::{
     RANDOMIZE_TIED_MOVES, TIME_LIMIT_MS, TT_SHARDS, TT_SHARD_MASK, TT_SIZE_BITS,
 };
 use crate::search_board::{Cell, SearchBoard};
-use crate::Gomoku;
+use crate::{Gomoku, position_name};
 
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
 use std::cmp::{max, min};
+use std::fs::File;
+use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
+use std::io::Write;
 
 
 // --- Transposition Table ---
@@ -523,6 +526,9 @@ pub fn get_ai_move_stats(
     // thread keeps repainting (live turn timer) while the search runs.
     let owned = state.clone();
     let (best, moves, stats) = py.allow_threads(|| get_ai_move_with_stats(&owned));
+    let mut logger = RunLogger::new(None).expect("failed to create log file");
+    
+    print_search_stats(&stats, &mut logger);
     let elapsed = start.elapsed().as_secs_f64();
     (best, moves, elapsed, stats.nodes_visited, stats.pruning_percent())
 }
@@ -846,3 +852,77 @@ pub fn get_ai_move_with_stats(
     (best_move, all_moves, final_stats)
 }
 
+/// Writes every logged line to stdout and to a per-run log file, so the
+/// live terminal output stays intact while also being persisted to disk.
+pub struct RunLogger {
+    file: Option<File>,
+}
+
+impl RunLogger {
+    pub fn new(path: Option<&Path>) -> std::io::Result<Self> {
+        Ok(RunLogger { file: path.map(|path| File::create(path)).transpose()? })
+    }
+
+    pub fn log(&mut self, line: &str) {
+        println!("{line}");
+        if let Some(mut file) = self.file.as_ref() {
+          writeln!(file, "{line}").ok();
+        }
+    }
+}
+pub fn print_search_stats(stats: &SearchStats, logger: &mut RunLogger) {
+    // Iterative deepening progression
+    if !stats.depth_times.is_empty() {
+        let mut line = String::from("  ID: ");
+        for (i, &(d, secs, nodes)) in stats.depth_times.iter().enumerate() {
+            if i > 0 {
+                line.push_str(" -> ");
+            }
+            line.push_str(&format!("d{}={:.3}s/{}n", d, secs, nodes));
+        }
+        logger.log(&line);
+    }
+
+    logger.log(&format!(
+        "  Depth {} | Nodes: {} | Cutoffs: {} | TT hits: {} | Avg branch: {:.1} | Pruned: ~{:.1}%",
+        stats.max_depth,
+        stats.nodes_visited,
+        stats.cutoffs,
+        stats.tt_hits,
+        stats.avg_branching_factor(),
+        stats.pruning_percent(),
+    ));
+
+    if !stats.pv.is_empty() {
+        logger.log(&format!(
+            "  PV: {}",
+            stats.pv
+                .iter()
+                .map(|&(x, y)| position_name(&(x as i32, y as i32)))
+                .collect::<Vec<_>>()
+                .join(" -> ")
+        ));
+    }
+
+    if stats.branch_times.is_empty() {
+        return;
+    }
+
+    let max_show = 10;
+    let total = stats.branch_times.len();
+    logger.log("  Branch timings:");
+
+    for (i, &(x, y, score, secs)) in stats.branch_times.iter().enumerate() {
+        if i >= max_show {
+            let others_count = total - max_show;
+            let others_time: f64 = stats.branch_times[max_show..].iter().map(|b| b.3).sum();
+            logger.log(&format!("    + {} others {:>26.3}s", others_count, others_time));
+            break;
+        }
+        let score_str = match score {
+            Some(s) => format!("{:>7}pts", s),
+            None => "       N/A".to_string(),
+        };
+        logger.log(&format!("    {:>4} = {} {:>8.3}s", position_name(&(x as i32, y as i32)), score_str, secs));
+    }
+}
