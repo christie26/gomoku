@@ -17,7 +17,7 @@ class GomokuGUI:
 
         self.sizeeee = CELL_SIZE * (BOARD_SIZE - 1) + PADDING * 2
         self.is_playing = False
-        self.debug = True
+        self.debug = False
         self.ai_thinking = False
         self.ai_stats = []  # list of (elapsed_secs, nodes_visited, pruning_percent)
 
@@ -69,11 +69,13 @@ class GomokuGUI:
         self.setting_panel = SettingsPanel(
             self.right_frame,
             on_start_game=self.start_game,
+            on_end_game=self.end_game,
             on_undo=self.undo,
             on_redo=self.redo,
             on_debug=self.debug_onoff,
             on_play_mode=self.switch_play_mode,
-            on_hint=self.show_hint
+            on_hint=self.show_hint,
+            default_debug = self.debug
         )
 
         # ===== HISTORY =====
@@ -132,8 +134,8 @@ class GomokuGUI:
         self.set_game(Gomoku(size=BOARD_SIZE))
         self.canvas.set_game(self.game)
 
-        ruleset = self.setting_panel.ruleset.get()
-        print(f"Game is started with {ruleset} ruleset")
+        # ruleset = self.setting_panel.ruleset.get()
+        # print(f"Game is started with {ruleset} ruleset")
 
         p = self.game.current_player
         self.highlight_active_player()
@@ -145,6 +147,24 @@ class GomokuGUI:
         self.setting_panel.reset_panel(self.is_playing)
         self.setting_panel.reset_ai_stats()
         self.score_bar.update_score(0)
+        self.player_frames["X"].reset_panel()
+        self.player_frames["O"].reset_panel()
+        if not self.players[self.game.current_player].is_human:
+            self.ai_play()
+
+    def end_game(self):
+        p = self.game.current_player
+        self.end_turn_timer(p)
+        self.player_frames[p].unhightlight_player()
+        
+        self.set_game(Gomoku(size=BOARD_SIZE))
+        self.canvas.set_game(self.game)
+
+        self.is_playing = False
+        self.canvas.reset_board(self.is_playing)
+        self.ai_stats = []
+        self.setting_panel.reset_panel(self.is_playing)
+        self.setting_panel.reset_ai_stats()
         self.player_frames["X"].reset_panel()
         self.player_frames["O"].reset_panel()
 
@@ -188,7 +208,9 @@ class GomokuGUI:
 
     def finish_game(self, winner):
         self.end_turn_timer(self.game.current_player)
-        self.canvas.show_winner(f"{self.players[winner].name} wins")
+        winner_text = self.players[winner].name if self.players[winner].is_human else "AI"
+        self.canvas.show_winner(f"{winner_text} wins")
+        self.canvas.finish_board()
         self.is_playing = False
         self.setting_panel.reset_panel(self.is_playing)
 

@@ -6,8 +6,8 @@ pub const BOARD_SIZE: usize = 19;
 
 pub const MAX_VALUE: i32 = 100_000;
 pub const MIN_VALUE: i32 = -100_000;
-pub const MAX_DEPTH: usize = 6;
-pub const SHALLOW_ORDER_DEPTH: usize = 1;
+pub const MAX_DEPTH: usize = 9;
+pub const SHALLOW_ORDER_DEPTH: usize = 2;
 pub const RADIUS: usize = 2;
 // From this ply (inclusive) onward, shrink candidate-move radius to DEEP_RADIUS.
 pub const DEEP_RADIUS_DEPTH: usize = 3;
@@ -24,7 +24,18 @@ pub const TIME_LIMIT_MS: Option<u64> = None;
 /// When multiple root moves end up tied for the best score, pick randomly
 /// among them instead of always keeping the first (scan-order) one. Flip to
 /// `false` to restore fully deterministic move selection.
-pub const RANDOMIZE_TIED_MOVES: bool = true;
+pub const RANDOMIZE_TIED_MOVES: bool = false;
+
+// Late move reductions. Moves far down the ordering rarely raise alpha, so
+// they are searched shallower first and only re-searched at full depth if one
+// beats alpha. Tactical moves (fours, fives, captures) are never reduced.
+
+/// Plies left below which reducing is not worth it.
+pub const LMR_MIN_DEPTH: usize = 3;
+/// Ordering position from which reductions start (0-based).
+pub const LMR_MIN_MOVE: usize = 3;
+/// Ordering position from which the reduction doubles.
+pub const LMR_DEEP_MOVE: usize = 6;
 
 // Transposition table
 
@@ -42,9 +53,11 @@ pub const HEURISTIC_EVAL_CLAMP: i32 = 99_999;
 // heuristic::evaluate_player.
 
 pub const WEIGHT_FIVE: i32 = 80_001;
-pub const WEIGHT_OPEN_FOUR: i32 = 35_000;
+pub const WEIGHT_OPEN_FOUR: i32 = 70_000;
 pub const WEIGHT_BLOCK_FOUR: i32 = 7_000;
+pub const WEIGHT_BLOCK_FOUR_TEMPO: i32 = 70_000;
 pub const WEIGHT_FREE_THREE: i32 = 5_000;
+pub const WEIGHT_FREE_THREE_TEMPO: i32 = 60_000;
 pub const WEIGHT_OPEN_THREE: i32 = 100;
 pub const WEIGHT_OPEN_TWO: i32 = 50;
 

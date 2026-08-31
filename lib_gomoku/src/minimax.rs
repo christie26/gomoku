@@ -1,14 +1,9 @@
 use crate::constants::{
-    CAPTURE_BONUS_1, CAPTURE_BONUS_2, CAPTURE_BONUS_3, CAPTURE_BONUS_4_PLUS,
-    COMBO_BLOCK_FOUR_AND_THREE, COMBO_CAPTURE_AND_FOUR, COMBO_DOUBLE_BLOCK_FOUR,
-    COMBO_DOUBLE_OPEN_FOUR, COMBO_DOUBLE_THREE, COMBO_OPEN_AND_BLOCK_FOUR,
-    COMBO_OPEN_FOUR_AND_THREE, DEEP_RADIUS, DEEP_RADIUS_DEPTH, MAX_DEPTH, MAX_VALUE, MIN_VALUE,
-    RADIUS, RANDOMIZE_TIED_MOVES, SB_EVAL_CLAMP, SHALLOW_ORDER_DEPTH, TEMPO_BLOCK_FOUR,
-    TEMPO_CAPTURE, TEMPO_OPEN_FOUR, TIME_LIMIT_MS, TT_SHARDS, TT_SHARD_MASK, TT_SIZE_BITS,
-    WEIGHT_BLOCK_FOUR, WEIGHT_FIVE, WEIGHT_FREE_THREE, WEIGHT_OPEN_FOUR, WEIGHT_OPEN_THREE,
-    WEIGHT_OPEN_TWO,
+    LMR_DEEP_MOVE, LMR_MIN_DEPTH, LMR_MIN_MOVE, MAX_DEPTH, MAX_VALUE, MIN_VALUE,
+    RANDOMIZE_TIED_MOVES, TIME_LIMIT_MS, TT_SHARDS, TT_SHARD_MASK, TT_SIZE_BITS,
 };
-use crate::{zobrist, Gomoku, Stone};
+use crate::search_board::{Cell, SearchBoard};
+use crate::Gomoku;
 
 use pyo3::prelude::*;
 use rayon::prelude::*;
@@ -17,845 +12,6 @@ use std::cmp::{max, min};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-// =====================================================================
-// SearchBoard: zero-heap make/unmake board for the search
-// =====================================================================
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-enum Cell {
-    Empty = 0,
-    Black = 1,
-    White = 2,
-}
-
-impl Cell {
-    #[inline]
-    fn opponent(self) -> Cell {
-        match self {
-            Cell::Black => Cell::White,
-            Cell::White => Cell::Black,
-            Cell::Empty => Cell::Empty,
-        }
-    }
-
-    #[inline]
-    fn zobrist_idx(self) -> usize {
-        // Black=0, White=1
-        (self as usize) - 1
-    }
-}
-
-#[derive(Clone)]
-struct SearchBoard {
-    cells: [[Cell; 19]; 19],
-    current: Cell,
-    opponent: Cell,
-    captures: [i32; 3], // Index by Cell as u8: [unused, Black, White]
-    hash: u64,
-    move_count: usize,
-    last_move: Option<(usize, usize)>,
-    total_stones: usize,
-    // Incrementally maintained by make_move/undo_move — see sb_local_patterns.
-    black_patterns: PatternCounts,
-    white_patterns: PatternCounts,
-}
-
-#[derive(Default, Clone, Copy, Debug, PartialEq)]
-struct PatternCounts {
-    five_rows: i32,
-    open_fours: i32,
-    block_fours: i32,
-    open_threes: i32,
-    open_twos: i32,
-    free_threes: i32,
-}
-
-impl std::ops::Sub for PatternCounts {
-    type Output = PatternCounts;
-    fn sub(self, other: PatternCounts) -> PatternCounts {
-        PatternCounts {
-            five_rows: self.five_rows - other.five_rows,
-            open_fours: self.open_fours - other.open_fours,
-            block_fours: self.block_fours - other.block_fours,
-            open_threes: self.open_threes - other.open_threes,
-            open_twos: self.open_twos - other.open_twos,
-            free_threes: self.free_threes - other.free_threes,
-        }
-    }
-}
-
-/// Which PatternCounts bucket a run-start classifies into.
-#[derive(Clone, Copy)]
-enum RunField {
-    Five,
-    OpenFour,
-    BlockFour,
-    OpenThree,
-    OpenTwo,
-}
-
-impl PatternCounts {
-    /// Add `delta` scaled by `sign` (1 to apply a move, -1 to undo it).
-    fn apply_delta(&mut self, delta: &PatternCounts, sign: i32) {
-        self.five_rows += delta.five_rows * sign;
-        self.open_fours += delta.open_fours * sign;
-        self.block_fours += delta.block_fours * sign;
-        self.open_threes += delta.open_threes * sign;
-        self.open_twos += delta.open_twos * sign;
-        self.free_threes += delta.free_threes * sign;
-    }
-
-    fn bump(&mut self, field: RunField, amount: i32) {
-        match field {
-            RunField::Five => self.five_rows += amount,
-            RunField::OpenFour => self.open_fours += amount,
-            RunField::BlockFour => self.block_fours += amount,
-            RunField::OpenThree => self.open_threes += amount,
-            RunField::OpenTwo => self.open_twos += amount,
-        }
-    }
-
-    fn score(&self, captures: i32, is_active: bool) -> i32 {
-        let mut score = 0i32;
-        score += self.five_rows * WEIGHT_FIVE;
-        score += self.open_fours * WEIGHT_OPEN_FOUR;
-        score += self.block_fours * WEIGHT_BLOCK_FOUR;
-        score += self.free_threes * WEIGHT_FREE_THREE;
-        score += self.open_threes * WEIGHT_OPEN_THREE;
-        score += self.open_twos * WEIGHT_OPEN_TWO;
-
-        score += match captures {
-            0 => 0,
-            1 => CAPTURE_BONUS_1,
-            2 => CAPTURE_BONUS_2,
-            3 => CAPTURE_BONUS_3,
-            4 => CAPTURE_BONUS_4_PLUS,
-            _ => CAPTURE_BONUS_4_PLUS,
-        };
-
-        let total_threes = self.open_threes + self.free_threes;
-        if self.open_fours >= 2 { score += COMBO_DOUBLE_OPEN_FOUR; }
-        if self.open_fours >= 1 && self.block_fours >= 1 { score += COMBO_OPEN_AND_BLOCK_FOUR; }
-        if self.block_fours >= 2 { score += COMBO_DOUBLE_BLOCK_FOUR; }
-        if self.open_fours >= 1 && total_threes >= 1 { score += COMBO_OPEN_FOUR_AND_THREE; }
-        if self.block_fours >= 1 && total_threes >= 1 { score += COMBO_BLOCK_FOUR_AND_THREE; }
-        if total_threes >= 2 { score += COMBO_DOUBLE_THREE; }
-        if captures >= 4 && (self.block_fours >= 1 || self.open_fours >= 1) { score += COMBO_CAPTURE_AND_FOUR; }
-
-        if is_active {
-            if self.open_fours >= 1 { score += TEMPO_OPEN_FOUR; }
-            if self.block_fours >= 1 { score += TEMPO_BLOCK_FOUR; }
-            if captures >= 4 { score += TEMPO_CAPTURE; }
-        }
-
-        score
-    }
-}
-
-struct UndoInfo {
-    placed: (usize, usize),
-    _placed_player: Cell,
-    captured_stones: [(usize, usize); 8], // max 4 captures * 2 stones each = 8
-    num_captured: usize,
-    old_captures_current: i32,
-    old_hash: u64,
-    old_move_count: usize,
-    old_last_move: Option<(usize, usize)>,
-    old_total_stones: usize,
-    delta_black: PatternCounts,
-    delta_white: PatternCounts,
-}
-
-const ALL_DIRS: [(i32, i32); 8] = [
-    (1, 0), (0, 1), (1, 1), (1, -1),
-    (-1, 0), (0, -1), (-1, -1), (-1, 1),
-];
-
-impl SearchBoard {
-    fn from_gomoku(g: &Gomoku) -> Self {
-        let mut cells = [[Cell::Empty; 19]; 19];
-        let mut total_stones = 0usize;
-        for r in 0..19 {
-            for c in 0..19 {
-                cells[r][c] = match g.board[r][c] {
-                    Stone::Black => { total_stones += 1; Cell::Black }
-                    Stone::White => { total_stones += 1; Cell::White }
-                    Stone::Empty => Cell::Empty,
-                };
-            }
-        }
-        let current = match g.current_player {
-            Stone::Black => Cell::Black,
-            Stone::White => Cell::White,
-            _ => Cell::Empty,
-        };
-        let cap_b = *g.capture_count.get(&Stone::Black).unwrap_or(&0);
-        let cap_w = *g.capture_count.get(&Stone::White).unwrap_or(&0);
-        let last_move = g.current_move.map(|(x, y)| (x as usize, y as usize));
-        let mut board = SearchBoard {
-            cells,
-            current,
-            opponent: current.opponent(),
-            captures: [0, cap_b, cap_w],
-            hash: g.hash,
-            move_count: g.move_count,
-            last_move,
-            total_stones,
-            black_patterns: PatternCounts::default(),
-            white_patterns: PatternCounts::default(),
-        };
-        let (black_patterns, white_patterns) = board.sb_scan_patterns();
-        board.black_patterns = black_patterns;
-        board.white_patterns = white_patterns;
-        board
-    }
-
-    #[inline]
-    fn in_bounds(r: i32, c: i32) -> bool {
-        r >= 0 && r < 19 && c >= 0 && c < 19
-    }
-
-    #[inline]
-    fn get(&self, r: i32, c: i32) -> Cell {
-        self.cells[r as usize][c as usize]
-    }
-
-    fn make_move(&mut self, r: usize, c: usize) -> UndoInfo {
-        let z = zobrist();
-        let old_hash = self.hash;
-        let old_captures = self.captures[self.current as usize];
-        let old_move_count = self.move_count;
-        let old_last_move = self.last_move;
-        let old_total_stones = self.total_stones;
-
-        // Snapshot local pattern contributions around (r,c) before any mutation.
-        // Used by the fast incremental path below when this move captures nothing.
-        let (before_b, before_w) = self.sb_local_patterns(r as i32, c as i32);
-
-        // Place stone
-        self.cells[r][c] = self.current;
-        self.hash ^= z.board[r * 19 + c][self.current.zobrist_idx()];
-        self.total_stones += 1;
-        self.move_count += 1;
-        self.last_move = Some((r, c));
-
-        // Execute captures: scan 8 directions for current-opp-opp-current pattern
-        let mut captured_stones = [(0usize, 0usize); 8];
-        let mut num_captured = 0usize;
-        let ri = r as i32;
-        let ci = c as i32;
-
-        for &(dr, dc) in ALL_DIRS.iter() {
-            let r1 = ri + dr;
-            let c1 = ci + dc;
-            let r2 = ri + 2 * dr;
-            let c2 = ci + 2 * dc;
-            let r3 = ri + 3 * dr;
-            let c3 = ci + 3 * dc;
-
-            if !Self::in_bounds(r3, c3) { continue; }
-            if self.get(r1, c1) == self.opponent
-                && self.get(r2, c2) == self.opponent
-                && self.get(r3, c3) == self.current
-            {
-                // Capture the two opponent stones
-                let opp_zi = self.opponent.zobrist_idx();
-                let (ur1, uc1) = (r1 as usize, c1 as usize);
-                let (ur2, uc2) = (r2 as usize, c2 as usize);
-                self.cells[ur1][uc1] = Cell::Empty;
-                self.cells[ur2][uc2] = Cell::Empty;
-                self.hash ^= z.board[ur1 * 19 + uc1][opp_zi];
-                self.hash ^= z.board[ur2 * 19 + uc2][opp_zi];
-                captured_stones[num_captured] = (ur1, uc1);
-                captured_stones[num_captured + 1] = (ur2, uc2);
-                num_captured += 2;
-                self.captures[self.current as usize] += 1;
-                self.total_stones -= 2;
-            }
-        }
-
-        // Switch player
-        self.hash ^= z.player;
-        let tmp = self.current;
-        self.current = self.opponent;
-        self.opponent = tmp;
-
-        // Update incrementally maintained pattern counts. A non-capturing move
-        // only ever changes patterns in the placed stone's own neighborhood, so
-        // diffing a local rescan before/after is enough. Captures can reopen
-        // lines far from (r,c) (each removed stone affects its own neighborhood),
-        // so that rarer path falls back to a full rescan instead.
-        let (delta_black, delta_white) = if num_captured == 0 {
-            let (after_b, after_w) = self.sb_local_patterns(r as i32, c as i32);
-            (after_b - before_b, after_w - before_w)
-        } else {
-            let (new_black, new_white) = self.sb_scan_patterns();
-            (new_black - self.black_patterns, new_white - self.white_patterns)
-        };
-        self.black_patterns.apply_delta(&delta_black, 1);
-        self.white_patterns.apply_delta(&delta_white, 1);
-
-        UndoInfo {
-            placed: (r, c),
-            _placed_player: tmp, // the player who made the move
-            captured_stones,
-            num_captured,
-            old_captures_current: old_captures,
-            old_hash: old_hash,
-            old_move_count,
-            old_last_move,
-            old_total_stones,
-            delta_black,
-            delta_white,
-        }
-    }
-
-    fn undo_move(&mut self, info: &UndoInfo) {
-        // Swap players back
-        let tmp = self.current;
-        self.current = self.opponent;
-        self.opponent = tmp;
-
-        self.black_patterns.apply_delta(&info.delta_black, -1);
-        self.white_patterns.apply_delta(&info.delta_white, -1);
-
-        // Remove placed stone
-        let (r, c) = info.placed;
-        self.cells[r][c] = Cell::Empty;
-
-        // Restore captured stones
-        for i in 0..info.num_captured {
-            let (cr, cc) = info.captured_stones[i];
-            self.cells[cr][cc] = self.opponent; // opponent of the player who moved
-        }
-
-        // Restore scalars
-        self.captures[self.current as usize] = info.old_captures_current;
-        self.hash = info.old_hash;
-        self.move_count = info.old_move_count;
-        self.last_move = info.old_last_move;
-        self.total_stones = info.old_total_stones;
-    }
-
-    // ---- Board scanning helpers ----
-
-    /// Count consecutive stones of `player` starting from (r,c) going (dr,dc), max 4 steps
-    fn count_stones(&self, r: usize, c: usize, dr: i32, dc: i32, player: Cell) -> i32 {
-        let mut count = 0;
-        for i in 1..5i32 {
-            let nr = r as i32 + dr * i;
-            let nc = c as i32 + dc * i;
-            if !Self::in_bounds(nr, nc) { break; }
-            if self.cells[nr as usize][nc as usize] == player {
-                count += 1;
-            } else {
-                break;
-            }
-        }
-        count
-    }
-
-    /// Check if placing `player` at (r,c) can capture in direction (dr,dc)
-    fn can_capture_at(&self, r: usize, c: usize, dr: i32, dc: i32, player: Cell) -> bool {
-        let opp = player.opponent();
-        let ri = r as i32;
-        let ci = c as i32;
-        let r1 = ri + dr; let c1 = ci + dc;
-        let r2 = ri + 2*dr; let c2 = ci + 2*dc;
-        let r3 = ri + 3*dr; let c3 = ci + 3*dc;
-        if !Self::in_bounds(r3, c3) { return false; }
-        self.get(r1, c1) == opp && self.get(r2, c2) == opp && self.get(r3, c3) == player
-    }
-
-    /// Evaluate move ordering score for an empty cell (r,c) for `player`
-    fn evaluate_position(&self, r: usize, c: usize, player: Cell) -> i32 {
-        let dirs: [(i32,i32); 4] = [(1,0),(0,1),(1,1),(1,-1)];
-        let mut score = 0i32;
-        for &(dr, dc) in &dirs {
-            let mut count = 1i32;
-            count += self.count_stones(r, c, dr, dc, player);
-            count += self.count_stones(r, c, -dr, -dc, player);
-            score += match count {
-                n if n >= 5 => 100_000,
-                4 => 10_000,
-                3 => 1_000,
-                2 => 100,
-                _ => 0,
-            };
-            if self.can_capture_at(r, c, dr, dc, player) { score += 50_000; }
-            if self.can_capture_at(r, c, -dr, -dc, player) { score += 50_000; }
-        }
-        score
-    }
-
-    // ---- Free-three / double-three detection ----
-
-    /// Port of Gomoku::count_free_three for SearchBoard
-    fn sb_count_free_three(&self, sign: i32, dx: i32, dy: i32, x0: i32, y0: i32, player: Cell) -> (i32, i32, bool) {
-        let opp = player.opponent();
-        let mut my_count = 0;
-        let mut empty_count = 0;
-        let mut i = 1i32;
-        let mut hole = false;
-        loop {
-            let x = x0 + dx * i * sign;
-            let y = y0 + dy * i * sign;
-            if !Self::in_bounds(x, y) || self.get(x, y) == opp || empty_count == 2 {
-                break;
-            }
-            if self.get(x, y) == player {
-                if empty_count > 0 { hole = true; }
-                my_count += 1;
-            } else {
-                empty_count += 1;
-            }
-            i += 1;
-        }
-        (my_count, empty_count, hole)
-    }
-
-    /// Check if placing current player at (x0,y0) creates a double-three
-    fn sb_is_double_three(&self, x0: i32, y0: i32) -> bool {
-        let dirs: [(i32,i32); 4] = [(1,-1),(1,0),(1,1),(0,1)];
-        let player = self.current;
-        let mut free_three_count = 0;
-        for (dx, dy) in dirs {
-            let (plus_my, plus_empty, plus_hole) = self.sb_count_free_three(1, dx, dy, x0, y0, player);
-            let (minus_my, minus_empty, minus_hole) = self.sb_count_free_three(-1, dx, dy, x0, y0, player);
-            if plus_my + minus_my == 2 && plus_empty + minus_empty >= 3 {
-                let mut ok = true;
-                if plus_hole && minus_empty < 2 { ok = false; }
-                if minus_hole && plus_empty < 2 { ok = false; }
-                // Replicate the adjustment logic
-                let mut adj_plus_empty = plus_empty;
-                let mut adj_minus_empty = minus_empty;
-                if plus_hole && minus_empty == 2 { adj_minus_empty = 1; }
-                if minus_hole && plus_empty == 2 { adj_plus_empty = 1; }
-                let _ = (adj_plus_empty, adj_minus_empty); // used for pattern extent only
-                if ok {
-                    free_three_count += 1;
-                    if free_three_count > 1 { return true; }
-                }
-            }
-        }
-        false
-    }
-
-    // ---- Terminal detection ----
-
-    /// Check if `player` has 5+ in a row anywhere on the board
-    fn has_five_in_row(&self, player: Cell) -> bool {
-        let dirs: [(i32,i32); 4] = [(1,0),(0,1),(1,1),(1,-1)];
-        for r in 0..19i32 {
-            for c in 0..19i32 {
-                if self.get(r, c) != player { continue; }
-                for &(dr, dc) in &dirs {
-                    // Only count from the "start" of a run
-                    let pr = r - dr;
-                    let pc = c - dc;
-                    if Self::in_bounds(pr, pc) && self.get(pr, pc) == player { continue; }
-                    let mut count = 1;
-                    let mut nr = r + dr;
-                    let mut nc = c + dc;
-                    while Self::in_bounds(nr, nc) && self.get(nr, nc) == player {
-                        count += 1;
-                        nr += dr;
-                        nc += dc;
-                    }
-                    if count >= 5 { return true; }
-                }
-            }
-        }
-        false
-    }
-
-    /// Check if stone at (x,y) belongs to `player` and is in a capturable pair
-    fn sb_stone_in_capturable_pair(&self, x: i32, y: i32, player: Cell) -> bool {
-        if !Self::in_bounds(x, y) || self.get(x, y) != player { return false; }
-        let opp = player.opponent();
-        let dirs: [(i32,i32); 4] = [(1,0),(0,1),(1,1),(1,-1)];
-        for (dx, dy) in dirs {
-            // (x,y)-(x+dx,y+dy) pair
-            let nx = x + dx; let ny = y + dy;
-            if Self::in_bounds(nx, ny) && self.get(nx, ny) == player {
-                // Check OPP-PP-EMPTY
-                let bx = x - dx; let by = y - dy;
-                let ax = nx + dx; let ay = ny + dy;
-                if Self::in_bounds(bx, by) && Self::in_bounds(ax, ay)
-                    && self.get(bx, by) == opp && self.get(ax, ay) == Cell::Empty
-                {
-                    return true;
-                }
-                // Check EMPTY-PP-OPP
-                if Self::in_bounds(bx, by) && Self::in_bounds(ax, ay)
-                    && self.get(bx, by) == Cell::Empty && self.get(ax, ay) == opp
-                {
-                    return true;
-                }
-            }
-            // (x-dx,y-dy)-(x,y) pair
-            let px = x - dx; let py = y - dy;
-            if Self::in_bounds(px, py) && self.get(px, py) == player {
-                let bx = px - dx; let by = py - dy;
-                let ax = x + dx; let ay = y + dy;
-                if Self::in_bounds(bx, by) && Self::in_bounds(ax, ay)
-                    && self.get(bx, by) == opp && self.get(ax, ay) == Cell::Empty
-                {
-                    return true;
-                }
-                if Self::in_bounds(bx, by) && Self::in_bounds(ax, ay)
-                    && self.get(bx, by) == Cell::Empty && self.get(ax, ay) == opp
-                {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
-    /// Check if `player` has an uncapturable five-in-a-row
-    fn has_uncapturable_five(&self, player: Cell) -> bool {
-        let dirs: [(i32,i32); 4] = [(1,0),(0,1),(1,1),(1,-1)];
-        for r in 0..19i32 {
-            for c in 0..19i32 {
-                if self.get(r, c) != player { continue; }
-                for &(dr, dc) in &dirs {
-                    let pr = r - dr; let pc = c - dc;
-                    if Self::in_bounds(pr, pc) && self.get(pr, pc) == player { continue; }
-                    // Count run length
-                    let mut count = 1;
-                    let mut nr = r + dr; let mut nc = c + dc;
-                    while Self::in_bounds(nr, nc) && self.get(nr, nc) == player {
-                        count += 1;
-                        nr += dr; nc += dc;
-                    }
-                    if count < 5 { continue; }
-                    // Check if any stone in this run is capturable
-                    let mut any_capturable = false;
-                    for i in 0..count {
-                        let sr = r + dr * i;
-                        let sc = c + dc * i;
-                        if self.sb_stone_in_capturable_pair(sr, sc, player) {
-                            any_capturable = true;
-                            break;
-                        }
-                    }
-                    if !any_capturable { return true; }
-                }
-            }
-        }
-        false
-    }
-
-    /// Get winner after a make_move (which already switched players).
-    /// `board.opponent` is who just moved, `board.current` is who moves next.
-    fn get_winner(&self) -> Option<Cell> {
-        // 1. Check if the player who just moved (opponent) has >= 5 captures
-        if self.captures[self.opponent as usize] >= 5 {
-            return Some(self.opponent);
-        }
-        // 2. Check if current player (who didn't just move) has a five_row
-        //    (the opponent's move might have created it via capture removal — rare but check)
-        //    Actually in the original: check opponent_player's five_row first (step 2)
-        //    After make_move: self.current was the opponent_player before the move.
-        //    The original Gomoku::get_winner checks:
-        //      - current_player captures >= 5 (before switch_player was called in make_next_state)
-        //      - opponent_player five_row (which is the one who just had their patterns updated)
-        //      - current_player uncapturable five
-        //    After make_move switches, self.opponent = who just moved = old current_player.
-        //    self.current = old opponent_player.
-        //
-        //    Mapping:
-        //    old current_player captures >= 5 → self.opponent captures >= 5 (done above)
-        //    old opponent_player five_row → self.current has five_in_row
-        if self.has_five_in_row(self.current) {
-            return Some(self.current);
-        }
-        //    old current_player uncapturable five → self.opponent uncapturable five
-        if self.has_uncapturable_five(self.opponent) {
-            return Some(self.opponent);
-        }
-        None
-    }
-
-    fn is_terminal(&self) -> bool {
-        self.get_winner().is_some() || self.total_stones >= 361
-    }
-
-    // ---- Heuristic evaluation ----
-
-    /// Classify the run starting at (r,c) along (dr,dc), if (r,c) is a run
-    /// start (its predecessor along -dir isn't the same color). Mirrors the
-    /// run-scan branch of sb_scan_patterns for a single position.
-    fn sb_classify_run(&self, r: i32, c: i32, dr: i32, dc: i32) -> Option<(Cell, RunField)> {
-        if !Self::in_bounds(r, c) { return None; }
-        let cell = self.get(r, c);
-        if cell == Cell::Empty { return None; }
-
-        let pr = r - dr;
-        let pc = c - dc;
-        if Self::in_bounds(pr, pc) && self.get(pr, pc) == cell { return None; }
-
-        let mut count = 1i32;
-        let mut nr = r + dr;
-        let mut nc = c + dc;
-        while Self::in_bounds(nr, nc) && self.get(nr, nc) == cell {
-            count += 1;
-            nr += dr;
-            nc += dc;
-        }
-
-        if count >= 5 {
-            return Some((cell, RunField::Five));
-        }
-
-        let open_before = Self::in_bounds(pr, pc) && self.get(pr, pc) == Cell::Empty;
-        let open_after = Self::in_bounds(nr, nc) && self.get(nr, nc) == Cell::Empty;
-
-        let field = match count {
-            4 if open_before && open_after => RunField::OpenFour,
-            4 if open_before || open_after => RunField::BlockFour,
-            3 if open_before && open_after => RunField::OpenThree,
-            2 if open_before && open_after => RunField::OpenTwo,
-            _ => return None,
-        };
-        Some((cell, field))
-    }
-
-    /// Classify the free-three gap window starting at (r,c) along (dr,dc), if any.
-    /// Mirrors the free-three-scan branch of sb_scan_patterns for a single window.
-    fn sb_classify_window(&self, r: i32, c: i32, dr: i32, dc: i32) -> Option<Cell> {
-        if !Self::in_bounds(r, c) { return None; }
-        let r5 = r + 5 * dr;
-        let c5 = c + 5 * dc;
-        if !Self::in_bounds(r5, c5) { return None; }
-
-        let w = [
-            self.get(r, c),
-            self.get(r + dr, c + dc),
-            self.get(r + 2 * dr, c + 2 * dc),
-            self.get(r + 3 * dr, c + 3 * dc),
-            self.get(r + 4 * dr, c + 4 * dc),
-            self.get(r5, c5),
-        ];
-        if w[0] != Cell::Empty || w[5] != Cell::Empty { return None; }
-
-        for color in [Cell::Black, Cell::White] {
-            if w[1] == color && w[2] == Cell::Empty && w[3] == color && w[4] == color {
-                return Some(color);
-            }
-            if w[1] == color && w[2] == color && w[3] == Cell::Empty && w[4] == color {
-                return Some(color);
-            }
-        }
-        None
-    }
-
-    /// Sum of pattern contributions from every run-start and free-three window
-    /// that could possibly involve board position (ar,ac), given the current
-    /// board contents. Used to diff before/after a single-cell change (a plain
-    /// move, with no captures) instead of rescanning the whole board.
-    ///
-    /// Bounds: a same-color run through (ar,ac) can only extend up to 4 cells
-    /// either side before hitting a run of length >=5 — which can't pre-exist
-    /// for the color being placed, since make_move is never called on a board
-    /// where the mover already has a five-in-a-row (that's caught by
-    /// is_terminal() first). So k in -1..=4 covers every run-start whose
-    /// classification could change; k in 0..=5 covers every 6-cell window
-    /// that could contain (ar,ac).
-    fn sb_local_patterns(&self, ar: i32, ac: i32) -> (PatternCounts, PatternCounts) {
-        let dirs: [(i32, i32); 4] = [(1, 0), (0, 1), (1, 1), (1, -1)];
-        let mut black = PatternCounts::default();
-        let mut white = PatternCounts::default();
-
-        for &(dr, dc) in &dirs {
-            for k in -1..=4i32 {
-                let r = ar - k * dr;
-                let c = ac - k * dc;
-                if let Some((cell, field)) = self.sb_classify_run(r, c, dr, dc) {
-                    let stats = if cell == Cell::Black { &mut black } else { &mut white };
-                    stats.bump(field, 1);
-                }
-            }
-            for k in 0..=5i32 {
-                let r = ar - k * dr;
-                let c = ac - k * dc;
-                if let Some(color) = self.sb_classify_window(r, c, dr, dc) {
-                    let stats = if color == Cell::Black { &mut black } else { &mut white };
-                    stats.free_threes += 1;
-                }
-            }
-        }
-
-        (black, white)
-    }
-
-    /// Scan the board once and tally Black's and White's pattern counts
-    /// together, instead of scanning per color, to halve the number of
-    /// full-board passes needed for evaluation.
-    fn sb_scan_patterns(&self) -> (PatternCounts, PatternCounts) {
-        let dirs: [(i32,i32); 4] = [(1,0),(0,1),(1,1),(1,-1)];
-
-        let mut black = PatternCounts::default();
-        let mut white = PatternCounts::default();
-
-        // Scan runs: for each occupied cell, scan 4 positive directions.
-        // Only count from the start of a run (predecessor != same color).
-        for r in 0..19i32 {
-            for c in 0..19i32 {
-                let cell = self.get(r, c);
-                if cell == Cell::Empty { continue; }
-                let stats = if cell == Cell::Black { &mut black } else { &mut white };
-
-                for &(dr, dc) in &dirs {
-                    let pr = r - dr;
-                    let pc = c - dc;
-                    if Self::in_bounds(pr, pc) && self.get(pr, pc) == cell { continue; }
-
-                    let mut count = 1i32;
-                    let mut nr = r + dr;
-                    let mut nc = c + dc;
-                    while Self::in_bounds(nr, nc) && self.get(nr, nc) == cell {
-                        count += 1;
-                        nr += dr;
-                        nc += dc;
-                    }
-
-                    if count >= 5 {
-                        stats.five_rows += 1;
-                        continue;
-                    }
-
-                    let open_before = Self::in_bounds(pr, pc) && self.get(pr, pc) == Cell::Empty;
-                    let open_after = Self::in_bounds(nr, nc) && self.get(nr, nc) == Cell::Empty;
-
-                    match count {
-                        4 => {
-                            if open_before && open_after {
-                                stats.open_fours += 1;
-                            } else if open_before || open_after {
-                                stats.block_fours += 1;
-                            }
-                        }
-                        3 => {
-                            if open_before && open_after {
-                                stats.open_threes += 1;
-                            }
-                        }
-                        2 => {
-                            if open_before && open_after {
-                                stats.open_twos += 1;
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-
-        // Free threes: detect gap patterns _X_XX_ and _XX_X_ via sliding
-        // 6-cell window, checked for both colors against the same read.
-        for r in 0..19i32 {
-            for c in 0..19i32 {
-                for &(dr, dc) in &dirs {
-                    let r5 = r + 5*dr;
-                    let c5 = c + 5*dc;
-                    if !Self::in_bounds(r5, c5) { continue; }
-
-                    let w = [
-                        self.get(r, c),
-                        self.get(r + dr, c + dc),
-                        self.get(r + 2*dr, c + 2*dc),
-                        self.get(r + 3*dr, c + 3*dc),
-                        self.get(r + 4*dr, c + 4*dc),
-                        self.get(r5, c5),
-                    ];
-                    if w[0] != Cell::Empty || w[5] != Cell::Empty { continue; }
-
-                    for (color, stats) in [(Cell::Black, &mut black), (Cell::White, &mut white)] {
-                        // _X_XX_
-                        if w[1] == color && w[2] == Cell::Empty && w[3] == color && w[4] == color {
-                            stats.free_threes += 1;
-                        }
-                        // _XX_X_
-                        if w[1] == color && w[2] == color && w[3] == Cell::Empty && w[4] == color {
-                            stats.free_threes += 1;
-                        }
-                    }
-                }
-            }
-        }
-
-        (black, white)
-    }
-
-    fn sb_heuristic_evaluation(&self) -> i32 {
-        let black_score = self.black_patterns.score(self.captures[Cell::Black as usize], self.current == Cell::Black);
-        let white_score = self.white_patterns.score(self.captures[Cell::White as usize], self.current == Cell::White);
-        (black_score - white_score).clamp(-SB_EVAL_CLAMP, SB_EVAL_CLAMP)
-    }
-
-    // ---- Candidate move generation ----
-
-    fn get_candidate_moves(&mut self, depth: usize) -> Vec<(usize, usize)> {
-        // Empty board → center
-        if self.total_stones == 0 {
-            return vec![(9, 9)];
-        }
-
-        // Radius-1 moves around existing stones, dedup with flat array
-        let mut seen = [false; 361];
-        for r in 0..19usize {
-            for c in 0..19usize {
-                if self.cells[r][c] != Cell::Empty {
-                    let radius = if depth >= DEEP_RADIUS_DEPTH { DEEP_RADIUS } else { RADIUS };
-                    let r_start = r.saturating_sub(radius);
-                    let r_end = (r + radius + 1).min(19);
-                    let c_start = c.saturating_sub(radius);
-                    let c_end = (c + radius + 1).min(19);
-                    for rr in r_start..r_end {
-                        for cc in c_start..c_end {
-                            seen[rr * 19 + cc] = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Collect valid moves (empty, not double-three)
-        let mut moves: Vec<(usize, usize)> = Vec::with_capacity(64);
-        for idx in 0..361 {
-            if !seen[idx] { continue; }
-            let r = idx / 19;
-            let c = idx % 19;
-            if self.cells[r][c] != Cell::Empty { continue; }
-            if self.sb_is_double_three(r as i32, c as i32) { continue; }
-            moves.push((r, c));
-        }
-
-        // Move ordering: near the root (depth <= SHALLOW_ORDER_DEPTH), play each
-        // candidate and score the resulting board with the full-board heuristic
-        // used at leaf nodes for the best ordering quality. Deeper nodes fall
-        // back to the cheap local evaluate_position, since the full-board scan
-        // per candidate is too expensive to afford at every node.
-        if depth <= SHALLOW_ORDER_DEPTH {
-            let mover = self.current;
-            moves.sort_by_cached_key(|&(r, c)| {
-                let undo = self.make_move(r, c);
-                let score = self.sb_heuristic_evaluation();
-                self.undo_move(&undo);
-                if mover == Cell::Black { -score } else { score }
-            });
-        } else {
-            moves.sort_by_cached_key(|&(r, c)| {
-                std::cmp::Reverse(self.evaluate_position(r, c, self.current))
-            });
-        }
-
-        moves
-    }
-}
 
 // --- Transposition Table ---
 
@@ -924,11 +80,30 @@ impl ShardedTT {
         let shard = (hash & TT_SHARD_MASK) as usize;
         self.shards[shard].lock().unwrap().store(hash, entry);
     }
+
+    /// Drop every entry. Entries are keyed by Zobrist hash so stale ones are
+    /// not wrong, but they do make one search's cost depend on what ran before
+    /// it — clear between unrelated positions to get comparable timings.
+    pub fn clear(&self) {
+        for shard in &self.shards {
+            let mut t = shard.lock().unwrap();
+            for slot in t.entries.iter_mut() {
+                *slot = None;
+            }
+        }
+    }
 }
 
 // Kept alive for the process lifetime so entries survive across turns —
 // most sub-positions from one turn's search recur in the next turn's tree.
 static GLOBAL_TT: OnceLock<ShardedTT> = OnceLock::new();
+
+/// Empty the shared transposition table. Useful between games, and required
+/// for any benchmark that wants one position's cost not to depend on the last.
+#[pyfunction]
+pub fn clear_transposition_table() {
+    shared_tt().clear();
+}
 
 fn shared_tt() -> &'static ShardedTT {
     GLOBAL_TT.get_or_init(|| ShardedTT::new(TT_SIZE_BITS))
@@ -1052,6 +227,58 @@ fn sb_state_value(board: &SearchBoard, depth: usize) -> i32 {
 // root in `get_ai_move_with_stats`. Recursive YBWC was tried but caused a
 // 100×+ blowup in nodes_visited because losing α-tightening between siblings
 // compounds at every level of recursion.
+/// Killer-move and history tables: memory of which moves have been causing
+/// beta cutoffs, used only to decide what order to try moves in.
+///
+/// Killers are per-ply — a refutation that works against one move usually
+/// works against its siblings. History is board-wide and depth-weighted, so a
+/// cutoff found deep in the tree counts for more than a shallow one.
+///
+/// Purely an ordering hint: it never changes which moves are legal, nor what
+/// any node evaluates to — only how fast alpha-beta finds the cutoff.
+/// One instance per search task, so no locking and no cross-thread sharing.
+pub struct MoveHeuristics {
+    killers: [[Option<(usize, usize)>; 2]; MAX_PLY],
+    history: [u32; 361],
+}
+
+/// Deepest ply the killer table can index. `depth` never exceeds `max_depth`,
+/// which is capped at `MAX_DEPTH`; the slack keeps indexing safe regardless.
+const MAX_PLY: usize = MAX_DEPTH + 4;
+
+impl MoveHeuristics {
+    pub fn new() -> Self {
+        MoveHeuristics { killers: [[None; 2]; MAX_PLY], history: [0; 361] }
+    }
+
+    #[inline]
+    fn killers_at(&self, ply: usize) -> [Option<(usize, usize)>; 2] {
+        if ply < MAX_PLY { self.killers[ply] } else { [None, None] }
+    }
+
+    /// Remember that `mv` caused a cutoff at `ply` with `depth_remaining` plies
+    /// left to search.
+    #[inline]
+    fn record_cutoff(&mut self, ply: usize, mv: (usize, usize), depth_remaining: usize) {
+        if ply < MAX_PLY && self.killers[ply][0] != Some(mv) {
+            self.killers[ply][1] = self.killers[ply][0];
+            self.killers[ply][0] = Some(mv);
+        }
+        // Depth-squared: a cutoff that pruned a deep subtree is worth more.
+        let bonus = (depth_remaining * depth_remaining) as u32;
+        let slot = &mut self.history[mv.0 * 19 + mv.1];
+        *slot = slot.saturating_add(bonus);
+        // Keep the table from saturating and going flat over a long search.
+        if *slot > HISTORY_CEILING {
+            for h in self.history.iter_mut() {
+                *h /= 2;
+            }
+        }
+    }
+}
+
+const HISTORY_CEILING: u32 = 1 << 20;
+
 fn sb_alphabeta(
     board: &mut SearchBoard,
     mut alpha: i32,
@@ -1062,6 +289,7 @@ fn sb_alphabeta(
     stats: &mut SearchStats,
     tt: &ShardedTT,
     deadline: Instant,
+    heur: &mut MoveHeuristics,
 ) -> (i32, Vec<(usize, usize)>, bool) {
     if Instant::now() >= deadline {
         return (0, vec![], true);
@@ -1097,14 +325,30 @@ fn sb_alphabeta(
         }
     }
 
-    let mut candidates = board.get_candidate_moves(depth);
+    // Facing a four, every move is a forced response, so nothing here is
+    // "late" enough to reduce.
+    let threats = board.patterns_of(board.opponent);
+    let under_threat =
+        threats.five_rows > 0 || threats.open_fours > 0 || threats.block_fours > 0;
+
+    let mut candidates = board.get_candidate_moves(depth, Some(&heur.history), false);
     stats.internal_nodes += 1;
     stats.total_children += candidates.len() as u64;
 
-    // Move ordering: put TT best move first
+    // Try the moves most likely to cause a cutoff first: the transposition
+    // table's best move, then this ply's killers. `get_candidate_moves` has
+    // already ordered the rest by history and static score.
+    let mut front = 0;
     if let Some(tt_move) = tt_best_move {
         if let Some(pos) = candidates.iter().position(|&m| m == tt_move) {
-            candidates.swap(0, pos);
+            candidates.swap(front, pos);
+            front += 1;
+        }
+    }
+    for killer in heur.killers_at(depth).into_iter().flatten() {
+        if let Some(pos) = candidates.iter().skip(front).position(|&m| m == killer) {
+            candidates.swap(front, front + pos);
+            front += 1;
         }
     }
 
@@ -1113,33 +357,75 @@ fn sb_alphabeta(
     let mut best_pv: Vec<(usize, usize)> = vec![];
     let mut first = true;
 
-    for &(move_r, move_c) in &candidates {
+    let mut searched_any = false;
+    for (move_index, &(move_r, move_c)) in candidates.iter().enumerate() {
+        // Legality is checked here rather than during generation, so it is
+        // only paid for the moves actually searched.
+        if board.sb_is_double_three(move_r as i32, move_c as i32) {
+            continue;
+        }
         stats.children_explored += 1;
+        searched_any = true;
 
+        let mover = board.current;
         let undo = board.make_move(move_r, move_c);
+
+        // A move is tactical if it made a four or five, or captured. Those
+        // decide games, so they always get searched at full depth.
+        let gain = if mover == Cell::Black { &undo.delta_black } else { &undo.delta_white };
+        let is_tactical = undo.num_captured > 0
+            || gain.five_rows > 0
+            || gain.open_fours > 0
+            || gain.block_fours > 0;
+
+        // Late move reduction: this far down the ordering a move rarely raises
+        // alpha, so probe it shallower. Anything that beats alpha anyway is
+        // re-searched at full depth below, so a wrong guess costs time, not
+        // correctness.
+        let reduction = if depth_remaining >= LMR_MIN_DEPTH
+            && move_index >= LMR_MIN_MOVE
+            && !is_tactical
+            && !under_threat
+        {
+            if move_index >= LMR_DEEP_MOVE { 2 } else { 1 }
+        } else {
+            0
+        };
+        let reduced_depth = max_depth - reduction.min(depth_remaining - 1);
 
         let (mut child_val, mut child_pv, mut child_timed_out);
         if first {
             (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                board, alpha, beta, !is_max_player, depth + 1, max_depth, stats, tt, deadline,
+                board, alpha, beta, !is_max_player, depth + 1, max_depth, stats, tt, deadline, heur,
             );
             first = false;
         } else if is_max_player {
             (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                board, alpha, alpha + 1, false, depth + 1, max_depth, stats, tt, deadline,
+                board, alpha, alpha + 1, false, depth + 1, reduced_depth, stats, tt, deadline, heur,
             );
+            // Re-search at full depth if the shallow probe looked promising.
+            if !child_timed_out && reduction > 0 && child_val > alpha {
+                (child_val, child_pv, child_timed_out) = sb_alphabeta(
+                    board, alpha, alpha + 1, false, depth + 1, max_depth, stats, tt, deadline, heur,
+                );
+            }
             if !child_timed_out && child_val > alpha && child_val < beta {
                 (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                    board, alpha, beta, false, depth + 1, max_depth, stats, tt, deadline,
+                    board, alpha, beta, false, depth + 1, max_depth, stats, tt, deadline, heur,
                 );
             }
         } else {
             (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                board, beta - 1, beta, true, depth + 1, max_depth, stats, tt, deadline,
+                board, beta - 1, beta, true, depth + 1, reduced_depth, stats, tt, deadline, heur,
             );
+            if !child_timed_out && reduction > 0 && child_val < beta {
+                (child_val, child_pv, child_timed_out) = sb_alphabeta(
+                    board, beta - 1, beta, true, depth + 1, max_depth, stats, tt, deadline, heur,
+                );
+            }
             if !child_timed_out && child_val < beta && child_val > alpha {
                 (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                    board, alpha, beta, true, depth + 1, max_depth, stats, tt, deadline,
+                    board, alpha, beta, true, depth + 1, max_depth, stats, tt, deadline, heur,
                 );
             }
         }
@@ -1172,8 +458,15 @@ fn sb_alphabeta(
 
         if alpha >= beta {
             stats.cutoffs += 1;
+            heur.record_cutoff(depth, (move_r, move_c), depth_remaining);
             break;
         }
+    }
+
+    // Every candidate turned out to be an illegal double three: there is no
+    // move to make, so the position stands as it is.
+    if !searched_any {
+        return (board.sb_heuristic_evaluation(), vec![], false);
     }
 
     // TT store
@@ -1216,7 +509,7 @@ pub fn get_ai_move(
 /// for surfacing search performance in the UI.
 #[pyfunction]
 pub fn get_ai_move_stats(
-    _py: Python,
+    py: Python,
     state: &Gomoku,
 ) -> (
     Option<(usize, usize, i32)>,
@@ -1226,7 +519,10 @@ pub fn get_ai_move_stats(
     f64,
 ) {
     let start = Instant::now();
-    let (best, moves, stats) = get_ai_move_with_stats(state);
+    // The GUI runs this on a worker thread; release the GIL so the Tk main
+    // thread keeps repainting (live turn timer) while the search runs.
+    let owned = state.clone();
+    let (best, moves, stats) = py.allow_threads(|| get_ai_move_with_stats(&owned));
     let elapsed = start.elapsed().as_secs_f64();
     (best, moves, elapsed, stats.nodes_visited, stats.pruning_percent())
 }
@@ -1252,6 +548,7 @@ pub fn get_move_pv(state: &Gomoku, x: usize, y: usize) -> (Vec<(usize, usize)>, 
 
     let mut final_pv = vec![];
     let mut final_value = 0i32;
+    let mut heur = MoveHeuristics::new();
     for depth in 1..=max_depth {
         if Instant::now() >= deadline {
             break;
@@ -1260,7 +557,7 @@ pub fn get_move_pv(state: &Gomoku, x: usize, y: usize) -> (Vec<(usize, usize)>, 
         stats.max_depth = depth;
         let (value, child_pv, timed_out) = sb_alphabeta(
             &mut board, MIN_VALUE, MAX_VALUE, !is_max_player,
-            1, depth, &mut stats, tt, deadline,
+            1, depth, &mut stats, tt, deadline, &mut heur,
         );
         if timed_out {
             break;
@@ -1286,7 +583,7 @@ pub fn get_ai_move_with_stats(
     let mut board = SearchBoard::from_gomoku(state);
     let is_max_player = board.current == Cell::Black;
 
-    let candidates = board.get_candidate_moves(0);
+    let candidates = board.get_candidate_moves(0, None, true);
     let mut all_moves: Vec<(usize, usize, Option<i32>)> = candidates
         .into_iter()
         .map(|(r, c)| (r, c, None))
@@ -1299,6 +596,9 @@ pub fn get_ai_move_with_stats(
     let mut depth_times: Vec<(usize, f64, u64)> = Vec::new();
     let tt = shared_tt();
     let deadline = search_deadline();
+    // Kept across iterative-deepening iterations: what refuted a move at depth
+    // d is usually still the refutation at depth d+1.
+    let mut root_heur = MoveHeuristics::new();
 
     for depth in 1..=max_depth {
         if Instant::now() >= deadline {
@@ -1335,6 +635,7 @@ pub fn get_ai_move_with_stats(
             let undo = board.make_move(move_r, move_c);
             let (value, child_pv, timed_out) = sb_alphabeta(
                 &mut board, alpha, beta, !is_max_player, 1, depth, &mut stats, tt, deadline,
+                &mut root_heur,
             );
             board.undo_move(&undo);
 
@@ -1394,6 +695,9 @@ pub fn get_ai_move_with_stats(
                 .into_par_iter()
                 .map(|((r, c), mut child_board)| {
                     let mut child_stats = SearchStats::new();
+                    // Each task orders its own subtree; sharing one table
+                    // across rayon workers would need a lock per cutoff.
+                    let mut child_heur = MoveHeuristics::new();
                     let branch_start = Instant::now();
                     let (v, pv, timed_out) = if is_max_player {
                         let (mut v, mut pv, mut timed_out) = sb_alphabeta(
@@ -1406,6 +710,7 @@ pub fn get_ai_move_with_stats(
                             &mut child_stats,
                             tt,
                             deadline,
+                            &mut child_heur,
                         );
                         if !timed_out && v > parent_alpha && v < parent_beta {
                             let r2 = sb_alphabeta(
@@ -1418,6 +723,7 @@ pub fn get_ai_move_with_stats(
                                 &mut child_stats,
                                 tt,
                                 deadline,
+                                &mut child_heur,
                             );
                             v = r2.0;
                             pv = r2.1;
@@ -1435,6 +741,7 @@ pub fn get_ai_move_with_stats(
                             &mut child_stats,
                             tt,
                             deadline,
+                            &mut child_heur,
                         );
                         if !timed_out && v < parent_beta && v > parent_alpha {
                             let r2 = sb_alphabeta(
@@ -1447,6 +754,7 @@ pub fn get_ai_move_with_stats(
                                 &mut child_stats,
                                 tt,
                                 deadline,
+                                &mut child_heur,
                             );
                             v = r2.0;
                             pv = r2.1;
@@ -1538,87 +846,3 @@ pub fn get_ai_move_with_stats(
     (best_move, all_moves, final_stats)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Small self-contained PRNG so the test doesn't need the `rand` crate.
-    struct TestRng(u64);
-    impl TestRng {
-        fn next_u64(&mut self) -> u64 {
-            let mut x = self.0;
-            x ^= x << 13;
-            x ^= x >> 7;
-            x ^= x << 17;
-            self.0 = x;
-            x
-        }
-        fn next_usize(&mut self, bound: usize) -> usize {
-            (self.next_u64() % bound as u64) as usize
-        }
-    }
-
-    fn empty_board() -> SearchBoard {
-        SearchBoard {
-            cells: [[Cell::Empty; 19]; 19],
-            current: Cell::Black,
-            opponent: Cell::White,
-            captures: [0, 0, 0],
-            hash: 0,
-            move_count: 0,
-            last_move: None,
-            total_stones: 0,
-            black_patterns: PatternCounts::default(),
-            white_patterns: PatternCounts::default(),
-        }
-    }
-
-    fn assert_patterns_match(board: &SearchBoard, ctx: &str) {
-        let (black, white) = board.sb_scan_patterns();
-        assert_eq!(board.black_patterns, black, "black patterns mismatch: {ctx}");
-        assert_eq!(board.white_patterns, white, "white patterns mismatch: {ctx}");
-    }
-
-    /// Incrementally maintained black_patterns/white_patterns must always equal
-    /// a from-scratch sb_scan_patterns() — this is the invariant the fast path in
-    /// make_move relies on. Random-play both colors, including whatever captures
-    /// happen to occur, and check after every move and after undoing every move.
-    #[test]
-    fn incremental_patterns_match_full_rescan_over_random_games() {
-        let mut rng = TestRng(0xC0FFEE_u64);
-        for game in 0..30usize {
-            let mut board = empty_board();
-            let mut undos = Vec::new();
-
-            loop {
-                let empties: Vec<(usize, usize)> = (0..19usize)
-                    .flat_map(|r| (0..19usize).map(move |c| (r, c)))
-                    .filter(|&(r, c)| board.cells[r][c] == Cell::Empty)
-                    .collect();
-                if empties.is_empty() {
-                    break;
-                }
-                let (r, c) = empties[rng.next_usize(empties.len())];
-
-                let undo = board.make_move(r, c);
-                assert_patterns_match(&board, &format!("game {game} move {} at ({r},{c})", undos.len()));
-                undos.push(undo);
-
-                // Real search never calls make_move again once a side has won —
-                // is_terminal() is always checked first. Mirror that here since
-                // the incremental path assumes the mover never already owns a
-                // pre-existing five-in-a-row of their own color.
-                if board.get_winner().is_some() {
-                    break;
-                }
-            }
-
-            while let Some(undo) = undos.pop() {
-                board.undo_move(&undo);
-                assert_patterns_match(&board, &format!("game {game} after undoing move {}", undos.len()));
-            }
-            assert_eq!(board.black_patterns, PatternCounts::default());
-            assert_eq!(board.white_patterns, PatternCounts::default());
-        }
-    }
-}

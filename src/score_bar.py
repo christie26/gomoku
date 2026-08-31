@@ -4,7 +4,9 @@ import tkinter as tk
 from src.screen_constant import BORDER_COLOR
 
 SCORE_BAR_WIDTH = 24
-SCORE_BAR_SCALE = 3000  # higher = bar reacts more slowly to score changes
+SCORE_BAR_SCALE = 100_000  # higher = bar reacts more slowly to score changes
+SCORE_TEXT_MARGIN = 26
+SCORE_TEXT_FONT = ("Helvetica", 10, "bold")
 
 
 class ScoreBar:
@@ -31,4 +33,18 @@ class ScoreBar:
         )
         self.canvas.create_rectangle(
             0, split_y, SCORE_BAR_WIDTH, self.height, fill="white", outline=""
+        )
+
+        # Score sits on the leading side's end, like a chess eval bar
+        if score >= 0:
+            text_y, text_fill = SCORE_TEXT_MARGIN, "white"
+        else:
+            text_y, text_fill = self.height - SCORE_TEXT_MARGIN, "black"
+        self.canvas.create_text(
+            SCORE_BAR_WIDTH / 2,
+            text_y,
+            text=f"{score:+.0f}",
+            fill=text_fill,
+            font=SCORE_TEXT_FONT,
+            angle=90,
         )

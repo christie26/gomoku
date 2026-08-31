@@ -1,3 +1,13 @@
+//! REFERENCE ONLY — not part of the build.
+//!
+//! The coordinate-based pattern recognizer this crate used before
+//! `search_board.rs` took over. Kept because `search_board::classify` is a
+//! direct port of `classify` below, and the range-building rules here are the
+//! only record of how patterns used to be reported as cell lists.
+//!
+//! Nothing declares `mod pattern_legacy`, so cargo never compiles this file.
+//! It will not track changes to `Gomoku`.
+
 use crate::{Gomoku, Pattern, Position, Stone};
 
 #[derive(Debug)]
