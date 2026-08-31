@@ -26,6 +26,10 @@ again to be in the same ven
 ```
 python -m cProfile -o profile.prof src/gomoku_gui.py --black Etienne --white Yoonseo
 ```
+or
+```
+python -m cProfile -o profile.prof src/gomoku_gui.py --black Etienne --white Yoonseo --use-undo True
+```
 - The profile.prof file generated can be opened with snakeviz, by running
 ```
 snakeviz profile.prof

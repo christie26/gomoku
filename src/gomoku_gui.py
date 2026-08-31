@@ -11,7 +11,7 @@ from src.screen_constant import CELL_SIZE, LABEL_PADDING, BOARD_SIZE, PADDING, L
 
 
 class GomokuGUI:
-    def __init__(self, root, player1, player2, history=None):
+    def __init__(self, root, player1, player2, history=None, use_undo=False):
         self.root = root
         self.root.title("Gomoku")
 
@@ -20,6 +20,7 @@ class GomokuGUI:
         self.debug = False
         self.ai_thinking = False
         self.ai_stats = []  # list of (elapsed_secs, nodes_visited, pruning_percent)
+        self.use_undo = use_undo
 
         # ===== MAIN LAYOUT =====
         self.main_frame = tk.Frame(
@@ -75,7 +76,8 @@ class GomokuGUI:
             on_debug=self.debug_onoff,
             on_play_mode=self.switch_play_mode,
             on_hint=self.show_hint,
-            default_debug = self.debug
+            default_debug = self.debug,
+            use_undo=self.use_undo
         )
 
         # ===== HISTORY =====
@@ -295,21 +297,22 @@ class GomokuGUI:
         self.highlight_active_player()
 
     def update_undo_redo_buttons(self):
-        if self.ai_thinking:
-            self.setting_panel.undo_button.config(state=tk.DISABLED)
-            self.setting_panel.redo_button.config(state=tk.DISABLED)
-            return
+        if self.use_undo:
+          if self.ai_thinking:
+              self.setting_panel.undo_button.config(state=tk.DISABLED)
+              self.setting_panel.redo_button.config(state=tk.DISABLED)
+              return
 
-        self.setting_panel.undo_button.config(
-            state=tk.NORMAL if self.history_index > 0 else tk.DISABLED
-        )
-        self.setting_panel.redo_button.config(
-            state=(
-                tk.NORMAL
-                if self.history_index < len(self.state_history) - 1
-                else tk.DISABLED
-            )
-        )
+          self.setting_panel.undo_button.config(
+              state=tk.NORMAL if self.history_index > 0 else tk.DISABLED
+          )
+          self.setting_panel.redo_button.config(
+              state=(
+                  tk.NORMAL
+                  if self.history_index < len(self.state_history) - 1
+                  else tk.DISABLED
+              )
+          )
 
     # ===== SETTING =====
     def debug_onoff(self, debug: bool):
@@ -365,6 +368,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--history-until", type=int, help="index of history where you want to stop"
     )
+    parser.add_argument("--use-undo", type=bool, default=False, help="set it as true to use undo/redo")
 
     args = parser.parse_args()
     board = None
@@ -393,7 +397,7 @@ if __name__ == "__main__":
             print(f"Failed to load history: {e}")
             exit(1)
     root = tk.Tk()
-    app = GomokuGUI(root, args.black, args.white, history)
+    app = GomokuGUI(root, args.black, args.white, history, args.use_undo)
 
     # if board is passed, update game state
     if board:

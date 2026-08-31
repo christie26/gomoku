@@ -7,7 +7,7 @@ BORDER_COLOR = "#6f5c43"
 
 class SettingsPanel:
     def __init__(
-        self, right_frame, on_start_game, on_end_game, on_undo, on_redo, on_debug, on_play_mode, on_hint, default_debug
+        self, right_frame, on_start_game, on_end_game, on_undo, on_redo, on_debug, on_play_mode, on_hint, default_debug, use_undo
     ):
         self.is_playing = False
         self.on_start_game = on_start_game
@@ -17,6 +17,7 @@ class SettingsPanel:
         self.on_debug = on_debug
         self.on_hint = on_hint
         self.switch_play_mode = on_play_mode
+        self.use_undo = use_undo
 
         self.setting_frame = tk.Frame(right_frame, padx=10, pady=10)
         self.setting_frame.pack(fill="both")
@@ -237,27 +238,26 @@ class SettingsPanel:
             highlightbackground=LIGHT_BACKGROUND,
         )
         self.end_button.pack(pady=5, padx=5, anchor="w")
+        if self.use_undo:
+            self.undo_button = tk.Button(
+                right_frame,
+                text="Undo",
+                command=self.on_undo,
+                state=tk.DISABLED,
+                font=NAME_FONT,
+                highlightbackground=LIGHT_BACKGROUND,
+            )
+            self.undo_button.pack(pady=5, padx=5, anchor="w")
 
-        self.undo_button = tk.Button(
-            right_frame,
-            text="Undo",
-            command=self.on_undo,
-            state=tk.DISABLED,
-            font=NAME_FONT,
-            highlightbackground=LIGHT_BACKGROUND,
-        )
-        self.undo_button.pack(pady=5, padx=5, anchor="w")
-
-        self.redo_button = tk.Button(
-            right_frame,
-            text="Redo",
-            command=self.on_redo,
-            state=tk.DISABLED,
-            font=NAME_FONT,
-            highlightbackground=LIGHT_BACKGROUND,
-        )
-        self.redo_button.pack(pady=5, padx=5, anchor="w")
-
+            self.redo_button = tk.Button(
+                right_frame,
+                text="Redo",
+                command=self.on_redo,
+                state=tk.DISABLED,
+                font=NAME_FONT,
+                highlightbackground=LIGHT_BACKGROUND,
+            )
+            self.redo_button.pack(pady=5, padx=5, anchor="w")
 
     def update_score(self, score):
         self.score_value.set(str(score))
