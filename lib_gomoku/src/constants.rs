@@ -73,7 +73,3 @@ pub const COMBO_OPEN_FOUR_AND_THREE: i32 = 30_000;
 pub const COMBO_BLOCK_FOUR_AND_THREE: i32 = 20_000;
 pub const COMBO_DOUBLE_THREE: i32 = 15_000;
 pub const COMBO_CAPTURE_AND_FOUR: i32 = 25_000;
-
-pub const TEMPO_OPEN_FOUR: i32 = 5_000;
-pub const TEMPO_BLOCK_FOUR: i32 = 3_000;
-pub const TEMPO_CAPTURE: i32 = 8_000;
