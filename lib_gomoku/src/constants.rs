@@ -55,9 +55,9 @@ pub const HEURISTIC_EVAL_CLAMP: i32 = 99_999;
 pub const WEIGHT_FIVE: i32 = 80_001;
 pub const WEIGHT_OPEN_FOUR: i32 = 70_000;
 pub const WEIGHT_BLOCK_FOUR: i32 = 7_000;
-pub const WEIGHT_BLOCK_FOUR_TEMPO: i32 = 40_000;
+pub const WEIGHT_BLOCK_FOUR_TEMPO: i32 = 70_000;
 pub const WEIGHT_FREE_THREE: i32 = 5_000;
-pub const WEIGHT_FREE_THREE_TEMPO: i32 = 30_000;
+pub const WEIGHT_FREE_THREE_TEMPO: i32 = 60_000;
 pub const WEIGHT_OPEN_THREE: i32 = 100;
 pub const WEIGHT_OPEN_TWO: i32 = 50;
 

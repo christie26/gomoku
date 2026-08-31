@@ -113,7 +113,7 @@ impl PatternCounts {
             _ => CAPTURE_BONUS_4_PLUS,
         };
         
-        if is_active {
+        if !is_active {
           score += self.block_fours * WEIGHT_BLOCK_FOUR_TEMPO;
           score += self.free_threes * WEIGHT_FREE_THREE_TEMPO;
         } else {
