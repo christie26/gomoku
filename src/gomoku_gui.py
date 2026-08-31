@@ -358,8 +358,8 @@ def load_history(filepath):
 # ===== MAIN =====
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--black", type=str, default=None)
-    parser.add_argument("--white", type=str, default=None)
+    parser.add_argument("--black", type=str, default="Bob")
+    parser.add_argument("--white", type=str, default="Alice")
 
     parser.add_argument("--board", type=str, help="Path to board file")
 
