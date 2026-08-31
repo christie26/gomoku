@@ -328,6 +328,7 @@ class GomokuGUI:
 
     def set_game(self, game):
         self.game = game
+        self.state_history = [self.game.clone_gomoku()]
         self.canvas.set_game(game)
 
 
