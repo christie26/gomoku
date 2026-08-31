@@ -7,7 +7,7 @@ pub const BOARD_SIZE: usize = 19;
 pub const MAX_VALUE: i32 = 100_000;
 pub const MIN_VALUE: i32 = -100_000;
 pub const MAX_DEPTH: usize = 9;
-pub const SHALLOW_ORDER_DEPTH: usize = 1;
+pub const SHALLOW_ORDER_DEPTH: usize = 2;
 pub const RADIUS: usize = 2;
 // From this ply (inclusive) onward, shrink candidate-move radius to DEEP_RADIUS.
 pub const DEEP_RADIUS_DEPTH: usize = 3;
@@ -24,7 +24,7 @@ pub const TIME_LIMIT_MS: Option<u64> = None;
 /// When multiple root moves end up tied for the best score, pick randomly
 /// among them instead of always keeping the first (scan-order) one. Flip to
 /// `false` to restore fully deterministic move selection.
-pub const RANDOMIZE_TIED_MOVES: bool = true;
+pub const RANDOMIZE_TIED_MOVES: bool = false;
 
 // Late move reductions. Moves far down the ordering rarely raise alpha, so
 // they are searched shallower first and only re-searched at full depth if one

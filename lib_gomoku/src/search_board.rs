@@ -112,8 +112,8 @@ impl PatternCounts {
             4 => CAPTURE_BONUS_4_PLUS,
             _ => CAPTURE_BONUS_4_PLUS,
         };
-        
-        if !is_active {
+
+        if is_active {
           score += self.block_fours * WEIGHT_BLOCK_FOUR_TEMPO;
           score += self.free_threes * WEIGHT_FREE_THREE_TEMPO;
         } else {
@@ -129,8 +129,7 @@ impl PatternCounts {
         if self.block_fours >= 1 && total_threes >= 1 { score += COMBO_BLOCK_FOUR_AND_THREE; }
         if total_threes >= 2 { score += COMBO_DOUBLE_THREE; }
         if captures >= 4 && (self.block_fours >= 1 || self.open_fours >= 1) { score += COMBO_CAPTURE_AND_FOUR; }
-       
-        
+
 
 
         // if is_active {
@@ -139,7 +138,7 @@ impl PatternCounts {
         //     if captures >= 4 { score += TEMPO_CAPTURE; }
         // }
 
-        score
+        score / 10
     }
 }
 
