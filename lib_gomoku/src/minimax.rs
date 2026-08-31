@@ -521,15 +521,6 @@ pub fn get_ai_move_stats(
     (best, moves, elapsed, stats.nodes_visited, stats.pruning_percent())
 }
 
-#[pyfunction]
-pub fn get_hint(
-    _py: Python,
-    state: &Gomoku,
-) -> Vec<(usize, usize, Option<i32>)> {
-    let (_, moves, _) = get_ai_move_with_stats(state);
-    moves
-}
-
 
 
 
