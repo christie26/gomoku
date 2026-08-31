@@ -133,7 +133,8 @@ class GomokuGUI:
 
     def start_game(self):
         self.set_game(Gomoku(size=BOARD_SIZE))
-        self.canvas.set_game(self.game)
+        self.state_history = [self.game.clone_gomoku()]
+        self.history_index = 0
 
         # ruleset = self.setting_panel.ruleset.get()
         # print(f"Game is started with {ruleset} ruleset")
@@ -212,6 +213,7 @@ class GomokuGUI:
         winner_text = self.players[winner].name if self.players[winner].is_human else "AI"
         self.canvas.show_winner(f"{winner_text} wins")
         self.canvas.finish_board()
+        
         self.is_playing = False
         self.setting_panel.reset_panel(self.is_playing)
 
@@ -328,7 +330,6 @@ class GomokuGUI:
 
     def set_game(self, game):
         self.game = game
-        self.state_history = [self.game.clone_gomoku()]
         self.canvas.set_game(game)
 
 
