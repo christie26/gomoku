@@ -7,10 +7,11 @@ BORDER_COLOR = "#6f5c43"
 
 class SettingsPanel:
     def __init__(
-        self, right_frame, on_start_game, on_undo, on_redo, on_debug, on_play_mode, on_hint
+        self, right_frame, on_start_game, on_end_game, on_undo, on_redo, on_debug, on_play_mode, on_hint, default_debug
     ):
         self.is_playing = False
         self.on_start_game = on_start_game
+        self.on_end_game = on_end_game
         self.on_undo = on_undo
         self.on_redo = on_redo
         self.on_debug = on_debug
@@ -20,6 +21,7 @@ class SettingsPanel:
         self.setting_frame = tk.Frame(right_frame, padx=10, pady=10)
         self.setting_frame.pack(fill="both")
         self.setting_ratios = []
+        self.default_debug = default_debug
 
         self.build_ui()
 
@@ -89,39 +91,39 @@ class SettingsPanel:
         # -------------------
         # 2. Ruleset
         # -------------------
-        rules_frame = tk.Label(
-            self.setting_frame,
-            text="Ruleset",
-            padx=5,
-            pady=0,
-            font=(NAME_FONT, 16),
-            background=LIGHT_BACKGROUND,
-        )
-        rules_frame.pack(pady=(15, 0), anchor="w")
+        # rules_frame = tk.Label(
+        #     self.setting_frame,
+        #     text="Ruleset",
+        #     padx=5,
+        #     pady=0,
+        #     font=(NAME_FONT, 16),
+        #     background=LIGHT_BACKGROUND,
+        # )
+        # rules_frame.pack(pady=(15, 0), anchor="w")
 
-        self.ruleset = tk.StringVar(value="1")
+        # self.ruleset = tk.StringVar(value="1")
 
-        rb4 = tk.Radiobutton(
-            self.setting_frame,
-            text="Option 1",
-            variable=self.ruleset,
-            value="1",
-            font=NAME_FONT,
-            background=LIGHT_BACKGROUND,
-        )
-        rb4.pack(anchor="w")
-        self.setting_ratios.append(rb4)
+        # rb4 = tk.Radiobutton(
+        #     self.setting_frame,
+        #     text="Option 1",
+        #     variable=self.ruleset,
+        #     value="1",
+        #     font=NAME_FONT,
+        #     background=LIGHT_BACKGROUND,
+        # )
+        # rb4.pack(anchor="w")
+        # self.setting_ratios.append(rb4)
 
-        rb5 = tk.Radiobutton(
-            self.setting_frame,
-            text="Option 2",
-            variable=self.ruleset,
-            value="2",
-            font=NAME_FONT,
-            background=LIGHT_BACKGROUND,
-        )
-        rb5.pack(anchor="w")
-        self.setting_ratios.append(rb5)
+        # rb5 = tk.Radiobutton(
+        #     self.setting_frame,
+        #     text="Option 2",
+        #     variable=self.ruleset,
+        #     value="2",
+        #     font=NAME_FONT,
+        #     background=LIGHT_BACKGROUND,
+        # )
+        # rb5.pack(anchor="w")
+        # self.setting_ratios.append(rb5)
 
         # -------------------
         # 3. Debug Tool
@@ -136,7 +138,7 @@ class SettingsPanel:
         )
         debug_frame.pack(pady=(15, 0), anchor="w")
 
-        self.debug_enabled = tk.BooleanVar(value=True)
+        self.debug_enabled = tk.BooleanVar(value=self.default_debug)
 
         self.debug_checkbox = tk.Checkbutton(
             self.setting_frame,
@@ -227,6 +229,15 @@ class SettingsPanel:
         )
         self.start_button.pack(pady=5, padx=5, anchor="w")
 
+        self.end_button = tk.Button(
+            right_frame,
+            text="End Game",
+            command=self.end_game,
+            font=NAME_FONT,
+            highlightbackground=LIGHT_BACKGROUND,
+        )
+        self.end_button.pack(pady=5, padx=5, anchor="w")
+
         self.undo_button = tk.Button(
             right_frame,
             text="Undo",
@@ -286,6 +297,10 @@ class SettingsPanel:
     def start_game(self):
         self.is_playing = True
         self.on_start_game()
+
+    def end_game(self):
+        self.is_playing = False
+        self.on_end_game()
 
     def reset_panel(self, is_playing: bool):
         if is_playing:

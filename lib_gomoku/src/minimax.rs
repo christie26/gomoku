@@ -509,7 +509,7 @@ pub fn get_ai_move(
 /// for surfacing search performance in the UI.
 #[pyfunction]
 pub fn get_ai_move_stats(
-    _py: Python,
+    py: Python,
     state: &Gomoku,
 ) -> (
     Option<(usize, usize, i32)>,
@@ -519,7 +519,10 @@ pub fn get_ai_move_stats(
     f64,
 ) {
     let start = Instant::now();
-    let (best, moves, stats) = get_ai_move_with_stats(state);
+    // The GUI runs this on a worker thread; release the GIL so the Tk main
+    // thread keeps repainting (live turn timer) while the search runs.
+    let owned = state.clone();
+    let (best, moves, stats) = py.allow_threads(|| get_ai_move_with_stats(&owned));
     let elapsed = start.elapsed().as_secs_f64();
     (best, moves, elapsed, stats.nodes_visited, stats.pruning_percent())
 }

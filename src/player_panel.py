@@ -133,3 +133,4 @@ class PlayerPanel:
 
     def reset_panel(self):
         self.time_label.config(text="0 ms")
+        self.update_capture(0)

@@ -250,6 +250,10 @@ class BoardCanvas:
             tags="message",
         )
 
+    def finish_board(self):
+        self.is_playing = False
+        self.remove_hover()
+
     # ===== RESET ====
     def reset_board(self, is_playing: bool):
         self.is_playing = is_playing
@@ -258,6 +262,7 @@ class BoardCanvas:
             self.canvas.delete("stone")
             self.canvas.delete("last-move")
             self.canvas.delete("message")
+            self.canvas.delete("debug")
             self.canvas.itemconfig(self.overlay, state="hidden")
         else:
             self.canvas.itemconfig(self.overlay, state="normal")
