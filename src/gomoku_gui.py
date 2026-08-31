@@ -205,7 +205,8 @@ class GomokuGUI:
 
     def finish_game(self, winner):
         self.end_turn_timer(self.game.current_player)
-        self.canvas.show_winner(f"{self.players[winner].name} wins")
+        winner_text = self.players[winner].name if self.players[winner].is_human else "AI"
+        self.canvas.show_winner(f"{winner_text} wins")
         self.is_playing = False
         self.setting_panel.reset_panel(self.is_playing)
 
