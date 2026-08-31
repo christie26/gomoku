@@ -69,6 +69,7 @@ class GomokuGUI:
         self.setting_panel = SettingsPanel(
             self.right_frame,
             on_start_game=self.start_game,
+            on_end_game=self.end_game,
             on_undo=self.undo,
             on_redo=self.redo,
             on_debug=self.debug_onoff,
@@ -145,6 +146,22 @@ class GomokuGUI:
         self.setting_panel.reset_panel(self.is_playing)
         self.setting_panel.reset_ai_stats()
         self.score_bar.update_score(0)
+        self.player_frames["X"].reset_panel()
+        self.player_frames["O"].reset_panel()
+
+    def end_game(self):
+        p = self.game.current_player
+        self.end_turn_timer(p)
+        self.player_frames[p].unhightlight_player()
+        
+        self.set_game(Gomoku(size=BOARD_SIZE))
+        self.canvas.set_game(self.game)
+
+        self.is_playing = False
+        self.canvas.reset_board(self.is_playing)
+        self.ai_stats = []
+        self.setting_panel.reset_panel(self.is_playing)
+        self.setting_panel.reset_ai_stats()
         self.player_frames["X"].reset_panel()
         self.player_frames["O"].reset_panel()
 
