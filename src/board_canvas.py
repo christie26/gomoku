@@ -262,6 +262,7 @@ class BoardCanvas:
             self.canvas.delete("stone")
             self.canvas.delete("last-move")
             self.canvas.delete("message")
+            self.canvas.delete("debug")
             self.canvas.itemconfig(self.overlay, state="hidden")
         else:
             self.canvas.itemconfig(self.overlay, state="normal")
