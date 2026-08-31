@@ -4,7 +4,7 @@ import tkinter as tk
 from src.screen_constant import BORDER_COLOR
 
 SCORE_BAR_WIDTH = 24
-SCORE_BAR_SCALE = 100_000  # higher = bar reacts more slowly to score changes
+SCORE_BAR_SCALE = 30_000  # higher = bar reacts more slowly to score changes
 SCORE_TEXT_MARGIN = 26
 SCORE_TEXT_FONT = ("Helvetica", 10, "bold")
 
