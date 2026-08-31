@@ -250,6 +250,10 @@ class BoardCanvas:
             tags="message",
         )
 
+    def finish_board(self):
+        self.is_playing = False
+        self.remove_hover()
+
     # ===== RESET ====
     def reset_board(self, is_playing: bool):
         self.is_playing = is_playing
