@@ -4,12 +4,7 @@
 //! coordinate-based system kept for reference in `pattern_legacy.rs`.
 
 use crate::constants::{
-    CAPTURE_BONUS_1, CAPTURE_BONUS_2, CAPTURE_BONUS_3, CAPTURE_BONUS_4_PLUS,
-    COMBO_BLOCK_FOUR_AND_THREE, COMBO_CAPTURE_AND_FOUR, COMBO_DOUBLE_BLOCK_FOUR,
-    COMBO_DOUBLE_OPEN_FOUR, COMBO_DOUBLE_THREE, COMBO_OPEN_AND_BLOCK_FOUR,
-    COMBO_OPEN_FOUR_AND_THREE, DEEP_RADIUS, DEEP_RADIUS_DEPTH, RADIUS, SB_EVAL_CLAMP,
-    SHALLOW_ORDER_DEPTH, TEMPO_BLOCK_FOUR, TEMPO_CAPTURE, TEMPO_OPEN_FOUR, WEIGHT_BLOCK_FOUR,
-    WEIGHT_FIVE, WEIGHT_FREE_THREE, WEIGHT_OPEN_FOUR, WEIGHT_OPEN_THREE, WEIGHT_OPEN_TWO,
+    CAPTURE_BONUS_1, CAPTURE_BONUS_2, CAPTURE_BONUS_3, CAPTURE_BONUS_4_PLUS, COMBO_BLOCK_FOUR_AND_THREE, COMBO_CAPTURE_AND_FOUR, COMBO_DOUBLE_BLOCK_FOUR, COMBO_DOUBLE_OPEN_FOUR, COMBO_DOUBLE_THREE, COMBO_OPEN_AND_BLOCK_FOUR, COMBO_OPEN_FOUR_AND_THREE, DEEP_RADIUS, DEEP_RADIUS_DEPTH, RADIUS, SB_EVAL_CLAMP, SHALLOW_ORDER_DEPTH, TEMPO_BLOCK_FOUR, TEMPO_CAPTURE, TEMPO_OPEN_FOUR, WEIGHT_BLOCK_FOUR, WEIGHT_BLOCK_FOUR_TEMPO, WEIGHT_FIVE, WEIGHT_FREE_THREE, WEIGHT_FREE_THREE_TEMPO, WEIGHT_OPEN_FOUR, WEIGHT_OPEN_THREE, WEIGHT_OPEN_TWO,
 };
 use crate::{zobrist, Gomoku, Pattern, Stone};
 
@@ -106,8 +101,6 @@ impl PatternCounts {
         let mut score = 0i32;
         score += self.five_rows * WEIGHT_FIVE;
         score += self.open_fours * WEIGHT_OPEN_FOUR;
-        score += self.block_fours * WEIGHT_BLOCK_FOUR;
-        score += self.free_threes * WEIGHT_FREE_THREE;
         score += self.open_threes * WEIGHT_OPEN_THREE;
         score += self.open_twos * WEIGHT_OPEN_TWO;
 
@@ -119,6 +112,14 @@ impl PatternCounts {
             4 => CAPTURE_BONUS_4_PLUS,
             _ => CAPTURE_BONUS_4_PLUS,
         };
+        
+        if is_active {
+          score += self.block_fours * WEIGHT_BLOCK_FOUR_TEMPO;
+          score += self.free_threes * WEIGHT_FREE_THREE_TEMPO;
+        } else {
+          score += self.block_fours * WEIGHT_BLOCK_FOUR;
+          score += self.free_threes * WEIGHT_FREE_THREE;
+        }
 
         let total_threes = self.open_threes + self.free_threes;
         if self.open_fours >= 2 { score += COMBO_DOUBLE_OPEN_FOUR; }
@@ -128,12 +129,15 @@ impl PatternCounts {
         if self.block_fours >= 1 && total_threes >= 1 { score += COMBO_BLOCK_FOUR_AND_THREE; }
         if total_threes >= 2 { score += COMBO_DOUBLE_THREE; }
         if captures >= 4 && (self.block_fours >= 1 || self.open_fours >= 1) { score += COMBO_CAPTURE_AND_FOUR; }
+       
+        
 
-        if is_active {
-            if self.open_fours >= 1 { score += TEMPO_OPEN_FOUR; }
-            if self.block_fours >= 1 { score += TEMPO_BLOCK_FOUR; }
-            if captures >= 4 { score += TEMPO_CAPTURE; }
-        }
+
+        // if is_active {
+        //     if self.open_fours >= 1 { score += TEMPO_OPEN_FOUR; }
+        //     if self.block_fours >= 1 { score += TEMPO_BLOCK_FOUR; }
+        //     if captures >= 4 { score += TEMPO_CAPTURE; }
+        // }
 
         score
     }
@@ -457,14 +461,6 @@ impl SearchBoard {
             delta_black,
             delta_white,
         }
-    }
-
-    /// Hand the turn over without playing a stone. Self-inverse: call it again
-    /// to take the pass back. Nothing on the board changes, so no pattern
-    /// counts move either.
-    pub(crate) fn make_null_move(&mut self) {
-        self.hash ^= zobrist().player;
-        std::mem::swap(&mut self.current, &mut self.opponent);
     }
 
     pub(crate) fn undo_move(&mut self, info: &UndoInfo) {

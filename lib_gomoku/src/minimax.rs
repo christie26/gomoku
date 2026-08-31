@@ -1,6 +1,5 @@
 use crate::constants::{
     LMR_DEEP_MOVE, LMR_MIN_DEPTH, LMR_MIN_MOVE, MAX_DEPTH, MAX_VALUE, MIN_VALUE,
-    CANDIDATE_CAP, CANDIDATE_CAP_DEPTH, NULL_MOVE_MIN_DEPTH, NULL_MOVE_REDUCTION,
     RANDOMIZE_TIED_MOVES, TIME_LIMIT_MS, TT_SHARDS, TT_SHARD_MASK, TT_SIZE_BITS,
 };
 use crate::search_board::{Cell, SearchBoard};
@@ -291,7 +290,6 @@ fn sb_alphabeta(
     tt: &ShardedTT,
     deadline: Instant,
     heur: &mut MoveHeuristics,
-    allow_null: bool,
 ) -> (i32, Vec<(usize, usize)>, bool) {
     if Instant::now() >= deadline {
         return (0, vec![], true);
@@ -333,45 +331,6 @@ fn sb_alphabeta(
     let under_threat =
         threats.five_rows > 0 || threats.open_fours > 0 || threats.block_fours > 0;
 
-    // The null-move probe needs a stricter condition than that. `get_winner`
-    // reads the position as "whoever is `opponent` just moved", and a pass
-    // breaks that assumption, so terminal scores inside the probe are only
-    // trustworthy where no terminal state is in reach. Requiring both sides to
-    // be four-free and five-free buys that. Skipping this is what let the
-    // engine walk past a split four: the probe mis-scored the position where
-    // the opponent completed it.
-    let own = board.patterns_of(board.current);
-    let tactical_position = under_threat
-        || own.five_rows > 0
-        || own.open_fours > 0
-        || own.block_fours > 0;
-
-    // Null-move probe: hand the turn over and see whether the position still
-    // beats beta. Passing is never an advantage in gomoku, so a position that
-    // survives a free enemy move would survive a real reply too.
-    if allow_null && !tactical_position && depth_remaining >= NULL_MOVE_MIN_DEPTH {
-        let probe_depth = max_depth - NULL_MOVE_REDUCTION;
-        board.make_null_move();
-        let (null_val, _, null_timed_out) = if is_max_player {
-            sb_alphabeta(board, beta - 1, beta, false, depth + 1, probe_depth,
-                         stats, tt, deadline, heur, false)
-        } else {
-            sb_alphabeta(board, alpha, alpha + 1, true, depth + 1, probe_depth,
-                         stats, tt, deadline, heur, false)
-        };
-        board.make_null_move();
-
-        if null_timed_out {
-            return (0, vec![], true);
-        }
-        if is_max_player && null_val >= beta {
-            return (null_val, vec![], false);
-        }
-        if !is_max_player && null_val <= alpha {
-            return (null_val, vec![], false);
-        }
-    }
-
     let mut candidates = board.get_candidate_moves(depth, Some(&heur.history), false);
     stats.internal_nodes += 1;
     stats.total_children += candidates.len() as u64;
@@ -391,13 +350,6 @@ fn sb_alphabeta(
             candidates.swap(front, front + pos);
             front += 1;
         }
-    }
-
-    // Drop the tail of the ordering. Safe to do here and not during generation:
-    // the transposition-table move and this ply's killers are already at the
-    // front, so the cap can only fall on moves the ordering rates lowest.
-    if depth >= CANDIDATE_CAP_DEPTH {
-        candidates.truncate(front.max(CANDIDATE_CAP));
     }
 
     let mut best_value = if is_max_player { MIN_VALUE - 1 } else { MAX_VALUE + 1 };
@@ -444,36 +396,36 @@ fn sb_alphabeta(
         let (mut child_val, mut child_pv, mut child_timed_out);
         if first {
             (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                board, alpha, beta, !is_max_player, depth + 1, max_depth, stats, tt, deadline, heur, true,
+                board, alpha, beta, !is_max_player, depth + 1, max_depth, stats, tt, deadline, heur,
             );
             first = false;
         } else if is_max_player {
             (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                board, alpha, alpha + 1, false, depth + 1, reduced_depth, stats, tt, deadline, heur, true,
+                board, alpha, alpha + 1, false, depth + 1, reduced_depth, stats, tt, deadline, heur,
             );
             // Re-search at full depth if the shallow probe looked promising.
             if !child_timed_out && reduction > 0 && child_val > alpha {
                 (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                    board, alpha, alpha + 1, false, depth + 1, max_depth, stats, tt, deadline, heur, true,
+                    board, alpha, alpha + 1, false, depth + 1, max_depth, stats, tt, deadline, heur,
                 );
             }
             if !child_timed_out && child_val > alpha && child_val < beta {
                 (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                    board, alpha, beta, false, depth + 1, max_depth, stats, tt, deadline, heur, true,
+                    board, alpha, beta, false, depth + 1, max_depth, stats, tt, deadline, heur,
                 );
             }
         } else {
             (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                board, beta - 1, beta, true, depth + 1, reduced_depth, stats, tt, deadline, heur, true,
+                board, beta - 1, beta, true, depth + 1, reduced_depth, stats, tt, deadline, heur,
             );
             if !child_timed_out && reduction > 0 && child_val < beta {
                 (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                    board, beta - 1, beta, true, depth + 1, max_depth, stats, tt, deadline, heur, true,
+                    board, beta - 1, beta, true, depth + 1, max_depth, stats, tt, deadline, heur,
                 );
             }
             if !child_timed_out && child_val < beta && child_val > alpha {
                 (child_val, child_pv, child_timed_out) = sb_alphabeta(
-                    board, alpha, beta, true, depth + 1, max_depth, stats, tt, deadline, heur, true,
+                    board, alpha, beta, true, depth + 1, max_depth, stats, tt, deadline, heur,
                 );
             }
         }
@@ -602,7 +554,7 @@ pub fn get_move_pv(state: &Gomoku, x: usize, y: usize) -> (Vec<(usize, usize)>, 
         stats.max_depth = depth;
         let (value, child_pv, timed_out) = sb_alphabeta(
             &mut board, MIN_VALUE, MAX_VALUE, !is_max_player,
-            1, depth, &mut stats, tt, deadline, &mut heur, true,
+            1, depth, &mut stats, tt, deadline, &mut heur,
         );
         if timed_out {
             break;
@@ -681,7 +633,6 @@ pub fn get_ai_move_with_stats(
             let (value, child_pv, timed_out) = sb_alphabeta(
                 &mut board, alpha, beta, !is_max_player, 1, depth, &mut stats, tt, deadline,
                 &mut root_heur,
-                true,
             );
             board.undo_move(&undo);
 
@@ -757,7 +708,6 @@ pub fn get_ai_move_with_stats(
                             tt,
                             deadline,
                             &mut child_heur,
-                            true,
                         );
                         if !timed_out && v > parent_alpha && v < parent_beta {
                             let r2 = sb_alphabeta(
@@ -771,7 +721,6 @@ pub fn get_ai_move_with_stats(
                                 tt,
                                 deadline,
                                 &mut child_heur,
-                                true,
                             );
                             v = r2.0;
                             pv = r2.1;
@@ -790,7 +739,6 @@ pub fn get_ai_move_with_stats(
                             tt,
                             deadline,
                             &mut child_heur,
-                            true,
                         );
                         if !timed_out && v < parent_beta && v > parent_alpha {
                             let r2 = sb_alphabeta(
@@ -804,7 +752,6 @@ pub fn get_ai_move_with_stats(
                                 tt,
                                 deadline,
                                 &mut child_heur,
-                                true,
                             );
                             v = r2.0;
                             pv = r2.1;

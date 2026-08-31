@@ -37,26 +37,6 @@ pub const LMR_MIN_MOVE: usize = 3;
 /// Ordering position from which the reduction doubles.
 pub const LMR_DEEP_MOVE: usize = 6;
 
-// Null-move pruning. Passing is never an advantage in gomoku, so if a
-// position still beats beta after handing the turn over, the real move would
-// too. Not attempted while facing a four, where passing simply loses.
-
-/// Plies left below which the null-move probe is not worth its cost.
-pub const NULL_MOVE_MIN_DEPTH: usize = 3;
-/// How many plies the null-move probe gives up.
-pub const NULL_MOVE_REDUCTION: usize = 2;
-
-// Candidate cap. Alpha-beta explores only a handful of the moves offered at
-// each node, so past a point the tail of the ordered list is generated, sorted
-// and never looked at. Applied only below the shallow plies, and only after
-// the transposition-table move and killers have been moved to the front, so
-// the moves most likely to matter can never be cut.
-
-/// Maximum candidates searched at a node, once past `CANDIDATE_CAP_DEPTH`.
-pub const CANDIDATE_CAP: usize = 16;
-/// Ply from which the cap applies.
-pub const CANDIDATE_CAP_DEPTH: usize = 2;
-
 // Transposition table
 
 pub const TT_SHARDS: usize = 64;
@@ -73,9 +53,11 @@ pub const HEURISTIC_EVAL_CLAMP: i32 = 99_999;
 // heuristic::evaluate_player.
 
 pub const WEIGHT_FIVE: i32 = 80_001;
-pub const WEIGHT_OPEN_FOUR: i32 = 35_000;
+pub const WEIGHT_OPEN_FOUR: i32 = 70_000;
 pub const WEIGHT_BLOCK_FOUR: i32 = 7_000;
+pub const WEIGHT_BLOCK_FOUR_TEMPO: i32 = 40_000;
 pub const WEIGHT_FREE_THREE: i32 = 5_000;
+pub const WEIGHT_FREE_THREE_TEMPO: i32 = 30_000;
 pub const WEIGHT_OPEN_THREE: i32 = 100;
 pub const WEIGHT_OPEN_TWO: i32 = 50;
 
