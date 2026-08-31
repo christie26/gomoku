@@ -17,7 +17,7 @@ class GomokuGUI:
 
         self.sizeeee = CELL_SIZE * (BOARD_SIZE - 1) + PADDING * 2
         self.is_playing = False
-        self.debug = True
+        self.debug = False
         self.ai_thinking = False
         self.ai_stats = []  # list of (elapsed_secs, nodes_visited, pruning_percent)
 
@@ -74,7 +74,8 @@ class GomokuGUI:
             on_redo=self.redo,
             on_debug=self.debug_onoff,
             on_play_mode=self.switch_play_mode,
-            on_hint=self.show_hint
+            on_hint=self.show_hint,
+            default_debug = self.debug
         )
 
         # ===== HISTORY =====

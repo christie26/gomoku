@@ -7,7 +7,7 @@ BORDER_COLOR = "#6f5c43"
 
 class SettingsPanel:
     def __init__(
-        self, right_frame, on_start_game, on_end_game, on_undo, on_redo, on_debug, on_play_mode, on_hint
+        self, right_frame, on_start_game, on_end_game, on_undo, on_redo, on_debug, on_play_mode, on_hint, default_debug
     ):
         self.is_playing = False
         self.on_start_game = on_start_game
@@ -21,6 +21,7 @@ class SettingsPanel:
         self.setting_frame = tk.Frame(right_frame, padx=10, pady=10)
         self.setting_frame.pack(fill="both")
         self.setting_ratios = []
+        self.default_debug = default_debug
 
         self.build_ui()
 
@@ -137,7 +138,7 @@ class SettingsPanel:
         )
         debug_frame.pack(pady=(15, 0), anchor="w")
 
-        self.debug_enabled = tk.BooleanVar(value=True)
+        self.debug_enabled = tk.BooleanVar(value=self.default_debug)
 
         self.debug_checkbox = tk.Checkbutton(
             self.setting_frame,
