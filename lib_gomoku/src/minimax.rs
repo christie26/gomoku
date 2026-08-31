@@ -561,8 +561,6 @@ pub fn get_ai_move_with_stats(
         .map(|(r, c)| (r, c, None))
         .collect();
 
-    let max_depth = if board.move_count < 4 { 3 } else { MAX_DEPTH };
-
     let mut best_move: Option<(usize, usize, i32)> = None;
     let mut final_stats = SearchStats::new();
     let mut depth_times: Vec<(usize, f64, u64)> = Vec::new();
@@ -572,7 +570,7 @@ pub fn get_ai_move_with_stats(
     // d is usually still the refutation at depth d+1.
     let mut root_heur = MoveHeuristics::new();
 
-    for depth in 1..=max_depth {
+    for depth in 1..=MAX_DEPTH {
         if Instant::now() >= deadline {
             break;
         }
