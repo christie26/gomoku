@@ -148,6 +148,8 @@ class GomokuGUI:
         self.score_bar.update_score(0)
         self.player_frames["X"].reset_panel()
         self.player_frames["O"].reset_panel()
+        if not self.players[self.game.current_player].is_human:
+            self.ai_play()
 
     def end_game(self):
         p = self.game.current_player
