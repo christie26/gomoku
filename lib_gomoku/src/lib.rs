@@ -573,6 +573,8 @@ fn lib_gomoku(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(heuristic::heuristic_evaluation, m)?)?;
     m.add_function(wrap_pyfunction!(minimax::get_ai_move_stats, m)?)?;
     m.add_function(wrap_pyfunction!(minimax::clear_transposition_table, m)?)?;
+    m.add_function(wrap_pyfunction!(minimax::get_minimax_eval, m)?)?;
+
 
     let gomoku_class = m.getattr("Gomoku")?;
     gomoku_class.setattr("__module__", "lib_gomoku")?;

@@ -1,5 +1,5 @@
 import tkinter as tk
-from lib_gomoku import Gomoku, MoveResult, get_ai_move, get_ai_move_stats, heuristic_evaluation
+from lib_gomoku import Gomoku, MoveResult, get_ai_move_stats, get_minimax_eval
 import argparse
 import time
 import threading
@@ -104,7 +104,7 @@ class GomokuGUI:
         if result == MoveResult.VALID:
             result, capture_count, captured = self.game.handle_move(x, y)
             if score is None:
-              score = heuristic_evaluation(self.game)
+              score = get_minimax_eval(self.game)
             self.setting_panel.update_score(score)
             self.score_bar.update_score(score)
             if captured:

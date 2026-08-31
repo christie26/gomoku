@@ -521,8 +521,29 @@ pub fn get_ai_move_stats(
     (best, moves, elapsed, stats.nodes_visited, stats.pruning_percent())
 }
 
+#[pyfunction]
+pub fn get_minimax_eval(py: Python, state: &Gomoku) -> i32 {
+    let mut owned = state.clone();
+    // Full flip: side to move, its opponent, and the Zobrist side-to-move bit.
+    // Setting `SearchBoard::current` alone leaves `opponent` and `hash` stale,
+    // which makes both colours read as the same player and mixes the shared
+    // TT with entries for the other side to move.
+    owned.switch_player();
 
+    let board = SearchBoard::from_gomoku(&owned);
+    // The game is already decided: there is nothing to search.
+    if board.is_terminal() {
+        return sb_state_value(&board, 0);
+    }
 
+    // The GUI calls this on the Tk thread; release the GIL like the AI path.
+    let (best, _, _) = py.allow_threads(|| get_ai_move_with_stats(&owned));
+    match best {
+        Some((_, _, score)) => score,
+        // Every candidate was an illegal double three: the position stands.
+        None => board.sb_heuristic_evaluation(),
+    }
+}
 
 pub fn get_ai_move_with_stats(
     state: &Gomoku,
